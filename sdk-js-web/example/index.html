@@ -41,7 +41,7 @@
       }
       .row { display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: center; }
       label { font-size: 0.85rem; color: var(--muted); display: block; margin-bottom: 0.35rem; }
-      input[type="file"], input[type="number"], select, button {
+      input[type="file"], input[type="number"], input[type="text"], select, button {
         font: inherit;
         background: #20242f;
         color: var(--fg);
@@ -50,6 +50,7 @@
         padding: 0.45rem 0.65rem;
       }
       input[type="number"] { width: 100px; }
+      input[type="text"].url { min-width: 320px; }
       button {
         cursor: pointer;
         background: var(--accent);
@@ -60,6 +61,7 @@
       button:disabled { opacity: 0.45; cursor: not-allowed; }
       button.secondary { background: #20242f; color: var(--fg); }
       .field { display: flex; flex-direction: column; gap: 0.25rem; }
+      .hidden { display: none !important; }
       canvas {
         display: block;
         max-width: 100%;
@@ -83,13 +85,39 @@
       .err { color: var(--err); }
       details > summary { cursor: pointer; color: var(--muted); margin-bottom: 0.5rem; }
       code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+      table.topk {
+        width: 100%;
+        border-collapse: collapse;
+        font-variant-numeric: tabular-nums;
+      }
+      table.topk th, table.topk td {
+        text-align: left;
+        padding: 0.35rem 0.5rem;
+        border-bottom: 1px solid var(--border);
+      }
+      table.topk th { color: var(--muted); font-weight: 500; font-size: 0.8rem; }
+      table.topk td.bar {
+        width: 40%;
+      }
+      table.topk .bar-fill {
+        background: var(--accent);
+        height: 8px;
+        border-radius: 4px;
+      }
     </style>
 
+    <!--
+      Importmap: short bare specifiers used by the script below. ORT Web is
+      pulled from a CDN (the matching .wasm files are configured at runtime
+      via ort.env.wasm.wasmPaths). The local SDK is served from the build
+      output at ../dist/index.js — run `npm run build` from sdk-js-web/
+      before opening this page.
+    -->
     <script type="importmap">
       {
         "imports": {
           "onnxruntime-web": "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.17/dist/ort.bundle.min.mjs",
-          "@ort-vision-sdk/web": "../dist/index.js"
+          "ort-vision-sdk-web": "../dist/index.js"
         }
       }
     </script>
@@ -98,35 +126,39 @@
     <main>
       <h1>ort-vision-sdk · browser demo</h1>
       <p class="subtitle">
-        End-to-end YOLO inference in the browser. Bring your own
-        <code>.onnx</code> model or pick one of the URL presets.
+        End-to-end ONNX inference in the browser — classification, detection
+        and instance segmentation. Bring your own <code>.onnx</code> model or
+        use the URL preset filled in for the chosen task.
       </p>
 
       <section class="panel">
         <div class="row">
           <div class="field">
-            <label for="model-source">Model source</label>
-            <select id="model-source">
-              <option value="file">Local .onnx file</option>
-              <option value="url">URL</option>
-            </select>
-          </div>
-          <div class="field" id="model-file-field">
-            <label for="model-file">Model file</label>
-            <input id="model-file" type="file" accept=".onnx" />
-          </div>
-          <div class="field" id="model-url-field" style="display:none">
-            <label for="model-url">Model URL</label>
-            <input id="model-url" type="text" value="https://huggingface.co/Xenova/yolov10n/resolve/main/onnx/model.onnx"
-              style="min-width: 320px; padding: 0.45rem 0.65rem; background:#20242f; color:var(--fg); border:1px solid var(--border); border-radius:6px;" />
-          </div>
-          <div class="field">
             <label for="task">Task</label>
             <select id="task">
-              <option value="detection">Detection</option>
+              <option value="classification">Classification</option>
+              <option value="detection" selected>Detection</option>
               <option value="segmentation">Instance segmentation</option>
             </select>
           </div>
+          <div class="field">
+            <label for="model-source">Model source</label>
+            <select id="model-source">
+              <option value="url">URL</option>
+              <option value="file">Local .onnx file</option>
+            </select>
+          </div>
+          <div class="field" id="model-url-field">
+            <label for="model-url">Model URL</label>
+            <input id="model-url" type="text" class="url" />
+          </div>
+          <div class="field hidden" id="model-file-field">
+            <label for="model-file">Model file</label>
+            <input id="model-file" type="file" accept=".onnx" />
+          </div>
+        </div>
+
+        <div class="row" id="threshold-row" style="margin-top: 0.75rem">
           <div class="field">
             <label for="conf">Conf threshold</label>
             <input id="conf" type="number" min="0" max="1" step="0.05" value="0.4" />
@@ -134,6 +166,30 @@
           <div class="field">
             <label for="iou">IoU threshold</label>
             <input id="iou" type="number" min="0" max="1" step="0.05" value="0.45" />
+          </div>
+        </div>
+
+        <div class="row hidden" id="classifier-row" style="margin-top: 0.75rem">
+          <div class="field">
+            <label for="labels-source">Labels</label>
+            <select id="labels-source">
+              <option value="url">From URL (1000 ImageNet classes)</option>
+              <option value="file">Local .txt or .json file</option>
+              <option value="none">None — show raw class IDs</option>
+            </select>
+          </div>
+          <div class="field" id="labels-url-field">
+            <label for="labels-url">Labels URL</label>
+            <input id="labels-url" type="text" class="url"
+              value="https://raw.githubusercontent.com/anishathalye/imagenet-simple-labels/master/imagenet-simple-labels.json" />
+          </div>
+          <div class="field hidden" id="labels-file-field">
+            <label for="labels-file">Labels file</label>
+            <input id="labels-file" type="file" accept=".txt,.json" />
+          </div>
+          <div class="field">
+            <label for="topk">Top-K</label>
+            <input id="topk" type="number" min="1" max="50" step="1" value="5" />
           </div>
         </div>
       </section>
@@ -157,6 +213,7 @@
 
       <section class="panel">
         <canvas id="canvas" width="640" height="480"></canvas>
+        <div id="topk-results" class="hidden" style="margin-top: 1rem"></div>
       </section>
 
       <details class="panel">
@@ -167,24 +224,41 @@
       <details class="panel">
         <summary>How to run this demo locally</summary>
         <ol style="line-height: 1.6">
-          <li>From the <code>sdk-js-web/</code> directory: <code>npm install &amp;&amp; npm run build</code></li>
-          <li>Serve the directory with any static HTTP server, e.g.:
-            <code>python3 -m http.server 8000</code></li>
-          <li>Open <code>http://localhost:8000/example/</code> in a browser
-            (Chromium-based browsers give you WebGPU; otherwise it falls back
-            to WASM automatically).</li>
+          <li>From the <code>sdk-js-web/</code> directory:
+            <code>npm install &amp;&amp; npm run build</code>
+            (produces <code>dist/index.js</code>, which the demo imports).</li>
+          <li>Serve the directory with a static HTTP server. Two options
+            that both work out of the box:
+            <ul>
+              <li><code>python3 -m http.server 8000</code> from
+                <code>sdk-js-web/</code>, then open
+                <code>http://localhost:8000/example/</code>.</li>
+              <li>VS Code <strong>Live Server</strong>: right-click
+                <code>example/index.html</code> → "Open with Live Server".
+                The default port is 5500.</li>
+            </ul>
+          </li>
+          <li>Pick a task, paste/upload a model and an image, click Run.</li>
         </ol>
-        <p>
-          The page loads <code>onnxruntime-web</code> from a CDN and the SDK
-          from the local <code>../dist/</code> build, so you must run
-          <code>npm run build</code> first.
+        <p style="margin-top: 0.75rem">
+          <strong>If nothing runs:</strong> open the browser devtools and
+          look at the Network/Console tabs. The two most common failures are
+          <em>(a)</em> the local SDK at <code>../dist/index.js</code> isn't
+          built yet — fix with <code>npm run build</code> — and
+          <em>(b)</em> the model URL has no CORS headers — switch to a
+          local file or use a CORS-friendly host
+          (Hugging Face, jsDelivr, ONNX Model Zoo).
         </p>
       </details>
     </main>
 
     <script type="module">
       import * as ort from "onnxruntime-web";
-      import { Detector, Segmenter } from "@ort-vision-sdk/web";
+      import {
+        Classifier,
+        Detector,
+        Segmenter,
+      } from "ort-vision-sdk-web";
 
       // ORT-Web needs to know where to fetch the matching .wasm files; point
       // it at the same CDN/version we imported the JS from.
@@ -201,22 +275,64 @@
       const modelSourceSelect = $("model-source");
       const modelFileField = $("model-file-field");
       const modelUrlField = $("model-url-field");
+      const modelUrlInput = $("model-url");
+      const thresholdRow = $("threshold-row");
+      const classifierRow = $("classifier-row");
+      const labelsSourceSelect = $("labels-source");
+      const labelsUrlField = $("labels-url-field");
+      const labelsFileField = $("labels-file-field");
+      const topkResultsBox = $("topk-results");
 
-      let task = null; // Detector | Segmenter
+      // Default model URLs per task — small, fast, public-CORS friendly.
+      const DEFAULT_MODEL_URL = {
+        classification:
+          "https://huggingface.co/Xenova/mobilenetv2_100/resolve/main/onnx/model.onnx",
+        detection:
+          "https://huggingface.co/Xenova/yolov10n/resolve/main/onnx/model.onnx",
+        segmentation:
+          "https://huggingface.co/Xenova/yolov8n-seg/resolve/main/onnx/model.onnx",
+      };
+
+      let task = null; // Classifier | Detector | Segmenter
       let lastImage = null; // ImageBitmap or HTMLImageElement
-      let lastConfig = { taskKind: null, modelKey: null };
+      let lastConfig = { taskKind: null, modelKey: null, labelsKey: null };
 
-      modelSourceSelect.addEventListener("change", () => {
+      // ---- UI sync ----------------------------------------------------------
+
+      function syncUiForTask() {
+        const t = taskSelect.value;
+        thresholdRow.classList.toggle("hidden", t === "classification");
+        classifierRow.classList.toggle("hidden", t !== "classification");
+        topkResultsBox.classList.toggle(
+          "hidden",
+          t !== "classification" || topkResultsBox.childElementCount === 0,
+        );
+        modelUrlInput.value = DEFAULT_MODEL_URL[t] ?? "";
+      }
+
+      function syncUiForModelSource() {
         const v = modelSourceSelect.value;
-        modelFileField.style.display = v === "file" ? "" : "none";
-        modelUrlField.style.display = v === "url" ? "" : "none";
-      });
+        modelFileField.classList.toggle("hidden", v !== "file");
+        modelUrlField.classList.toggle("hidden", v !== "url");
+      }
+
+      function syncUiForLabelsSource() {
+        const v = labelsSourceSelect.value;
+        labelsUrlField.classList.toggle("hidden", v !== "url");
+        labelsFileField.classList.toggle("hidden", v !== "file");
+      }
+
+      taskSelect.addEventListener("change", syncUiForTask);
+      modelSourceSelect.addEventListener("change", syncUiForModelSource);
+      labelsSourceSelect.addEventListener("change", syncUiForLabelsSource);
 
       $("image-file").addEventListener("change", async (e) => {
         const file = e.target.files?.[0];
         if (!file) return;
         lastImage = await createImageBitmap(file);
         drawImage(lastImage);
+        topkResultsBox.classList.add("hidden");
+        topkResultsBox.innerHTML = "";
         rerunBtn.disabled = task === null;
       });
 
@@ -249,36 +365,30 @@
         }
       });
 
+      // ---- Model loading ----------------------------------------------------
+
       async function loadOrReuseTask() {
         const taskKind = taskSelect.value;
-        const modelSource = modelSourceSelect.value;
-        const modelKey =
-          modelSource === "url"
-            ? `url:${$("model-url").value}`
-            : `file:${$("model-file").files?.[0]?.name ?? ""}`;
+        const modelKey = await modelCacheKey();
+        const labelsKey =
+          taskKind === "classification" ? await labelsCacheKey() : null;
 
         if (
           task &&
           lastConfig.taskKind === taskKind &&
-          lastConfig.modelKey === modelKey
+          lastConfig.modelKey === modelKey &&
+          lastConfig.labelsKey === labelsKey
         ) {
-          return;
+          return; // already up to date
         }
 
-        let modelArg;
-        if (modelSource === "url") {
-          modelArg = $("model-url").value.trim();
-          if (!modelArg) throw new Error("Provide a model URL.");
-          print(`Loading model from URL: ${modelArg}`);
-        } else {
-          const f = $("model-file").files?.[0];
-          if (!f) throw new Error("Pick a local .onnx file first.");
-          print(`Loading model from local file: ${f.name} (${(f.size / 1e6).toFixed(1)} MB)`);
-          modelArg = new Uint8Array(await f.arrayBuffer());
-        }
-
+        const modelArg = await resolveModelArg();
         const t0 = performance.now();
-        if (taskKind === "segmentation") {
+
+        if (taskKind === "classification") {
+          const labels = await resolveLabels();
+          task = await Classifier.create(modelArg, { labels });
+        } else if (taskKind === "segmentation") {
           task = await Segmenter.create(modelArg, {
             confThreshold: Number($("conf").value),
             iouThreshold: Number($("iou").value),
@@ -289,55 +399,168 @@
             iouThreshold: Number($("iou").value),
           });
         }
+
         const dt = performance.now() - t0;
-        lastConfig = { taskKind, modelKey };
+        lastConfig = { taskKind, modelKey, labelsKey };
         print(
           `Model ready in ${dt.toFixed(0)} ms. Providers: ${task.session.providers.join(", ")}.`,
           "ok",
         );
       }
 
+      async function modelCacheKey() {
+        const src = modelSourceSelect.value;
+        return src === "url"
+          ? `url:${modelUrlInput.value.trim()}`
+          : `file:${$("model-file").files?.[0]?.name ?? ""}`;
+      }
+
+      async function resolveModelArg() {
+        if (modelSourceSelect.value === "url") {
+          const url = modelUrlInput.value.trim();
+          if (!url) throw new Error("Provide a model URL.");
+          print(`Loading model from URL: ${url}`);
+          return url;
+        }
+        const f = $("model-file").files?.[0];
+        if (!f) throw new Error("Pick a local .onnx file first.");
+        print(`Loading model from local file: ${f.name} (${(f.size / 1e6).toFixed(1)} MB)`);
+        return new Uint8Array(await f.arrayBuffer());
+      }
+
+      // ---- Labels (classification only) -------------------------------------
+
+      async function labelsCacheKey() {
+        const src = labelsSourceSelect.value;
+        if (src === "none") return "none";
+        if (src === "url") return `url:${$("labels-url").value.trim()}`;
+        return `file:${$("labels-file").files?.[0]?.name ?? ""}`;
+      }
+
+      async function resolveLabels() {
+        const src = labelsSourceSelect.value;
+        if (src === "none") return null;
+
+        let text;
+        if (src === "url") {
+          const url = $("labels-url").value.trim();
+          if (!url) throw new Error("Provide a labels URL or pick 'None'.");
+          print(`Loading labels from URL: ${url}`);
+          const r = await fetch(url);
+          if (!r.ok) throw new Error(`Labels fetch failed: ${r.status} ${r.statusText}`);
+          text = await r.text();
+        } else {
+          const f = $("labels-file").files?.[0];
+          if (!f) throw new Error("Pick a labels file or change source to 'None'.");
+          print(`Loading labels from local file: ${f.name}`);
+          text = await f.text();
+        }
+
+        return parseLabelsText(text);
+      }
+
+      function parseLabelsText(text) {
+        const trimmed = text.trim();
+        if (trimmed.startsWith("[") || trimmed.startsWith("{")) {
+          const parsed = JSON.parse(trimmed);
+          if (Array.isArray(parsed)) return parsed.map(String);
+          // dict {id: name} → array
+          const max = Math.max(...Object.keys(parsed).map(Number));
+          const arr = new Array(max + 1).fill("");
+          for (const [k, v] of Object.entries(parsed)) {
+            arr[Number(k)] = Array.isArray(v) ? v[1] ?? v[0] : String(v);
+          }
+          return arr;
+        }
+        // plain text, one label per line
+        return trimmed.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
+      }
+
+      // ---- Inference + rendering -------------------------------------------
+
       async function runInference() {
         if (!task || !lastImage) return;
-
         const taskKind = taskSelect.value;
-        // Hot-update thresholds without rebuilding the session.
-        const confThreshold = Number($("conf").value);
-        const iouThreshold = Number($("iou").value);
 
         const t0 = performance.now();
-        const out = await task.predict(lastImage, { confThreshold, iouThreshold });
+        let results;
+        if (taskKind === "classification") {
+          const topK = Number($("topk").value) || 5;
+          results = await task.predict(lastImage, { topK });
+        } else {
+          // Hot-update thresholds without rebuilding the session.
+          const confThreshold = Number($("conf").value);
+          const iouThreshold = Number($("iou").value);
+          results = await task.predict(lastImage, { confThreshold, iouThreshold });
+        }
         const dt = performance.now() - t0;
 
         drawImage(lastImage);
-        const drawCount = drawOverlay(out, taskKind);
-        print(
-          `Inference: ${dt.toFixed(0)} ms · ${drawCount} ${taskKind === "segmentation" ? "instances" : "detections"} drawn.`,
-          "ok",
-        );
+        const summary = renderResults(results, taskKind);
+        print(`Inference: ${dt.toFixed(0)} ms · ${summary}`, "ok");
+      }
+
+      function renderResults(results, taskKind) {
+        if (taskKind === "classification") {
+          const r = results[0];
+          renderTopK(r);
+          return `top-1 = ${r.result.className} (${(r.result.confidence * 100).toFixed(1)}%)`;
+        }
+
+        topkResultsBox.classList.add("hidden");
+        topkResultsBox.innerHTML = "";
+
+        let count = 0;
+        if (taskKind === "segmentation") {
+          for (const seg of results) {
+            paintMask(seg.mask, seg.bbox, seg.classId);
+            drawBox(seg.bbox, seg.className, seg.confidence, seg.classId);
+            count++;
+          }
+        } else {
+          for (const det of results) {
+            drawBox(det.bbox, det.className, det.confidence, det.classId);
+            count++;
+          }
+        }
+        return `${count} ${taskKind === "segmentation" ? "instances" : "detections"} drawn.`;
+      }
+
+      function renderTopK(classificationResult) {
+        const probs = classificationResult.result.probabilities;
+        const rows = probs
+          .map((p) => {
+            const pct = (p.probability * 100).toFixed(1);
+            const width = Math.max(2, Math.round(p.probability * 100));
+            return `
+              <tr>
+                <td>${escapeHtml(p.className)}</td>
+                <td class="bar"><div class="bar-fill" style="width:${width}%"></div></td>
+                <td>${pct}%</td>
+              </tr>`;
+          })
+          .join("");
+
+        topkResultsBox.innerHTML = `
+          <table class="topk">
+            <thead>
+              <tr><th>Class</th><th>Probability</th><th>%</th></tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>`;
+        topkResultsBox.classList.remove("hidden");
+      }
+
+      function escapeHtml(str) {
+        return String(str).replace(/[&<>"']/g, (c) => ({
+          "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+        })[c]);
       }
 
       function drawImage(image) {
         canvas.width = image.width;
         canvas.height = image.height;
         ctx.drawImage(image, 0, 0);
-      }
-
-      function drawOverlay(out, taskKind) {
-        let count = 0;
-        if (taskKind === "segmentation") {
-          for (const seg of out) {
-            paintMask(seg.mask, seg.bbox, seg.classId);
-            drawBox(seg.bbox, seg.className, seg.confidence, seg.classId);
-            count++;
-          }
-        } else {
-          for (const det of out) {
-            drawBox(det.bbox, det.className, det.confidence, det.classId);
-            count++;
-          }
-        }
-        return count;
       }
 
       function drawBox(bbox, name, confidence, classId) {
@@ -402,7 +625,13 @@
         print(msg, "err");
       }
 
-      print("Ready. Pick a model and an image, then click Run.");
+      // ---- Boot -------------------------------------------------------------
+
+      syncUiForTask();
+      syncUiForModelSource();
+      syncUiForLabelsSource();
+      runBtn.disabled = false;
+      print("Ready. Pick a task, model and image, then click Run.");
     </script>
   </body>
 </html>

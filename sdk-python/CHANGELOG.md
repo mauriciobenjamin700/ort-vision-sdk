@@ -1,0 +1,110 @@
+# Changelog
+
+All notable changes to `ort-vision-sdk` (Python) are documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+## [0.2.0] - 2026-05-02
+
+This release brings the public API in line with the Ultralytics / PyTorch
+idiom, so code ported from those ecosystems works with minimal changes.
+
+### Added
+
+- **Per-image `Results` envelopes** (`DetectionResults`, `ClassificationResults`,
+  `SegmentationResults`) returned by every `predict()` call as a 1-element
+  list, mirroring `YOLO("img.jpg")`. Each envelope holds:
+  - `boxes` / `probs` / `masks` — bulk numpy views with Ultralytics-style
+    accessors (`xyxy`, `xywh`, `xyxyn`, `xywhn`, `cls`, `conf`, `data`,
+    `top1`, `top1conf`, `top5`, `top5conf`).
+  - `detections` — tuple of per-instance dataclasses (the previous return
+    type).
+  - `names` — `dict[int, str]` matching `model.names`.
+  - `orig_img`, `orig_shape`, `path`, `speed`.
+- **Ultralytics-style aliases** on `BoundingBox`, `ClassProbability`,
+  `ClassificationResult`, `DetectionResult`, `SegmentationResult`:
+  `cls`, `conf`, `name`, `box`, `xyxy`, `xywh` (center coords),
+  plus `xyxyn(orig_shape)` / `xywhn(orig_shape)` methods on `BoundingBox`.
+- **`__call__` on every task class** — `Detector(model)(image)` now works
+  like `torch.nn.Module.__call__`, delegating to `predict()`.
+- **`names: dict[int, str]` property** on every task class alongside
+  `labels: tuple[str, ...]`.
+- **Short device aliases** in `providers=` — `"cpu"`, `"cuda"`, `"gpu"`,
+  `"tensorrt"` / `"trt"`, `"coreml"` / `"mps"`, `"dml"` / `"directml"`,
+  `"openvino"` are expanded to the canonical `*ExecutionProvider` names.
+  New helper `normalize_provider(name)`.
+- **Explicit `head=` parameter** on `Detector` and `Segmenter` constructors —
+  caller declares which decoder family the model uses (`"yolo"` for
+  detect heads of v8/v9/v10/v11/v12/v26; `"yolo-seg"` for the matching
+  seg heads). The SDK does **not** auto-detect — wrong head raises
+  `ValueError`. New types `DetectorHead`, `SegmenterHead`.
+- **`classes` filter** on `Detector.predict()` / `Detector.__call__()` and
+  `Segmenter.predict()` / `Segmenter.__call__()` — keeps only results whose
+  `class_id` is in the supplied list, matching Ultralytics'
+  `model.predict(img, classes=[0, 16])`.
+- **`postprocess.batched_nms(boxes, scores, idxs, iou_threshold)`** matching
+  `torchvision.ops.batched_nms`.
+- **Generic YOLO decoder names**: `decode_yolo`, `decode_yolo_anchors`,
+  `decode_yolo_seg` — same code, accurate name (covers v8/v9/v10/v11/v12).
+- **Preprocess helpers** mirroring torchvision/OpenCV:
+  - `to_tensor(image)` → CHW `float32 / 255` (ToTensor parity).
+  - `from_cv2(bgr)` / `to_cv2(rgb)` — channel-order bridges.
+
+### Changed
+
+- `Detector.predict(img)` now returns `list[DetectionResults]` (1 element)
+  instead of `list[DetectionResult]`. Iterate the envelope to recover the
+  old shape: `for d in detector.predict(img)[0]: ...`.
+- `Classifier.predict(img)` now returns `list[ClassificationResults]`.
+- `Segmenter.predict(img)` now returns `list[SegmentationResults]`.
+- `nms(boxes, scores, iou_threshold)` — first parameter renamed from
+  `boxes_xyxy` to `boxes` for `torchvision.ops.nms` parity.
+- The detection decoder no longer applies the per-class loop inline — it
+  delegates to `batched_nms`.
+
+### Deprecated
+
+- `decode_yolov8`, `decode_yolov8_anchors`, `decode_yolov8_seg` — emit
+  `DeprecationWarning`; will be removed in 0.3.0. Use `decode_yolo`,
+  `decode_yolo_anchors`, `decode_yolo_seg` instead.
+
+### Migration
+
+```python
+# Before (0.1.0)
+detections = detector.predict("street.jpg")
+for d in detections:
+    print(d.class_id, d.class_name, d.confidence, d.bbox.as_xyxy())
+
+# After (0.2.0)
+results = detector.predict("street.jpg")  # list[DetectionResults], len 1
+r = results[0]
+
+# Per-instance dataclasses (legacy fields still work):
+for d in r:
+    print(d.class_id, d.class_name, d.confidence, d.bbox.as_xyxy())
+# or with the new short aliases:
+for d in r:
+    print(d.cls, d.name, d.conf, d.box.xyxy)
+
+# Bulk numpy access (matches Ultralytics):
+print(r.boxes.xyxy.shape, r.boxes.cls, r.boxes.conf, r.names)
+```
+
+## [0.1.0] - 2026-05-02
+
+### Added
+
+- Initial alpha release.
+- `Classifier` and `Detector` task classes wrapping `onnxruntime.InferenceSession`.
+- Image I/O helpers (`load_image`, `ImageInput`).
+- Default label maps (`COCO_CLASSES`, ImageNet via `resolve_labels`).
+- Public types: `BoundingBox`, `ClassProbability`, `ClassificationResult`, `DetectionResult`, `ImageArray`.
+- Optional extras: `gpu` (onnxruntime-gpu), `opencv` (opencv-python), `dev` (test/lint tooling).
+
+[Unreleased]: https://github.com/mauriciobenjamin700/ort-vision-sdk/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/mauriciobenjamin700/ort-vision-sdk/releases/tag/v0.2.0
+[0.1.0]: https://github.com/mauriciobenjamin700/ort-vision-sdk/releases/tag/v0.1.0

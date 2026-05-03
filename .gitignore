@@ -1,0 +1,32 @@
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local env
+.env
+.env.local
+
+# Local virtualenvs (anywhere)
+.venv/
+venv/
+env/
+ENV/
+
+# Models and assets (keep repo lean)
+*.onnx
+*.pt
+*.pth
+*.h5
+*.pb
+models/
+assets/
+data/
+
+# Per-package build artifacts and caches are owned by each sub-project's
+# own .gitignore (sdk-python/.gitignore, sdk-js-web/.gitignore).

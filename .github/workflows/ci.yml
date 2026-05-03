@@ -1,0 +1,118 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    name: Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sdk-python
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: sdk-python/pyproject.toml
+
+      - name: Install package and dev tooling
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Lint
+        run: ruff check src
+
+      - name: Format check
+        run: ruff format --check src
+
+      - name: Type check
+        run: mypy src
+
+      - name: Run tests
+        run: pytest
+
+      - name: Build distributions
+        run: |
+          pip install build
+          python -m build
+
+      - name: Verify distributions
+        run: |
+          pip install twine
+          twine check dist/*
+
+      - name: Smoke-install built wheel and import
+        run: |
+          python -m venv /tmp/smoke-venv
+          /tmp/smoke-venv/bin/pip install --quiet --upgrade pip
+          /tmp/smoke-venv/bin/pip install --quiet dist/*.whl
+          /tmp/smoke-venv/bin/python -c "import ort_vision_sdk as m; \
+            assert m.__version__, 'no __version__'; \
+            assert m.Detector and m.Classifier and m.Segmenter, 'tasks missing'; \
+            assert m.Boxes and m.Probs and m.Masks, 'result envelopes missing'; \
+            print('Smoke OK · version =', m.__version__)"
+
+  web:
+    name: Web (Node ${{ matrix.node-version }})
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sdk-js-web
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: ["18", "20", "22"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+          cache-dependency-path: sdk-js-web/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      - name: Pack (dry-run sanity)
+        run: npm pack --dry-run
+
+      - name: Smoke-install packed tarball and import in a fresh project
+        run: |
+          npm pack --silent
+          mkdir -p /tmp/web-smoke && cd /tmp/web-smoke
+          npm init -y >/dev/null
+          npm pkg set type=module >/dev/null
+          npm install --silent "$GITHUB_WORKSPACE/sdk-js-web"/ort-vision-sdk-web-*.tgz onnxruntime-web@^1.17
+          node -e "import('@ort-vision-sdk/web').then(m => { \
+            if (!m.Detector || !m.Segmenter || !m.Classifier) throw new Error('tasks missing'); \
+            if (!m.Boxes || !m.Probs || !m.Masks) throw new Error('result envelopes missing'); \
+            if (!m.VERSION) throw new Error('no VERSION'); \
+            console.log('Smoke OK · VERSION =', m.VERSION); \
+          })"

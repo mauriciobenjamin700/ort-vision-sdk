@@ -1,0 +1,22 @@
+node_modules/
+dist/
+coverage/
+.turbo/
+.cache/
+*.tsbuildinfo
+
+# Models / assets
+*.onnx
+public/models/
+public/assets/
+
+# Editors / OS
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Local env
+.env
+.env.local

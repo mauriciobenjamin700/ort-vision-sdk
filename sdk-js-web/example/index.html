@@ -1,0 +1,408 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>ort-vision-sdk · browser demo</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0e1015;
+        --panel: #161922;
+        --border: #262b36;
+        --fg: #e7e9ee;
+        --muted: #8b93a4;
+        --accent: #6aa3ff;
+        --ok: #5ad29c;
+        --err: #ff7b7b;
+      }
+      * { box-sizing: border-box; }
+      html, body {
+        margin: 0;
+        padding: 0;
+        background: var(--bg);
+        color: var(--fg);
+        font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        font-size: 14px;
+      }
+      main {
+        max-width: 1100px;
+        margin: 0 auto;
+        padding: 1.5rem 1.5rem 4rem;
+      }
+      h1 { font-size: 1.5rem; margin: 0 0 0.25rem; }
+      .subtitle { color: var(--muted); margin: 0 0 1.5rem; }
+      .panel {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 1rem 1.25rem;
+        margin-bottom: 1rem;
+      }
+      .row { display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: center; }
+      label { font-size: 0.85rem; color: var(--muted); display: block; margin-bottom: 0.35rem; }
+      input[type="file"], input[type="number"], select, button {
+        font: inherit;
+        background: #20242f;
+        color: var(--fg);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 0.45rem 0.65rem;
+      }
+      input[type="number"] { width: 100px; }
+      button {
+        cursor: pointer;
+        background: var(--accent);
+        color: #0b1422;
+        border: none;
+        font-weight: 600;
+      }
+      button:disabled { opacity: 0.45; cursor: not-allowed; }
+      button.secondary { background: #20242f; color: var(--fg); }
+      .field { display: flex; flex-direction: column; gap: 0.25rem; }
+      canvas {
+        display: block;
+        max-width: 100%;
+        background: #000;
+        border-radius: 8px;
+        border: 1px solid var(--border);
+      }
+      pre#log {
+        background: #0a0c11;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 0.75rem 1rem;
+        margin: 0;
+        max-height: 220px;
+        overflow: auto;
+        white-space: pre-wrap;
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .ok { color: var(--ok); }
+      .err { color: var(--err); }
+      details > summary { cursor: pointer; color: var(--muted); margin-bottom: 0.5rem; }
+      code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    </style>
+
+    <script type="importmap">
+      {
+        "imports": {
+          "onnxruntime-web": "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.17/dist/ort.bundle.min.mjs",
+          "@ort-vision-sdk/web": "../dist/index.js"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <main>
+      <h1>ort-vision-sdk · browser demo</h1>
+      <p class="subtitle">
+        End-to-end YOLO inference in the browser. Bring your own
+        <code>.onnx</code> model or pick one of the URL presets.
+      </p>
+
+      <section class="panel">
+        <div class="row">
+          <div class="field">
+            <label for="model-source">Model source</label>
+            <select id="model-source">
+              <option value="file">Local .onnx file</option>
+              <option value="url">URL</option>
+            </select>
+          </div>
+          <div class="field" id="model-file-field">
+            <label for="model-file">Model file</label>
+            <input id="model-file" type="file" accept=".onnx" />
+          </div>
+          <div class="field" id="model-url-field" style="display:none">
+            <label for="model-url">Model URL</label>
+            <input id="model-url" type="text" value="https://huggingface.co/Xenova/yolov10n/resolve/main/onnx/model.onnx"
+              style="min-width: 320px; padding: 0.45rem 0.65rem; background:#20242f; color:var(--fg); border:1px solid var(--border); border-radius:6px;" />
+          </div>
+          <div class="field">
+            <label for="task">Task</label>
+            <select id="task">
+              <option value="detection">Detection</option>
+              <option value="segmentation">Instance segmentation</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="conf">Conf threshold</label>
+            <input id="conf" type="number" min="0" max="1" step="0.05" value="0.4" />
+          </div>
+          <div class="field">
+            <label for="iou">IoU threshold</label>
+            <input id="iou" type="number" min="0" max="1" step="0.05" value="0.45" />
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="row">
+          <div class="field">
+            <label for="image-file">Image</label>
+            <input id="image-file" type="file" accept="image/*" />
+          </div>
+          <div class="field">
+            <label>&nbsp;</label>
+            <button id="run-btn" disabled>Load model + run</button>
+          </div>
+          <div class="field">
+            <label>&nbsp;</label>
+            <button id="rerun-btn" class="secondary" disabled>Run on current image</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <canvas id="canvas" width="640" height="480"></canvas>
+      </section>
+
+      <details class="panel">
+        <summary>Log</summary>
+        <pre id="log"></pre>
+      </details>
+
+      <details class="panel">
+        <summary>How to run this demo locally</summary>
+        <ol style="line-height: 1.6">
+          <li>From the <code>sdk-js-web/</code> directory: <code>npm install &amp;&amp; npm run build</code></li>
+          <li>Serve the directory with any static HTTP server, e.g.:
+            <code>python3 -m http.server 8000</code></li>
+          <li>Open <code>http://localhost:8000/example/</code> in a browser
+            (Chromium-based browsers give you WebGPU; otherwise it falls back
+            to WASM automatically).</li>
+        </ol>
+        <p>
+          The page loads <code>onnxruntime-web</code> from a CDN and the SDK
+          from the local <code>../dist/</code> build, so you must run
+          <code>npm run build</code> first.
+        </p>
+      </details>
+    </main>
+
+    <script type="module">
+      import * as ort from "onnxruntime-web";
+      import { Detector, Segmenter } from "@ort-vision-sdk/web";
+
+      // ORT-Web needs to know where to fetch the matching .wasm files; point
+      // it at the same CDN/version we imported the JS from.
+      ort.env.wasm.wasmPaths =
+        "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.17/dist/";
+
+      const $ = (id) => document.getElementById(id);
+      const canvas = $("canvas");
+      const ctx = canvas.getContext("2d");
+      const log = $("log");
+      const runBtn = $("run-btn");
+      const rerunBtn = $("rerun-btn");
+      const taskSelect = $("task");
+      const modelSourceSelect = $("model-source");
+      const modelFileField = $("model-file-field");
+      const modelUrlField = $("model-url-field");
+
+      let task = null; // Detector | Segmenter
+      let lastImage = null; // ImageBitmap or HTMLImageElement
+      let lastConfig = { taskKind: null, modelKey: null };
+
+      modelSourceSelect.addEventListener("change", () => {
+        const v = modelSourceSelect.value;
+        modelFileField.style.display = v === "file" ? "" : "none";
+        modelUrlField.style.display = v === "url" ? "" : "none";
+      });
+
+      $("image-file").addEventListener("change", async (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        lastImage = await createImageBitmap(file);
+        drawImage(lastImage);
+        rerunBtn.disabled = task === null;
+      });
+
+      runBtn.addEventListener("click", async () => {
+        try {
+          runBtn.disabled = true;
+          await loadOrReuseTask();
+          if (lastImage) {
+            await runInference();
+          } else {
+            print("Model loaded. Now pick an image.", "ok");
+          }
+        } catch (err) {
+          printError(err);
+        } finally {
+          runBtn.disabled = false;
+          rerunBtn.disabled = !(task && lastImage);
+        }
+      });
+
+      rerunBtn.addEventListener("click", async () => {
+        if (!task || !lastImage) return;
+        try {
+          rerunBtn.disabled = true;
+          await runInference();
+        } catch (err) {
+          printError(err);
+        } finally {
+          rerunBtn.disabled = false;
+        }
+      });
+
+      async function loadOrReuseTask() {
+        const taskKind = taskSelect.value;
+        const modelSource = modelSourceSelect.value;
+        const modelKey =
+          modelSource === "url"
+            ? `url:${$("model-url").value}`
+            : `file:${$("model-file").files?.[0]?.name ?? ""}`;
+
+        if (
+          task &&
+          lastConfig.taskKind === taskKind &&
+          lastConfig.modelKey === modelKey
+        ) {
+          return;
+        }
+
+        let modelArg;
+        if (modelSource === "url") {
+          modelArg = $("model-url").value.trim();
+          if (!modelArg) throw new Error("Provide a model URL.");
+          print(`Loading model from URL: ${modelArg}`);
+        } else {
+          const f = $("model-file").files?.[0];
+          if (!f) throw new Error("Pick a local .onnx file first.");
+          print(`Loading model from local file: ${f.name} (${(f.size / 1e6).toFixed(1)} MB)`);
+          modelArg = new Uint8Array(await f.arrayBuffer());
+        }
+
+        const t0 = performance.now();
+        if (taskKind === "segmentation") {
+          task = await Segmenter.create(modelArg, {
+            confThreshold: Number($("conf").value),
+            iouThreshold: Number($("iou").value),
+          });
+        } else {
+          task = await Detector.create(modelArg, {
+            confThreshold: Number($("conf").value),
+            iouThreshold: Number($("iou").value),
+          });
+        }
+        const dt = performance.now() - t0;
+        lastConfig = { taskKind, modelKey };
+        print(
+          `Model ready in ${dt.toFixed(0)} ms. Providers: ${task.session.providers.join(", ")}.`,
+          "ok",
+        );
+      }
+
+      async function runInference() {
+        if (!task || !lastImage) return;
+
+        const taskKind = taskSelect.value;
+        // Hot-update thresholds without rebuilding the session.
+        const confThreshold = Number($("conf").value);
+        const iouThreshold = Number($("iou").value);
+
+        const t0 = performance.now();
+        const out = await task.predict(lastImage, { confThreshold, iouThreshold });
+        const dt = performance.now() - t0;
+
+        drawImage(lastImage);
+        const drawCount = drawOverlay(out, taskKind);
+        print(
+          `Inference: ${dt.toFixed(0)} ms · ${drawCount} ${taskKind === "segmentation" ? "instances" : "detections"} drawn.`,
+          "ok",
+        );
+      }
+
+      function drawImage(image) {
+        canvas.width = image.width;
+        canvas.height = image.height;
+        ctx.drawImage(image, 0, 0);
+      }
+
+      function drawOverlay(out, taskKind) {
+        let count = 0;
+        if (taskKind === "segmentation") {
+          for (const seg of out) {
+            paintMask(seg.mask, seg.bbox, seg.classId);
+            drawBox(seg.bbox, seg.className, seg.confidence, seg.classId);
+            count++;
+          }
+        } else {
+          for (const det of out) {
+            drawBox(det.bbox, det.className, det.confidence, det.classId);
+            count++;
+          }
+        }
+        return count;
+      }
+
+      function drawBox(bbox, name, confidence, classId) {
+        const [x1, y1, x2, y2] = bbox.asXyxy();
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = colorFor(classId);
+        ctx.fillStyle = colorFor(classId);
+        ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
+
+        const label = `${name} ${(confidence * 100).toFixed(0)}%`;
+        ctx.font = "12px ui-sans-serif, system-ui, sans-serif";
+        const tw = ctx.measureText(label).width + 8;
+        const th = 16;
+        const ly = Math.max(0, y1 - th);
+        ctx.fillRect(x1, ly, tw, th);
+        ctx.fillStyle = "#0b1422";
+        ctx.fillText(label, x1 + 4, ly + 12);
+      }
+
+      function paintMask(mask, bbox, classId) {
+        if (mask.width === 0 || mask.height === 0) return;
+        const [x1, y1] = bbox.asIntXyxy();
+        const off = new OffscreenCanvas(mask.width, mask.height);
+        const offCtx = off.getContext("2d");
+        const imageData = offCtx.createImageData(mask.width, mask.height);
+        const [r, g, b] = hexToRgb(colorFor(classId));
+        for (let i = 0, j = 0; i < mask.data.length; i++, j += 4) {
+          const on = mask.data[i] !== 0;
+          imageData.data[j] = r;
+          imageData.data[j + 1] = g;
+          imageData.data[j + 2] = b;
+          imageData.data[j + 3] = on ? 110 : 0; // soft alpha
+        }
+        offCtx.putImageData(imageData, 0, 0);
+        ctx.drawImage(off, x1, y1);
+      }
+
+      function colorFor(classId) {
+        const palette = [
+          "#6aa3ff", "#5ad29c", "#ffb84d", "#ff7b7b", "#c389ff",
+          "#46d3d4", "#ffd166", "#ef476f", "#06d6a0", "#118ab2",
+        ];
+        return palette[classId % palette.length];
+      }
+
+      function hexToRgb(hex) {
+        const n = parseInt(hex.slice(1), 16);
+        return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+      }
+
+      function print(msg, kind = "") {
+        const span = document.createElement("span");
+        if (kind) span.className = kind;
+        span.textContent = `${new Date().toLocaleTimeString()} · ${msg}\n`;
+        log.appendChild(span);
+        log.scrollTop = log.scrollHeight;
+      }
+
+      function printError(err) {
+        console.error(err);
+        const msg = err && err.stack ? err.stack : String(err);
+        print(msg, "err");
+      }
+
+      print("Ready. Pick a model and an image, then click Run.");
+    </script>
+  </body>
+</html>

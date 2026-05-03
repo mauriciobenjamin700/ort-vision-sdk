@@ -1,0 +1,197 @@
+"""Image classification task using ONNX Runtime."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import numpy as np
+import onnxruntime as ort
+
+from ort_vision_sdk.io.image import ImageInput, load_image
+from ort_vision_sdk.labels import LabelSpec, resolve_labels
+from ort_vision_sdk.postprocess.classification import softmax, topk
+from ort_vision_sdk.preprocess.image import (
+    add_batch_dim,
+    normalize,
+    resize,
+    to_chw,
+)
+from ort_vision_sdk.results import ClassificationResults, Probs
+from ort_vision_sdk.tasks.base import VisionTask
+from ort_vision_sdk.types import ClassProbability, ClassificationResult, ImageArray
+
+_IMAGENET_MEAN: tuple[float, float, float] = (0.485, 0.456, 0.406)
+_IMAGENET_STD: tuple[float, float, float] = (0.229, 0.224, 0.225)
+
+
+class Classifier(VisionTask):
+    """Image classifier wrapping an ONNX model with ImageNet-style preprocessing.
+
+    The default configuration matches the most common torchvision/ImageNet
+    convention: 224×224 RGB input, ``float32`` normalized with ImageNet mean
+    and standard deviation, NCHW layout, batch size 1, softmax applied to the
+    raw output.
+
+    ``predict()`` returns ``list[ClassificationResults]`` (length 1 for a
+    single image), mirroring Ultralytics' API. The envelope exposes a
+    ``probs`` collection (``top1``, ``top1conf``, ``top5``, ``top5conf``,
+    ``data``) and a per-image ``result`` dataclass with the resolved
+    per-class probabilities.
+
+    Override the constructor arguments when working with models that expect a
+    different input size or normalization, or skip the softmax for models
+    that already output probabilities.
+
+    Example:
+        >>> clf = Classifier("resnet50.onnx", labels="imagenet_labels.txt")
+        >>> results = clf.predict("dog.jpg")
+        >>> r = results[0]
+        >>> print(r.cls, r.conf, r.name)
+        >>> print(r.probs.top5, r.probs.top5conf)
+    """
+
+    def __init__(
+        self,
+        model_path: str | Path,
+        *,
+        labels: LabelSpec = None,
+        providers: list[str] | None = None,
+        session_options: ort.SessionOptions | None = None,
+        input_size: tuple[int, int] = (224, 224),
+        mean: tuple[float, float, float] = _IMAGENET_MEAN,
+        std: tuple[float, float, float] = _IMAGENET_STD,
+        apply_softmax: bool = True,
+    ) -> None:
+        """Initialize the classifier.
+
+        Args:
+            model_path: Path to the ``.onnx`` model.
+            labels: Class label spec — see :func:`resolve_labels`.
+            providers: Execution providers in preference order. Accepts short
+                aliases (``"cuda"``, ``"cpu"``, ...) or canonical ORT names.
+                Auto if ``None``.
+            session_options: Optional ORT session options.
+            input_size: Model input ``(width, height)`` in pixels.
+            mean: Per-channel RGB mean used for normalization.
+            std: Per-channel RGB standard deviation used for normalization.
+            apply_softmax: If ``True`` (default), apply softmax to the raw model
+                output before deriving probabilities. Set to ``False`` for
+                models whose final layer is already a probability distribution.
+        """
+        super().__init__(
+            model_path,
+            providers=providers,
+            session_options=session_options,
+        )
+        self._input_size: tuple[int, int] = input_size
+        self._mean: tuple[float, float, float] = mean
+        self._std: tuple[float, float, float] = std
+        self._apply_softmax: bool = apply_softmax
+
+        num_classes = self._infer_num_classes()
+        self._labels: tuple[str, ...] = resolve_labels(labels, num_classes=num_classes)
+        self._names: dict[int, str] = {i: name for i, name in enumerate(self._labels)}
+
+    @property
+    def labels(self) -> tuple[str, ...]:
+        """Class labels indexed by class id."""
+        return self._labels
+
+    @property
+    def names(self) -> dict[int, str]:
+        """Class id → class name dict (matches Ultralytics' ``model.names``)."""
+        return self._names
+
+    @property
+    def num_classes(self) -> int:
+        """Number of classes the model can predict."""
+        return len(self._labels)
+
+    def __call__(
+        self,
+        image: ImageInput,
+        *,
+        top_k: int | None = None,
+    ) -> list[ClassificationResults]:
+        """Alias for :meth:`predict` — call the classifier like a torch ``nn.Module``."""
+        return self.predict(image, top_k=top_k)
+
+    def predict(
+        self,
+        image: ImageInput,
+        *,
+        top_k: int | None = None,
+    ) -> list[ClassificationResults]:
+        """Run classification on a single image.
+
+        Args:
+            image: Image source (path, bytes, ``np.ndarray``, or ``PIL.Image``).
+            top_k: If set, the per-class probability tuple in
+                ``results[0].result.probabilities`` is truncated to the top-k
+                entries. The bulk ``probs`` view always exposes the full
+                vector, regardless of ``top_k``.
+
+        Returns:
+            A 1-element list containing a :class:`ClassificationResults`
+            envelope.
+        """
+        path = str(image) if isinstance(image, (str, Path)) else None
+        original = load_image(image)
+        tensor = self._preprocess(original)
+        outputs = self._session.run({self._session.input_name: tensor})
+        full_probs = self._postprocess(outputs[0])
+
+        indices, values = topk(full_probs, k=top_k)
+        probabilities = tuple(
+            ClassProbability(
+                class_id=int(idx),
+                class_name=self._labels[int(idx)],
+                probability=float(val),
+            )
+            for idx, val in zip(indices, values, strict=True)
+        )
+
+        top = probabilities[0]
+        result = ClassificationResult(
+            class_id=top.class_id,
+            class_name=top.class_name,
+            confidence=top.probability,
+            image=original,
+            probabilities=probabilities,
+        )
+        probs_view = Probs(data=full_probs.astype(np.float64, copy=False))
+
+        return [
+            ClassificationResults(
+                probs=probs_view,
+                result=result,
+                names=self._names,
+                orig_img=original,
+                orig_shape=(int(original.shape[0]), int(original.shape[1])),
+                path=path,
+            )
+        ]
+
+    def _preprocess(self, image: ImageArray) -> np.ndarray:
+        """Resize → normalize → CHW → batch."""
+        resized = resize(image, self._input_size)
+        normalized = normalize(resized, mean=self._mean, std=self._std)
+        chw = to_chw(normalized)
+        return add_batch_dim(chw).astype(np.float32, copy=False)
+
+    def _postprocess(self, output: np.ndarray) -> np.ndarray:
+        """Squeeze batch dim and (optionally) apply softmax."""
+        scores = np.squeeze(output, axis=0) if output.ndim == 2 else output
+        if scores.ndim != 1:
+            raise ValueError(
+                f"Expected classifier output to reduce to a 1-D vector, got shape {scores.shape}."
+            )
+        return softmax(scores) if self._apply_softmax else scores.astype(np.float32, copy=False)
+
+    def _infer_num_classes(self) -> int | None:
+        """Read num_classes from the model's first output last static dim."""
+        outputs = self._session.raw.get_outputs()
+        if not outputs:
+            return None
+        last_dim = tuple(outputs[0].shape)[-1]
+        return int(last_dim) if isinstance(last_dim, int) else None

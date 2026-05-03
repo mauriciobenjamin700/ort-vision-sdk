@@ -10,4 +10,6 @@ _Gerado automaticamente por `make releases-md` a partir das git tags._
 
 ## sdk-js-web (npm)
 
-_Nenhuma release publicada ainda._
+| Tag | Data | Commit |
+| --- | ---- | ------ |
+| web-v0.2.0 | 2026-05-03 | 3fb5779 |

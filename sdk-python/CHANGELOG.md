@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-05-03
+
+Patch release focused on documentation and CI hardening — no public API changes.
+
+### Changed
+
+- README rewritten as a comprehensive PyPI landing page: badges, "Why this
+  SDK" comparison, task/result tables, runnable quick-start for `Classifier`,
+  `Detector`, `Segmenter`, sections on inputs, label specs, execution
+  providers, and "Common patterns" recipes.
+
+### Fixed
+
+- `mypy` strict mode now passes on Python 3.10/3.11/3.12. `numpy>=2.x` marks
+  `ndarray` as generic but its type-parameter defaults rely on PEP 696 (Python
+  3.13+); we disabled `disallow_any_generics` to keep the SDK building under
+  the supported Python range. Two real shape inference issues in
+  `postprocess/segmentation.py` and `tasks/detector.py` were also fixed via
+  explicit annotations.
+- CI smoke-install step now captures the packed tarball name dynamically and
+  resolves the package name via `package.json`, fixing failures introduced by
+  the previous web-package scope rename.
+
 ## [0.2.0] - 2026-05-02
 
 This release brings the public API in line with the Ultralytics / PyTorch

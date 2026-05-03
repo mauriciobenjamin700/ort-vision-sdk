@@ -1,13 +1,17 @@
-# @ort-vision-sdk/web
+# @mauriciobenjamin700/ort-vision-sdk-web
+
+[![npm](https://img.shields.io/npm/v/@mauriciobenjamin700/ort-vision-sdk-web.svg)](https://www.npmjs.com/package/@mauriciobenjamin700/ort-vision-sdk-web)
+[![GitHub](https://img.shields.io/badge/github-mauriciobenjamin700%2Fort--vision--sdk-181717?logo=github)](https://github.com/mauriciobenjamin700/ort-vision-sdk)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/mauriciobenjamin700/ort-vision-sdk/blob/main/sdk-js-web/LICENSE)
 
 High-level TypeScript SDK for browser computer vision inference on top of [ONNX Runtime Web](https://onnxruntime.ai/docs/get-started/with-javascript/web.html).
 
-Mirrors the Python `ort-vision-sdk` API: task-oriented classes (`Classifier`, `Detector`) that handle image loading, preprocessing, execution-provider selection and postprocessing. Output is the same typed shape as the Python version (`ClassificationResult`, `DetectionResult`, `BoundingBox`).
+Mirrors the Python [`ort-vision-sdk`](https://pypi.org/project/ort-vision-sdk/) API: task-oriented classes (`Classifier`, `Detector`) that handle image loading, preprocessing, execution-provider selection and postprocessing. Output is the same typed shape as the Python version (`ClassificationResult`, `DetectionResult`, `BoundingBox`).
 
 ## Installation
 
 ```bash
-npm install @ort-vision-sdk/web onnxruntime-web
+npm install @mauriciobenjamin700/ort-vision-sdk-web onnxruntime-web
 ```
 
 `onnxruntime-web` is a peer dependency — you bring your own version and ship the matching `.wasm` files yourself.
@@ -17,7 +21,7 @@ npm install @ort-vision-sdk/web onnxruntime-web
 ### Image classification
 
 ```typescript
-import { Classifier } from "@ort-vision-sdk/web";
+import { Classifier } from "@mauriciobenjamin700/ort-vision-sdk-web";
 
 const clf = await Classifier.create("/models/resnet50.onnx", {
   labels: ["tench", "goldfish", /* ... 1000 ImageNet labels */],
@@ -33,7 +37,7 @@ console.log(result.probabilities);
 ### Object detection
 
 ```typescript
-import { Detector } from "@ort-vision-sdk/web";
+import { Detector } from "@mauriciobenjamin700/ort-vision-sdk-web";
 
 // labels defaults to "coco" (80 classes)
 const det = await Detector.create("/models/yolov8n.onnx");
@@ -75,4 +79,12 @@ For WebGPU to actually engage you need a recent ORT-Web build, a Chromium-based 
 
 ## Status
 
-Alpha — API may change. See [`package.json`](package.json) for supported versions.
+This project is **alpha** — the public API is stable enough to build against, but minor versions may introduce breaking changes during the pre-1.0 phase. Pin the version range you build against.
+
+- Source code & issues: <https://github.com/mauriciobenjamin700/ort-vision-sdk>
+- Changelog: <https://github.com/mauriciobenjamin700/ort-vision-sdk/blob/main/sdk-js-web/CHANGELOG.md>
+- Python counterpart: [`ort-vision-sdk`](https://pypi.org/project/ort-vision-sdk/)
+
+## License
+
+MIT — see [LICENSE](https://github.com/mauriciobenjamin700/ort-vision-sdk/blob/main/sdk-js-web/LICENSE).

@@ -1,0 +1,160 @@
+# Makefile — automação de release para os pacotes do monorepo
+#
+# Uso rápido:
+#   make help                                  # lista todos os alvos
+#   make releases                              # mostra histórico (a partir das git tags)
+#   make release PROJECT=python TAG=0.3.0      # bump + validate + commit + tag + push
+#   make release PROJECT=web    TAG=0.3.0      # idem para o pacote npm
+#
+# Variáveis aceitas:
+#   PROJECT          python | web
+#   TAG              número de versão sem prefixo (ex.: 0.3.0)
+#   DRY_RUN=1        executa todo o pipeline mas NÃO faz push (cria branch + commit + tag locais)
+#   SKIP_VALIDATE=1  pula o passo de validação (lint/typecheck/build)
+#   BASE_BRANCH=...  branch alvo do PR (default: main; útil para PRs empilhados)
+
+SHELL        := /bin/bash
+.SHELLFLAGS  := -eu -o pipefail -c
+.DEFAULT_GOAL := help
+
+PROJECT       ?=
+TAG           ?=
+DRY_RUN       ?= 0
+SKIP_VALIDATE ?= 0
+BASE_BRANCH   ?= main
+
+PY_DIR         := sdk-python
+WEB_DIR        := sdk-js-web
+RELEASES_FILE  := RELEASES.md
+
+PY_VERSION_FILES  := $(PY_DIR)/pyproject.toml $(PY_DIR)/src/ort_vision_sdk/__init__.py
+WEB_VERSION_FILES := $(WEB_DIR)/package.json $(WEB_DIR)/package-lock.json $(WEB_DIR)/src/index.ts
+
+# ---------------------------------------------------------------------------
+# Help
+# ---------------------------------------------------------------------------
+
+.PHONY: help
+help: ## Mostra esta ajuda
+	@printf "Uso: make <alvo> [PROJECT=python|web] [TAG=0.3.0] [DRY_RUN=1] [SKIP_VALIDATE=1]\n\n"
+	@printf "Alvos:\n"
+	@awk 'BEGIN{FS=":.*?## "} /^[a-zA-Z_-]+:.*## / {printf "  \033[36m%-22s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
+
+# ---------------------------------------------------------------------------
+# Histórico de releases (lê das git tags — fonte da verdade)
+# ---------------------------------------------------------------------------
+
+.PHONY: releases releases-python releases-web last-python last-web releases-md
+
+releases: ## Lista todas as tags de release agrupadas por projeto
+	@printf "\n=== sdk-python (PyPI) ===\n"
+	@git tag -l "v*.*.*" --sort=-v:refname | sed 's/^/  /' | grep . || echo "  (nenhuma tag ainda)"
+	@printf "\n=== sdk-js-web (npm) ===\n"
+	@git tag -l "web-v*.*.*" --sort=-v:refname | sed 's/^/  /' | grep . || echo "  (nenhuma tag ainda)"
+	@printf "\n"
+
+releases-python: ## Lista apenas as tags do sdk-python (mais recentes primeiro)
+	@git tag -l "v*.*.*" --sort=-v:refname
+
+releases-web: ## Lista apenas as tags do sdk-js-web (mais recentes primeiro)
+	@git tag -l "web-v*.*.*" --sort=-v:refname
+
+last-python: ## Mostra a última tag publicada do sdk-python
+	@git tag -l "v*.*.*" --sort=-v:refname | head -n 1 | grep . || echo "(nenhuma)"
+
+last-web: ## Mostra a última tag publicada do sdk-js-web
+	@git tag -l "web-v*.*.*" --sort=-v:refname | head -n 1 | grep . || echo "(nenhuma)"
+
+releases-md: ## (Re)gera RELEASES.md a partir das git tags
+	@{ \
+	  printf "# Histórico de releases\n\n"; \
+	  printf "_Gerado automaticamente por \`make releases-md\` a partir das git tags._\n\n"; \
+	  printf "## sdk-python (PyPI)\n\n"; \
+	  py_rows=$$(git for-each-ref --sort=-v:refname --format='| %(refname:short) | %(creatordate:short) | %(objectname:short) |' 'refs/tags/v*.*.*' 2>/dev/null || true); \
+	  if [ -n "$$py_rows" ]; then \
+	    printf "| Tag | Data | Commit |\n| --- | ---- | ------ |\n%s\n\n" "$$py_rows"; \
+	  else \
+	    printf "_Nenhuma release publicada ainda._\n\n"; \
+	  fi; \
+	  printf "## sdk-js-web (npm)\n\n"; \
+	  web_rows=$$(git for-each-ref --sort=-v:refname --format='| %(refname:short) | %(creatordate:short) | %(objectname:short) |' 'refs/tags/web-v*.*.*' 2>/dev/null || true); \
+	  if [ -n "$$web_rows" ]; then \
+	    printf "| Tag | Data | Commit |\n| --- | ---- | ------ |\n%s\n" "$$web_rows"; \
+	  else \
+	    printf "_Nenhuma release publicada ainda._\n"; \
+	  fi; \
+	} > $(RELEASES_FILE)
+	@echo "✓ $(RELEASES_FILE) atualizado"
+
+# ---------------------------------------------------------------------------
+# Bump de versão nos arquivos-fonte
+# ---------------------------------------------------------------------------
+
+.PHONY: bump-python bump-web
+
+bump-python: _require-tag ## Atualiza versão do sdk-python (use TAG=0.3.0)
+	@sed -i.bak -E 's/^version = "[^"]*"/version = "$(TAG)"/' $(PY_DIR)/pyproject.toml
+	@sed -i.bak -E 's/^__version__: str = "[^"]*"/__version__: str = "$(TAG)"/' $(PY_DIR)/src/ort_vision_sdk/__init__.py
+	@rm -f $(PY_DIR)/pyproject.toml.bak $(PY_DIR)/src/ort_vision_sdk/__init__.py.bak
+	@echo "✓ sdk-python bumped → $(TAG)"
+
+bump-web: _require-tag ## Atualiza versão do sdk-js-web (use TAG=0.3.0)
+	@cd $(WEB_DIR) && npm version $(TAG) --no-git-tag-version --allow-same-version >/dev/null
+	@sed -i.bak -E 's/^export const VERSION: string = "[^"]*";$$/export const VERSION: string = "$(TAG)";/' $(WEB_DIR)/src/index.ts
+	@rm -f $(WEB_DIR)/src/index.ts.bak
+	@echo "✓ sdk-js-web bumped → $(TAG)"
+
+# ---------------------------------------------------------------------------
+# Validação local (mesmos checks que o CI roda)
+# ---------------------------------------------------------------------------
+
+.PHONY: validate-python validate-web
+
+validate-python: ## Lint + typecheck + build + twine check do sdk-python
+	cd $(PY_DIR) && \
+	  python -m pip install --quiet -e ".[dev]" && \
+	  ruff check src && \
+	  ruff format --check src && \
+	  mypy src && \
+	  rm -rf dist && \
+	  python -m build && \
+	  twine check dist/*
+
+validate-web: ## Typecheck + build + pack do sdk-js-web
+	cd $(WEB_DIR) && \
+	  npm ci && \
+	  npm run typecheck && \
+	  npm run build && \
+	  npm pack --dry-run
+
+# ---------------------------------------------------------------------------
+# Release pipeline
+# ---------------------------------------------------------------------------
+
+.PHONY: release release-python release-web
+
+release: _require-project _require-tag ## Pipeline completo: make release PROJECT=python|web TAG=0.3.0
+	@DRY_RUN=$(DRY_RUN) SKIP_VALIDATE=$(SKIP_VALIDATE) BASE_BRANCH=$(BASE_BRANCH) \
+	  ./scripts/release.sh "$(PROJECT)" "$(TAG)"
+
+release-python: _require-tag ## Release do sdk-python (use TAG=0.3.0)
+	@DRY_RUN=$(DRY_RUN) SKIP_VALIDATE=$(SKIP_VALIDATE) BASE_BRANCH=$(BASE_BRANCH) \
+	  ./scripts/release.sh python "$(TAG)"
+
+release-web: _require-tag ## Release do sdk-js-web (use TAG=0.3.0)
+	@DRY_RUN=$(DRY_RUN) SKIP_VALIDATE=$(SKIP_VALIDATE) BASE_BRANCH=$(BASE_BRANCH) \
+	  ./scripts/release.sh web "$(TAG)"
+
+# ---------------------------------------------------------------------------
+# Guards (uso interno)
+# ---------------------------------------------------------------------------
+
+.PHONY: _require-tag _require-project
+
+_require-tag:
+	@test -n "$(TAG)" || { echo "ERROR: TAG é obrigatório (ex.: TAG=0.3.0)"; exit 1; }
+	@echo "$(TAG)" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+([.-][a-zA-Z0-9]+)*$$' || \
+	  { echo "ERROR: TAG inválido '$(TAG)' — esperado formato semver (ex.: 0.3.0, 1.0.0-rc1)"; exit 1; }
+
+_require-project:
+	@test -n "$(PROJECT)" || { echo "ERROR: PROJECT é obrigatório (python|web)"; exit 1; }

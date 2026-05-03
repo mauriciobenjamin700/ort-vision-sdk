@@ -98,9 +98,120 @@ Se preferir desabilitar, edite [.github/workflows/release-npm.yml](../.github/wo
 
 ---
 
-## 3. Fluxo de release — PyPI
+## 3. Fluxo de release com `make` (recomendado)
 
-Toda vez que for lançar uma versão nova:
+O [Makefile](../Makefile) (que delega para [scripts/release.sh](../scripts/release.sh)) automatiza todo o fluxo: cria uma **release branch** dedicada, faz bump de versão, valida local, faz commit, cria a tag, faz push da branch + tag e abre um **PR** para a `main` via `gh`. A `main` nunca recebe push direto — toda mudança passa por revisão.
+
+### 3.1. Quick reference
+
+```bash
+make help                                # lista todos os alvos disponíveis
+make releases                            # mostra histórico de tags por projeto
+make last-python                         # última versão publicada do sdk-python
+make last-web                            # última versão publicada do sdk-js-web
+
+# Release de verdade (cria release branch + tag + abre PR):
+make release PROJECT=python TAG=0.3.0
+make release PROJECT=web    TAG=0.3.0
+
+# Atalhos equivalentes:
+make release-python TAG=0.3.0
+make release-web    TAG=0.3.0
+```
+
+> `TAG` é só o número da versão (ex.: `0.3.0`). O Makefile adiciona o prefixo certo (`v` para Python, `web-v` para npm) automaticamente.
+
+### 3.2. Passo a passo de uma release
+
+Exemplo: subir o sdk-python para `0.3.0`.
+
+1. **Atualize o CHANGELOG** — em [sdk-python/CHANGELOG.md](../sdk-python/CHANGELOG.md), mova o que está em `## [Unreleased]` para `## [0.3.0] - YYYY-MM-DD`. Esse é o único passo manual.
+
+2. **Faça commit do CHANGELOG** (o Makefile exige working tree limpa):
+
+   ```bash
+   git add sdk-python/CHANGELOG.md
+   git commit -m "docs(python): changelog for 0.3.0"
+   git push origin main   # ou pelo seu fluxo de PR habitual
+   ```
+
+3. **(Recomendado) Faça um dry-run primeiro:**
+
+   ```bash
+   make release PROJECT=python TAG=0.3.0 DRY_RUN=1
+   ```
+
+   Isso cria a branch `release/v0.3.0` localmente, atualiza a versão, valida e cria a tag — mas **não faz push nem abre PR**. Inspecione com `git log --oneline main..HEAD` e `git show v0.3.0`. Se algo estiver errado:
+
+   ```bash
+   git checkout main
+   git branch -D release/v0.3.0
+   git tag -d v0.3.0
+   ```
+
+4. **Rode o release de verdade:**
+
+   ```bash
+   make release PROJECT=python TAG=0.3.0
+   ```
+
+   O script vai, em ordem:
+   - Validar que `TAG` está no formato semver e que a tag não existe (local nem remoto)
+   - Avisar se o `CHANGELOG.md` não menciona `[0.3.0]`
+   - Criar a branch `release/v0.3.0` a partir do HEAD atual
+   - Atualizar a versão em `pyproject.toml` e em `src/ort_vision_sdk/__init__.py`
+   - Rodar lint + typecheck + build + `twine check` (mesmos checks do CI)
+   - Criar o commit `chore(python): release v0.3.0` e a tag `v0.3.0` na branch
+   - Regenerar [RELEASES.md](../RELEASES.md) e fazer commit dele
+   - `git push -u origin release/v0.3.0` + `git push origin v0.3.0`
+   - Abrir um PR via `gh pr create` com o template padrão em PT-BR
+
+5. **A tag já dispara o workflow** — acompanhe em **GitHub → Actions → Release to PyPI** e aprove o deploy no environment `pypi` quando solicitado. A publicação corre **independente** do merge do PR (a tag é a fonte da verdade).
+
+6. **Faça merge do PR** quando estiver pronto — isso propaga para `main` o bump de versão e a entrada em `RELEASES.md`.
+
+Para o npm é o mesmo fluxo, só trocando `PROJECT=python` por `PROJECT=web`. O Makefile adiciona o prefixo `web-v` na tag e atualiza `package.json`, `package-lock.json` e `src/index.ts`.
+
+### 3.3. Variáveis aceitas
+
+| Variável | Descrição |
+| --- | --- |
+| `PROJECT=python\|web` | Qual SDK liberar (obrigatório em `make release`) |
+| `TAG=0.3.0` | Versão sem prefixo, formato semver |
+| `DRY_RUN=1` | Faz tudo localmente (branch + commit + tag) mas pula push e PR |
+| `SKIP_VALIDATE=1` | Pula lint/typecheck/build (use só se acabou de validar manualmente) |
+| `BASE_BRANCH=...` | Branch-alvo do PR (default `main`). Útil para empilhar PRs (ex.: `BASE_BRANCH=release/v0.3.0` para o web encadear no python) |
+
+### 3.4. Histórico de releases
+
+A fonte da verdade é o `git tag`. Após cada release, o Makefile regenera [RELEASES.md](../RELEASES.md) com tag, data e SHA do commit por projeto. Para regenerar manualmente:
+
+```bash
+make releases-md
+```
+
+Para listar pelo terminal:
+
+```bash
+make releases          # ambos os projetos, mais recentes primeiro
+make releases-python   # só Python
+make releases-web      # só Web
+make last-python       # só a última tag do Python
+make last-web          # só a última tag do Web
+```
+
+### 3.5. Quando algo dá errado
+
+- **`working tree sujo`** → faça commit ou stash antes de tentar de novo. O Makefile não atualiza versão por cima de mudanças pendentes (evita levar para o commit coisa que não devia).
+- **`tag X já existe localmente`** → alguém (ou você) já criou essa tag. Veja com `git tag -l`. Se foi engano: `git tag -d <tag>` (e `git push origin :refs/tags/<tag>` caso já tenha sido pushed).
+- **Validação falhou no meio do release** → a atualização de versão já foi aplicada nos arquivos mas não entrou no commit. Reverta com `git checkout -- sdk-python/` (ou `sdk-js-web/`), conserte o problema e rode de novo.
+- **`CHANGELOG.md` não menciona [TAG]`** → o Makefile só avisa e espera você confirmar com ENTER. Se foi descuido, Ctrl+C, atualize o changelog, faça commit e rode de novo.
+
+---
+
+## 4. Fluxo manual — PyPI (referência)
+
+> Use o `make release` da seção 3. Esta seção existe só como referência de "o que o Makefile está fazendo por baixo dos panos".
 
 ```bash
 cd sdk-python
@@ -162,7 +273,9 @@ Use credenciais do TestPyPI ou um token salvo em `~/.pypirc`:
 
 ---
 
-## 4. Fluxo de release — npm
+## 5. Fluxo manual — npm (referência)
+
+> Use o `make release` da seção 3. Esta seção existe só como referência de "o que o Makefile está fazendo por baixo dos panos".
 
 ```bash
 cd sdk-js-web
@@ -204,7 +317,7 @@ node -e "import('@ort-vision-sdk/web').then(m => console.log(Object.keys(m)))"
 
 ---
 
-## 5. Versionamento
+## 6. Versionamento
 
 Os dois pacotes seguem [SemVer](https://semver.org). Mantenha-os em **lockstep** quando a mudança afeta os dois (ex.: novo tipo público), e independentes quando a mudança é só de um lado (ex.: ajuste só na preprocess do navegador).
 
@@ -222,7 +335,9 @@ Locais que carregam a versão e precisam ficar em sincronia:
 
 ---
 
-## 6. Checklist final antes de tagear
+## 7. Checklist final antes de tagear
+
+> Se você está usando `make release` (seção 3), todos esses itens são verificados/aplicados automaticamente — exceto o `CHANGELOG.md`, que continua sendo manual.
 
 - [ ] Versão bumpada nos dois lugares do pacote (Python: `pyproject.toml` + `__init__.py`; Web: `package.json` + `index.ts`).
 - [ ] `CHANGELOG.md` do pacote atualizado, com a data de hoje.
@@ -235,7 +350,7 @@ Locais que carregam a versão e precisam ficar em sincronia:
 
 ---
 
-## 7. Rollback / yank
+## 8. Rollback / yank
 
 ### PyPI
 
@@ -267,7 +382,7 @@ E publicar uma versão patch corrigida. **Nunca** reaproveite um número de vers
 
 ---
 
-## 8. Problemas comuns
+## 9. Problemas comuns
 
 **`twine check` reclama de README inválido**
 A render do PyPI usa CommonMark estrito. Evite HTML cru e badges com URLs relativas — use URLs absolutas para imagens/links.

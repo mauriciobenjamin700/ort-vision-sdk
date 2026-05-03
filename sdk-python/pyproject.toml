@@ -37,6 +37,7 @@ gpu = ["onnxruntime-gpu>=1.17.0"]
 opencv = ["opencv-python>=4.8.0"]
 dev = [
     "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
     "pytest-cov>=5.0.0",
     "ruff>=0.5.0",
     "mypy>=1.10.0",
@@ -122,6 +123,7 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 pythonpath = ["src"]
 addopts = "-ra --strict-markers"
+asyncio_mode = "auto"
 filterwarnings = [
     "default::DeprecationWarning:ort_vision_sdk.*",
 ]

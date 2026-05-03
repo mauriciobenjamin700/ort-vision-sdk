@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 
 import numpy as np
@@ -120,3 +121,99 @@ class OrtSession:
         except Exception as exc:
             raise InferenceError(f"Inference failed: {exc}") from exc
         return outputs
+
+    async def async_run(
+        self,
+        feeds: dict[str, np.ndarray],
+        *,
+        output_names: list[str] | None = None,
+    ) -> list[np.ndarray]:
+        """Async wrapper around :meth:`run` using ``asyncio.to_thread``.
+
+        Off-loads the synchronous ORT call to the asyncio default executor's
+        thread pool, so a single inference does not block the event loop.
+        This is the right choice for typical async code (FastAPI handlers,
+        AnyIO tasks, scripts that intermix I/O and inference): one thread per
+        in-flight inference, fully portable across ORT versions.
+
+        For high-throughput concurrency where many awaits should share a
+        single thread pool, prefer :meth:`ort_async_run`.
+
+        Args:
+            feeds: Mapping of input name to NumPy array.
+            output_names: Names of the outputs to fetch. ``None`` (default)
+                fetches all outputs in declared order.
+
+        Returns:
+            A list of NumPy arrays, one per output, in the order requested.
+
+        Raises:
+            InferenceError: If ORT raises any error during execution.
+        """
+        return await asyncio.to_thread(self.run, feeds, output_names=output_names)
+
+    async def ort_async_run(
+        self,
+        feeds: dict[str, np.ndarray],
+        *,
+        output_names: list[str] | None = None,
+    ) -> list[np.ndarray]:
+        """Async wrapper around ORT's native ``InferenceSession.run_async``.
+
+        Schedules inference on the ONNX Runtime internal thread pool
+        (configured via ``intra_op_num_threads`` / ``inter_op_num_threads``
+        on your ``SessionOptions``). The returned future resolves when ORT
+        invokes its callback on a worker thread; the result is hopped back
+        to the event loop via ``loop.call_soon_threadsafe``.
+
+        Use this for **high-concurrency** workloads — dozens or hundreds of
+        simultaneous awaits all share the ORT pool, instead of each call
+        spawning a Python thread (which is what :meth:`async_run` does). For
+        typical one-off async calls, :meth:`async_run` is simpler and equally
+        non-blocking.
+
+        Requires ``onnxruntime>=1.16``.
+
+        Args:
+            feeds: Mapping of input name to NumPy array.
+            output_names: Names of the outputs to fetch. ``None`` (default)
+                fetches all outputs in declared order.
+
+        Returns:
+            A list of NumPy arrays, one per output.
+
+        Raises:
+            InferenceError: If ORT signals an error in the callback, or if
+                the installed ORT version does not expose ``run_async``.
+        """
+        run_async = getattr(self._session, "run_async", None)
+        if run_async is None:
+            raise InferenceError(
+                "InferenceSession.run_async is not available in this onnxruntime "
+                "version. Upgrade to onnxruntime>=1.16, or use async_run instead."
+            )
+
+        loop = asyncio.get_running_loop()
+        future: asyncio.Future[list[np.ndarray]] = loop.create_future()
+        fetch = output_names if output_names is not None else self._output_names
+
+        def _callback(
+            outputs: list[np.ndarray],
+            user_data: object,
+            error: str | None,
+        ) -> None:
+            if future.done():
+                return
+            if error:
+                loop.call_soon_threadsafe(
+                    future.set_exception, InferenceError(f"Inference failed: {error}")
+                )
+            else:
+                loop.call_soon_threadsafe(future.set_result, outputs)
+
+        try:
+            run_async(fetch, feeds, _callback, None)
+        except Exception as exc:
+            raise InferenceError(f"Inference failed: {exc}") from exc
+
+        return await future

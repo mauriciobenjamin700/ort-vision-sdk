@@ -231,6 +231,67 @@ Per-instance dataclasses (`DetectionResult`, `SegmentationResult`, `ClassProbabi
 
 ---
 
+## Async inference
+
+Each task class exposes two async variants of `predict()` that match the sync signature exactly. Pick the one that matches your concurrency profile:
+
+| Method | Mechanism | Use when |
+| --- | --- | --- |
+| `predict()` | Synchronous | Scripts, notebooks, batch pipelines without an event loop |
+| `async_predict()` | `asyncio.to_thread` | Default async path — FastAPI/AnyIO/Quart handlers and other async code. Off-loads the whole pipeline (preprocess + run + postprocess) to the asyncio default executor's thread pool, freeing the event loop. One Python thread per in-flight inference. |
+| `ort_async_predict()` | `InferenceSession.run_async` | High-throughput concurrency — many simultaneous awaits should share a single thread pool. Pre-/post-processing run on the event loop thread; the model run is dispatched to the ONNX Runtime internal pool you configured via `SessionOptions.intra_op_num_threads` / `inter_op_num_threads`. Requires `onnxruntime>=1.16`. |
+
+The same split is available on the underlying session — `OrtSession.async_run` / `OrtSession.ort_async_run` — for callers building their own pipelines.
+
+### FastAPI handler (default async)
+
+```python
+from fastapi import FastAPI, UploadFile
+from ort_vision_sdk import Detector
+
+app = FastAPI()
+det = Detector("yolov8n.onnx")
+
+@app.post("/detect")
+async def detect(file: UploadFile) -> dict[str, list[dict[str, float | int | str]]]:
+    image_bytes = await file.read()
+    result = (await det.async_predict(image_bytes))[0]
+    return {
+        "detections": [
+            {"name": d.name, "conf": d.conf, "x1": d.box.x1, "y1": d.box.y1,
+             "x2": d.box.x2, "y2": d.box.y2}
+            for d in result
+        ]
+    }
+```
+
+### High-concurrency batch (ORT pool)
+
+```python
+import asyncio
+import onnxruntime as ort
+from ort_vision_sdk import Detector
+
+# Configure the ORT thread pool — all in-flight inferences share these threads.
+opts = ort.SessionOptions()
+opts.intra_op_num_threads = 4
+opts.inter_op_num_threads = 1
+
+det = Detector("yolov8n.onnx", session_options=opts)
+
+async def detect_all(paths: list[str]) -> list[list]:
+    # Hundreds of concurrent awaits, all sharing the ORT pool of 4 threads —
+    # no Python thread spawned per await.
+    return await asyncio.gather(*(det.ort_async_predict(p) for p in paths))
+
+results = asyncio.run(detect_all([f"img_{i}.jpg" for i in range(200)]))
+```
+
+### Rule of thumb
+
+- **One-off async call inside a request handler** → `async_predict`
+- **Hundreds of concurrent inferences** (queue worker, batch endpoint) → `ort_async_predict`
+
 ## Common patterns
 
 ### Iterate detections only

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 from typing import Literal
 
@@ -150,7 +151,7 @@ class Detector(VisionTask):
         iou_threshold: float | None = None,
         classes: list[int] | None = None,
     ) -> list[DetectionResults]:
-        """Run detection on a single image.
+        """Run detection on a single image (synchronous).
 
         Args:
             image: Image source (path, bytes, ``np.ndarray``, or ``PIL.Image``).
@@ -170,7 +171,92 @@ class Detector(VisionTask):
         original = load_image(image)
         tensor, scale, pad = self._preprocess(original)
         outputs = self._session.run({self._session.input_name: tensor})
+        return self._build_results(
+            outputs,
+            original=original,
+            path=path,
+            scale=scale,
+            pad=pad,
+            conf_threshold=conf_threshold,
+            iou_threshold=iou_threshold,
+            classes=classes,
+        )
 
+    async def async_predict(
+        self,
+        image: ImageInput,
+        *,
+        conf_threshold: float | None = None,
+        iou_threshold: float | None = None,
+        classes: list[int] | None = None,
+    ) -> list[DetectionResults]:
+        """Async detection via ``asyncio.to_thread``.
+
+        Off-loads :meth:`predict` (preprocess + ORT run + decode + NMS) to the
+        asyncio default executor's thread pool, freeing the event loop. Use in
+        FastAPI/AnyIO handlers and similar async contexts. For
+        high-concurrency workloads, see :meth:`ort_async_predict`.
+
+        Args and return type match :meth:`predict` exactly.
+        """
+        return await asyncio.to_thread(
+            self.predict,
+            image,
+            conf_threshold=conf_threshold,
+            iou_threshold=iou_threshold,
+            classes=classes,
+        )
+
+    async def ort_async_predict(
+        self,
+        image: ImageInput,
+        *,
+        conf_threshold: float | None = None,
+        iou_threshold: float | None = None,
+        classes: list[int] | None = None,
+    ) -> list[DetectionResults]:
+        """Async detection using ORT's native ``run_async`` for the model step.
+
+        Letterboxing and decode/NMS run on the event loop thread (NumPy ops);
+        the model run is dispatched to the ONNX Runtime internal thread pool
+        (configured by your ``SessionOptions``). Prefer this for
+        high-throughput concurrency where many awaits should share the ORT
+        pool. Requires ``onnxruntime>=1.16``.
+
+        Args and return type match :meth:`predict` exactly.
+        """
+        path = str(image) if isinstance(image, (str, Path)) else None
+        original = load_image(image)
+        tensor, scale, pad = self._preprocess(original)
+        outputs = await self._session.ort_async_run({self._session.input_name: tensor})
+        return self._build_results(
+            outputs,
+            original=original,
+            path=path,
+            scale=scale,
+            pad=pad,
+            conf_threshold=conf_threshold,
+            iou_threshold=iou_threshold,
+            classes=classes,
+        )
+
+    def _build_results(
+        self,
+        outputs: list[np.ndarray],
+        *,
+        original: ImageArray,
+        path: str | None,
+        scale: float,
+        pad: tuple[int, int],
+        conf_threshold: float | None,
+        iou_threshold: float | None,
+        classes: list[int] | None,
+    ) -> list[DetectionResults]:
+        """Decode raw outputs + NMS into a :class:`DetectionResults` envelope.
+
+        Shared between :meth:`predict`, :meth:`async_predict` and
+        :meth:`ort_async_predict`.
+        """
         decoded = decode_yolo(
             outputs[0],
             original_size=(original.shape[1], original.shape[0]),

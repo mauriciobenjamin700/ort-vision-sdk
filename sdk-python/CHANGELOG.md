@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Async inference API.** Each task and the underlying `OrtSession` now
+  expose two async variants of the existing sync entrypoints, with explicit
+  prefixes so callers know which threading model they are opting into:
+  - `async_*` — `asyncio.to_thread` wrappers. Default async path: dispatches
+    the sync call to the asyncio executor's thread pool, freeing the event
+    loop. Right for FastAPI/AnyIO handlers and most async code.
+    - `OrtSession.async_run`
+    - `Classifier.async_predict`, `Detector.async_predict`,
+      `Segmenter.async_predict`
+  - `ort_async_*` — uses ORT's native `InferenceSession.run_async` callback,
+    so all in-flight inferences share the ONNX Runtime internal thread pool
+    (configured via `SessionOptions`). Right for high-concurrency workloads
+    where you don't want a Python thread per await. Requires
+    `onnxruntime>=1.16`.
+    - `OrtSession.ort_async_run`
+    - `Classifier.ort_async_predict`, `Detector.ort_async_predict`,
+      `Segmenter.ort_async_predict`
+- `pytest-asyncio` added to `[dev]` extras (with `asyncio_mode = "auto"`) so
+  async tests are recognised without per-test markers.
+
+### Changed
+
+- Each task's `predict()` now delegates the result-building logic to a
+  private `_build_results()` helper, so the sync and async variants share
+  one implementation of decode/NMS/result envelope construction. Public
+  behaviour is unchanged.
+
 ## [0.2.1] - 2026-05-03
 
 Patch release focused on documentation and CI hardening — no public API changes.

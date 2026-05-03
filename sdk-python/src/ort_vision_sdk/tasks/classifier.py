@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 
 import numpy as np
@@ -122,7 +123,7 @@ class Classifier(VisionTask):
         *,
         top_k: int | None = None,
     ) -> list[ClassificationResults]:
-        """Run classification on a single image.
+        """Run classification on a single image (synchronous).
 
         Args:
             image: Image source (path, bytes, ``np.ndarray``, or ``PIL.Image``).
@@ -139,6 +140,62 @@ class Classifier(VisionTask):
         original = load_image(image)
         tensor = self._preprocess(original)
         outputs = self._session.run({self._session.input_name: tensor})
+        return self._build_results(outputs, original=original, path=path, top_k=top_k)
+
+    async def async_predict(
+        self,
+        image: ImageInput,
+        *,
+        top_k: int | None = None,
+    ) -> list[ClassificationResults]:
+        """Async classification via ``asyncio.to_thread``.
+
+        Off-loads the entire :meth:`predict` pipeline to the asyncio default
+        executor's thread pool, freeing the event loop. Use in FastAPI/AnyIO
+        handlers, or any async code where you don't want a single inference
+        to block the loop. For high concurrency, see :meth:`ort_async_predict`.
+
+        Args and return type match :meth:`predict` exactly.
+        """
+        return await asyncio.to_thread(self.predict, image, top_k=top_k)
+
+    async def ort_async_predict(
+        self,
+        image: ImageInput,
+        *,
+        top_k: int | None = None,
+    ) -> list[ClassificationResults]:
+        """Async classification using ORT's native ``run_async`` for inference.
+
+        Pre-/post-processing run on the event loop thread (cheap NumPy ops);
+        the model run is dispatched to the ONNX Runtime internal thread pool
+        (configured by your ``SessionOptions``). Prefer this over
+        :meth:`async_predict` for high-throughput concurrent workloads where
+        you want all in-flight inferences to share the ORT pool. Requires
+        ``onnxruntime>=1.16``.
+
+        Args and return type match :meth:`predict` exactly.
+        """
+        path = str(image) if isinstance(image, (str, Path)) else None
+        original = load_image(image)
+        tensor = self._preprocess(original)
+        outputs = await self._session.ort_async_run({self._session.input_name: tensor})
+        return self._build_results(outputs, original=original, path=path, top_k=top_k)
+
+    def _build_results(
+        self,
+        outputs: list[np.ndarray],
+        *,
+        original: ImageArray,
+        path: str | None,
+        top_k: int | None,
+    ) -> list[ClassificationResults]:
+        """Postprocess raw outputs into a :class:`ClassificationResults` envelope.
+
+        Shared between :meth:`predict`, :meth:`async_predict` and
+        :meth:`ort_async_predict` so the result-building logic stays in one
+        place regardless of how the model run was scheduled.
+        """
         full_probs = self._postprocess(outputs[0])
 
         indices, values = topk(full_probs, k=top_k)

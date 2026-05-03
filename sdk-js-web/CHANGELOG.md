@@ -1,11 +1,29 @@
 # Changelog
 
-All notable changes to `@ort-vision-sdk/web` are documented in this file.
+All notable changes to `@mauriciobenjamin700/ort-vision-sdk-web` are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+## [0.2.1] - 2026-05-03
+
+First **published** release on npm. The previous `0.2.0` tag never produced a
+package because the CI smoke-install step still referenced the old
+`@ort-vision-sdk/web` scope after the rename to
+`@mauriciobenjamin700/ort-vision-sdk-web`. No public API changes.
+
+### Changed
+
+- README rewritten with badges, GitHub repo links, npm install snippets and
+  imports updated to the new `@mauriciobenjamin700/ort-vision-sdk-web` scope.
+
+### Fixed
+
+- CI smoke-install step now captures the packed tarball name dynamically and
+  resolves the package name via `package.json`, so it survives future
+  package-name changes.
 
 ## [0.2.0] - 2026-05-02
 

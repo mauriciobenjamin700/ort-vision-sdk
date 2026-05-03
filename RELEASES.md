@@ -6,6 +6,7 @@ _Gerado automaticamente por `make releases-md` a partir das git tags._
 
 | Tag | Data | Commit |
 | --- | ---- | ------ |
+| v0.2.1 | 2026-05-03 | 0f8d392 |
 | v0.2.0 | 2026-05-03 | f3b4ad9 |
 
 ## sdk-js-web (npm)

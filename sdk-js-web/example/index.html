@@ -116,7 +116,7 @@
     <script type="importmap">
       {
         "imports": {
-          "onnxruntime-web": "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.17/dist/ort.bundle.min.mjs",
+          "onnxruntime-web": "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.17/dist/esm/ort.min.js",
           "ort-vision-sdk-web": "../dist/index.js"
         }
       }
@@ -141,22 +141,23 @@
               <option value="segmentation">Instance segmentation</option>
             </select>
           </div>
-          <div class="field">
-            <label for="model-source">Model source</label>
-            <select id="model-source">
-              <option value="url">URL</option>
-              <option value="file">Local .onnx file</option>
-            </select>
+          <div class="field" style="flex: 1 1 240px">
+            <label for="model-file">Model file (.onnx)</label>
+            <div class="row" style="gap: 0.4rem">
+              <input id="model-file" type="file" accept=".onnx" style="flex: 1 1 auto" />
+              <button id="model-file-clear" type="button" class="secondary" title="Clear selected file">×</button>
+            </div>
           </div>
-          <div class="field" id="model-url-field">
-            <label for="model-url">Model URL</label>
-            <input id="model-url" type="text" class="url" />
-          </div>
-          <div class="field hidden" id="model-file-field">
-            <label for="model-file">Model file</label>
-            <input id="model-file" type="file" accept=".onnx" />
+          <div class="field" style="flex: 2 1 320px">
+            <label for="model-url">…or paste a URL</label>
+            <input id="model-url" type="text" class="url" style="width: 100%" />
           </div>
         </div>
+        <p style="margin: 0.5rem 0 0; color: var(--muted); font-size: 0.8rem">
+          If a file is selected it takes priority over the URL. Default URLs are
+          CORS-friendly Hugging Face presets that change automatically with the
+          task.
+        </p>
 
         <div class="row" id="threshold-row" style="margin-top: 0.75rem">
           <div class="field">
@@ -272,9 +273,8 @@
       const runBtn = $("run-btn");
       const rerunBtn = $("rerun-btn");
       const taskSelect = $("task");
-      const modelSourceSelect = $("model-source");
-      const modelFileField = $("model-file-field");
-      const modelUrlField = $("model-url-field");
+      const modelFileInput = $("model-file");
+      const modelFileClearBtn = $("model-file-clear");
       const modelUrlInput = $("model-url");
       const thresholdRow = $("threshold-row");
       const classifierRow = $("classifier-row");
@@ -307,13 +307,11 @@
           "hidden",
           t !== "classification" || topkResultsBox.childElementCount === 0,
         );
-        modelUrlInput.value = DEFAULT_MODEL_URL[t] ?? "";
-      }
-
-      function syncUiForModelSource() {
-        const v = modelSourceSelect.value;
-        modelFileField.classList.toggle("hidden", v !== "file");
-        modelUrlField.classList.toggle("hidden", v !== "url");
+        // Auto-fill the URL only if the user hasn't customised it.
+        const known = new Set(Object.values(DEFAULT_MODEL_URL).concat([""]));
+        if (known.has(modelUrlInput.value.trim())) {
+          modelUrlInput.value = DEFAULT_MODEL_URL[t] ?? "";
+        }
       }
 
       function syncUiForLabelsSource() {
@@ -323,8 +321,11 @@
       }
 
       taskSelect.addEventListener("change", syncUiForTask);
-      modelSourceSelect.addEventListener("change", syncUiForModelSource);
       labelsSourceSelect.addEventListener("change", syncUiForLabelsSource);
+
+      modelFileClearBtn.addEventListener("click", () => {
+        modelFileInput.value = "";
+      });
 
       $("image-file").addEventListener("change", async (e) => {
         const file = e.target.files?.[0];
@@ -409,23 +410,31 @@
       }
 
       async function modelCacheKey() {
-        const src = modelSourceSelect.value;
-        return src === "url"
-          ? `url:${modelUrlInput.value.trim()}`
-          : `file:${$("model-file").files?.[0]?.name ?? ""}`;
+        // File takes priority — cache key includes name + size + lastModified
+        // so picking a different file (or modifying the same one) busts the cache.
+        const f = modelFileInput.files?.[0];
+        if (f) return `file:${f.name}:${f.size}:${f.lastModified}`;
+        return `url:${modelUrlInput.value.trim()}`;
       }
 
       async function resolveModelArg() {
-        if (modelSourceSelect.value === "url") {
-          const url = modelUrlInput.value.trim();
-          if (!url) throw new Error("Provide a model URL.");
-          print(`Loading model from URL: ${url}`);
-          return url;
+        // 1) If the user picked a local file, that wins — no fetch, no CORS.
+        const f = modelFileInput.files?.[0];
+        if (f) {
+          print(
+            `Loading model from local file: ${f.name} (${(f.size / 1e6).toFixed(1)} MB)`,
+          );
+          return new Uint8Array(await f.arrayBuffer());
         }
-        const f = $("model-file").files?.[0];
-        if (!f) throw new Error("Pick a local .onnx file first.");
-        print(`Loading model from local file: ${f.name} (${(f.size / 1e6).toFixed(1)} MB)`);
-        return new Uint8Array(await f.arrayBuffer());
+        // 2) Otherwise fall back to the URL input (default URL pre-filled per task).
+        const url = modelUrlInput.value.trim();
+        if (!url) {
+          throw new Error(
+            "Pick a local .onnx file or paste a model URL — both fields are empty.",
+          );
+        }
+        print(`Loading model from URL: ${url}`);
+        return url;
       }
 
       // ---- Labels (classification only) -------------------------------------
@@ -627,11 +636,12 @@
 
       // ---- Boot -------------------------------------------------------------
 
+      // Pre-fill the URL with the default for the initially selected task.
+      modelUrlInput.value = DEFAULT_MODEL_URL[taskSelect.value] ?? "";
       syncUiForTask();
-      syncUiForModelSource();
       syncUiForLabelsSource();
       runBtn.disabled = false;
-      print("Ready. Pick a task, model and image, then click Run.");
+      print("Ready. Pick a task, then either choose a local .onnx file or use the URL, and click Run.");
     </script>
   </body>
 </html>

@@ -30,3 +30,4 @@ data/
 
 # Per-package build artifacts and caches are owned by each sub-project's
 # own .gitignore (sdk-python/.gitignore, sdk-js-web/.gitignore).
+.playwright-mcp/

@@ -44,12 +44,13 @@ jobs:
 
       - name: Smoke-install packed tarball in a fresh project and import
         run: |
-          npm pack --silent
+          TARBALL=$(npm pack --silent)
+          PKG_NAME=$(node -p "require('./package.json').name")
           mkdir -p /tmp/web-smoke && cd /tmp/web-smoke
           npm init -y >/dev/null
           npm pkg set type=module >/dev/null
-          npm install --silent "$GITHUB_WORKSPACE/sdk-js-web"/ort-vision-sdk-web-*.tgz onnxruntime-web@^1.17
-          node -e "import('@ort-vision-sdk/web').then(m => { \
+          npm install --silent "$GITHUB_WORKSPACE/sdk-js-web/$TARBALL" onnxruntime-web@^1.17
+          PKG_NAME="$PKG_NAME" node -e "import(process.env.PKG_NAME).then(m => { \
             if (!m.Detector || !m.Segmenter || !m.Classifier) throw new Error('tasks missing'); \
             if (!m.Boxes || !m.Probs || !m.Masks) throw new Error('result envelopes missing'); \
             if (!m.VERSION) throw new Error('no VERSION'); \

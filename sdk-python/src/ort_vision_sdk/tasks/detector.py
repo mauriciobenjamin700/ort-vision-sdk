@@ -190,14 +190,15 @@ class Detector(VisionTask):
             for bbox, class_id, confidence in decoded
         )
 
-        boxes = self._build_boxes(detections, orig_shape=original.shape[:2])
+        orig_shape: tuple[int, int] = (int(original.shape[0]), int(original.shape[1]))
+        boxes = self._build_boxes(detections, orig_shape=orig_shape)
         return [
             DetectionResults(
                 boxes=boxes,
                 detections=detections,
                 names=self._names,
                 orig_img=original,
-                orig_shape=(int(original.shape[0]), int(original.shape[1])),
+                orig_shape=orig_shape,
                 path=path,
             )
         ]

@@ -104,6 +104,10 @@ indent-style = "space"
 [tool.mypy]
 python_version = "3.10"
 strict = true
+# numpy 2.x marca `ndarray` como genérico; defaults via PEP 696 só funcionam em
+# Python 3.13+, então em 3.10/3.11/3.12 mypy strict pediria type args em todo
+# uso de np.ndarray. Desligamos a checagem global para evitar 40+ pontos de fricção.
+disallow_any_generics = false
 warn_unused_ignores = true
 warn_return_any = true
 disallow_untyped_defs = true

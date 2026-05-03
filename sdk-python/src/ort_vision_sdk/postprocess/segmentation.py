@@ -146,6 +146,7 @@ def decode_yolo_seg(
         mbx2 = min(mask_w, int(np.ceil(ibx2 * scale_x)))
         mby2 = min(mask_h, int(np.ceil(iby2 * scale_y)))
 
+        mask_binary: np.ndarray
         if mbx2 <= mbx1 or mby2 <= mby1 or bbox_w == 0 or bbox_h == 0:
             mask_binary = np.zeros((bbox_h, bbox_w), dtype=np.uint8)
         else:

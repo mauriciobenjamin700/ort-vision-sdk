@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 from typing import Literal
 
@@ -165,7 +166,7 @@ class Segmenter(VisionTask):
         iou_threshold: float | None = None,
         classes: list[int] | None = None,
     ) -> list[SegmentationResults]:
-        """Run instance segmentation on a single image.
+        """Run instance segmentation on a single image (synchronous).
 
         Args:
             image: Image source (path, bytes, ``np.ndarray``, or ``PIL.Image``).
@@ -183,7 +184,90 @@ class Segmenter(VisionTask):
         original = load_image(image)
         tensor, scale, pad = self._preprocess(original)
         outputs = self._session.run({self._session.input_name: tensor})
+        return self._build_results(
+            outputs,
+            original=original,
+            path=path,
+            scale=scale,
+            pad=pad,
+            conf_threshold=conf_threshold,
+            iou_threshold=iou_threshold,
+            classes=classes,
+        )
 
+    async def async_predict(
+        self,
+        image: ImageInput,
+        *,
+        conf_threshold: float | None = None,
+        iou_threshold: float | None = None,
+        classes: list[int] | None = None,
+    ) -> list[SegmentationResults]:
+        """Async segmentation via ``asyncio.to_thread``.
+
+        Off-loads the entire :meth:`predict` pipeline to the asyncio default
+        executor's thread pool. Use in FastAPI/AnyIO handlers. For
+        high-concurrency workloads, see :meth:`ort_async_predict`.
+
+        Args and return type match :meth:`predict` exactly.
+        """
+        return await asyncio.to_thread(
+            self.predict,
+            image,
+            conf_threshold=conf_threshold,
+            iou_threshold=iou_threshold,
+            classes=classes,
+        )
+
+    async def ort_async_predict(
+        self,
+        image: ImageInput,
+        *,
+        conf_threshold: float | None = None,
+        iou_threshold: float | None = None,
+        classes: list[int] | None = None,
+    ) -> list[SegmentationResults]:
+        """Async segmentation using ORT's native ``run_async`` for the model step.
+
+        Pre-/post-processing run on the event loop thread; the model run is
+        dispatched to the ONNX Runtime internal thread pool (configured via
+        ``SessionOptions``). Prefer this for high-concurrency workloads where
+        many awaits should share the ORT pool. Requires ``onnxruntime>=1.16``.
+
+        Args and return type match :meth:`predict` exactly.
+        """
+        path = str(image) if isinstance(image, (str, Path)) else None
+        original = load_image(image)
+        tensor, scale, pad = self._preprocess(original)
+        outputs = await self._session.ort_async_run({self._session.input_name: tensor})
+        return self._build_results(
+            outputs,
+            original=original,
+            path=path,
+            scale=scale,
+            pad=pad,
+            conf_threshold=conf_threshold,
+            iou_threshold=iou_threshold,
+            classes=classes,
+        )
+
+    def _build_results(
+        self,
+        outputs: list[np.ndarray],
+        *,
+        original: ImageArray,
+        path: str | None,
+        scale: float,
+        pad: tuple[int, int],
+        conf_threshold: float | None,
+        iou_threshold: float | None,
+        classes: list[int] | None,
+    ) -> list[SegmentationResults]:
+        """Decode raw outputs + NMS + masks into a :class:`SegmentationResults`.
+
+        Shared between :meth:`predict`, :meth:`async_predict` and
+        :meth:`ort_async_predict`.
+        """
         per_anchor, prototypes = self._split_outputs(outputs)
 
         decoded = decode_yolo_seg(

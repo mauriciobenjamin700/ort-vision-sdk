@@ -37,9 +37,7 @@ def topk(probabilities: np.ndarray, k: int | None) -> tuple[np.ndarray, np.ndarr
         ValueError: If ``probabilities`` is not 1-D.
     """
     if probabilities.ndim != 1:
-        raise ValueError(
-            f"Expected a 1-D probability vector, got shape {probabilities.shape}."
-        )
+        raise ValueError(f"Expected a 1-D probability vector, got shape {probabilities.shape}.")
     n = probabilities.shape[0]
     k_eff = n if k is None else min(k, n)
     indices = np.argsort(-probabilities, kind="stable")[:k_eff]

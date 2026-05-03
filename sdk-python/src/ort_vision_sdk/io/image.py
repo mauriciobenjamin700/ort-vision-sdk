@@ -82,9 +82,7 @@ def _from_pil(image: Image.Image) -> ImageArray:
 def _validate_array(array: np.ndarray) -> ImageArray:
     """Validate that a user-supplied ndarray matches the canonical format."""
     if array.ndim != 3 or array.shape[2] != 3:
-        raise ImageLoadError(
-            f"Expected an HWC RGB array with 3 channels, got shape {array.shape}."
-        )
+        raise ImageLoadError(f"Expected an HWC RGB array with 3 channels, got shape {array.shape}.")
     if array.dtype != np.uint8:
         raise ImageLoadError(
             f"Expected dtype uint8, got {array.dtype}. "

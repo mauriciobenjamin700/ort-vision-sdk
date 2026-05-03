@@ -78,6 +78,12 @@ def decode_yolo_seg(
         descending confidence order. Each ``mask`` is a binary ``uint8``
         array (0 or 255) cropped to its bounding box in original-image
         pixel coordinates.
+
+    Raises:
+        ValueError: If the per-anchor output channel count does not equal
+            ``4 + num_classes + num_mask_coefs`` — i.e. the prototypes and
+            per-anchor tensors come from different models, or ``num_classes``
+            was misreported.
     """
     if prototypes.ndim == 4:
         prototypes = prototypes[0]
@@ -88,7 +94,8 @@ def decode_yolo_seg(
     if output_2d.shape[0] != expected_channels:
         raise ValueError(
             f"YOLO seg output channel count {output_2d.shape[0]} does not match "
-            f"4 + num_classes ({num_classes}) + num_mask_coefs ({num_mask_coefs}) = {expected_channels}."
+            f"4 + num_classes ({num_classes}) + num_mask_coefs ({num_mask_coefs}) "
+            f"= {expected_channels}."
         )
 
     anchor_indices, boxes_orig, class_ids, confidences = decode_yolo_anchors(
@@ -146,9 +153,7 @@ def decode_yolo_seg(
             mask_resized = _resize_soft_mask(mask_crop, (bbox_w, bbox_h))
             mask_binary = ((mask_resized >= mask_threshold) * 255).astype(np.uint8)
 
-        results.append(
-            (bbox, int(class_ids[k]), float(confidences[k]), mask_binary)
-        )
+        results.append((bbox, int(class_ids[k]), float(confidences[k]), mask_binary))
 
     return results
 
@@ -196,7 +201,30 @@ def decode_yolov8_seg(
     max_detections: int,
     mask_threshold: float = 0.5,
 ) -> list[DecodedSegmentation]:
-    """Deprecated alias for :func:`decode_yolo_seg`. Will be removed in 0.3.0."""
+    """Deprecated alias for :func:`decode_yolo_seg`. Will be removed in 0.3.0.
+
+    Args:
+        output: ``output0`` tensor, see :func:`decode_yolo_seg`.
+        prototypes: ``output1`` tensor, see :func:`decode_yolo_seg`.
+        num_classes: Number of classes the model predicts.
+        input_size: ``(width, height)`` of the model input (post-letterbox).
+        original_size: ``(width, height)`` of the original image.
+        pad: ``(pad_left, pad_top)`` letterbox padding in input-tensor pixels.
+        scale: Letterbox scale factor.
+        conf_threshold: Minimum class score to keep a candidate.
+        iou_threshold: IoU threshold for non-maximum suppression.
+        max_detections: Maximum number of instances to return after NMS.
+        mask_threshold: Probability cutoff applied to soft masks; defaults to ``0.5``.
+
+    Returns:
+        Identical to :func:`decode_yolo_seg` — a list of
+        ``(BoundingBox, class_id, confidence, mask)`` tuples in descending
+        confidence order.
+
+    Raises:
+        ValueError: Forwarded from :func:`decode_yolo_seg` on channel-count
+            mismatch.
+    """
     warnings.warn(
         "decode_yolov8_seg is deprecated since 0.2.0; use decode_yolo_seg "
         "(same behavior, covers v8/v11 seg heads). The alias will be removed in 0.3.0.",

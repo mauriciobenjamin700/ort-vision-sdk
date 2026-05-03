@@ -1,8 +1,15 @@
-"""Abstract base class shared by all vision tasks."""
+"""Common base class shared by all vision tasks.
+
+Provides the ``ONNX Runtime`` session lifecycle (load + provider resolution)
+plus the ``session`` property. Each subclass adds its own preprocessing,
+postprocessing, label resolution, and ``predict()`` signature, since those
+diverge enough between classification, detection and segmentation that
+forcing a common abstract method would just push a generic ``Any`` return
+type onto callers.
+"""
 
 from __future__ import annotations
 
-from abc import ABC
 from pathlib import Path
 
 import onnxruntime as ort
@@ -10,7 +17,7 @@ import onnxruntime as ort
 from ort_vision_sdk.core.session import OrtSession
 
 
-class VisionTask(ABC):
+class VisionTask:
     """Common foundation for task-oriented vision SDK objects.
 
     Subclasses (:class:`~ort_vision_sdk.tasks.classifier.Classifier`,
@@ -19,6 +26,9 @@ class VisionTask(ABC):
     base class only owns the inference session — label resolution lives in
     each task because the way ``num_classes`` is read from the model differs
     per task.
+
+    This class is not intended to be instantiated directly; instantiate one
+    of the concrete task classes instead.
     """
 
     def __init__(

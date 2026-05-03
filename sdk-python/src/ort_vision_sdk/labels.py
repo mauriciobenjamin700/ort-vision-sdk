@@ -12,9 +12,7 @@ from typing import TypeAlias
 
 from ort_vision_sdk.core.exceptions import LabelMapError
 
-LabelSpec: TypeAlias = (
-    list[str] | tuple[str, ...] | dict[int, str] | str | Path | None
-)
+LabelSpec: TypeAlias = list[str] | tuple[str, ...] | dict[int, str] | str | Path | None
 """Anything accepted by :func:`resolve_labels`.
 
 - ``list[str]`` / ``tuple[str, ...]``: explicit names indexed by class id.
@@ -26,17 +24,85 @@ LabelSpec: TypeAlias = (
 
 
 COCO_CLASSES: tuple[str, ...] = (
-    "person", "bicycle", "car", "motorcycle", "airplane", "bus", "train", "truck",
-    "boat", "traffic light", "fire hydrant", "stop sign", "parking meter", "bench",
-    "bird", "cat", "dog", "horse", "sheep", "cow", "elephant", "bear", "zebra",
-    "giraffe", "backpack", "umbrella", "handbag", "tie", "suitcase", "frisbee",
-    "skis", "snowboard", "sports ball", "kite", "baseball bat", "baseball glove",
-    "skateboard", "surfboard", "tennis racket", "bottle", "wine glass", "cup",
-    "fork", "knife", "spoon", "bowl", "banana", "apple", "sandwich", "orange",
-    "broccoli", "carrot", "hot dog", "pizza", "donut", "cake", "chair", "couch",
-    "potted plant", "bed", "dining table", "toilet", "tv", "laptop", "mouse",
-    "remote", "keyboard", "cell phone", "microwave", "oven", "toaster", "sink",
-    "refrigerator", "book", "clock", "vase", "scissors", "teddy bear", "hair drier",
+    "person",
+    "bicycle",
+    "car",
+    "motorcycle",
+    "airplane",
+    "bus",
+    "train",
+    "truck",
+    "boat",
+    "traffic light",
+    "fire hydrant",
+    "stop sign",
+    "parking meter",
+    "bench",
+    "bird",
+    "cat",
+    "dog",
+    "horse",
+    "sheep",
+    "cow",
+    "elephant",
+    "bear",
+    "zebra",
+    "giraffe",
+    "backpack",
+    "umbrella",
+    "handbag",
+    "tie",
+    "suitcase",
+    "frisbee",
+    "skis",
+    "snowboard",
+    "sports ball",
+    "kite",
+    "baseball bat",
+    "baseball glove",
+    "skateboard",
+    "surfboard",
+    "tennis racket",
+    "bottle",
+    "wine glass",
+    "cup",
+    "fork",
+    "knife",
+    "spoon",
+    "bowl",
+    "banana",
+    "apple",
+    "sandwich",
+    "orange",
+    "broccoli",
+    "carrot",
+    "hot dog",
+    "pizza",
+    "donut",
+    "cake",
+    "chair",
+    "couch",
+    "potted plant",
+    "bed",
+    "dining table",
+    "toilet",
+    "tv",
+    "laptop",
+    "mouse",
+    "remote",
+    "keyboard",
+    "cell phone",
+    "microwave",
+    "oven",
+    "toaster",
+    "sink",
+    "refrigerator",
+    "book",
+    "clock",
+    "vase",
+    "scissors",
+    "teddy bear",
+    "hair drier",
     "toothbrush",
 )
 """COCO 2017 80-class labels in canonical class-id order."""
@@ -119,8 +185,7 @@ def _resolve(spec: LabelSpec, num_classes: int | None) -> tuple[str, ...]:
         if path.is_file():
             return _load_file(path)
         raise LabelMapError(
-            f"Unknown labels preset or missing file: {spec!r}. "
-            f"Known presets: {sorted(_PRESETS)}."
+            f"Unknown labels preset or missing file: {spec!r}. Known presets: {sorted(_PRESETS)}."
         )
 
     raise LabelMapError(f"Unsupported labels spec type: {type(spec).__name__}.")

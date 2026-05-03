@@ -102,11 +102,12 @@ def from_cv2(bgr_image: np.ndarray) -> ImageArray:
 
     Returns:
         HWC uint8 RGB array (the SDK's canonical :data:`ImageArray`).
+
+    Raises:
+        ValueError: If ``bgr_image`` is not a 3-D array with exactly 3 channels.
     """
     if bgr_image.ndim != 3 or bgr_image.shape[2] != 3:
-        raise ValueError(
-            f"from_cv2: expected an HWC 3-channel array, got shape {bgr_image.shape}."
-        )
+        raise ValueError(f"from_cv2: expected an HWC 3-channel array, got shape {bgr_image.shape}.")
     return np.ascontiguousarray(bgr_image[..., ::-1])
 
 
@@ -121,11 +122,12 @@ def to_cv2(image: ImageArray) -> np.ndarray:
 
     Returns:
         HWC uint8 BGR array.
+
+    Raises:
+        ValueError: If ``image`` is not a 3-D array with exactly 3 channels.
     """
     if image.ndim != 3 or image.shape[2] != 3:
-        raise ValueError(
-            f"to_cv2: expected an HWC 3-channel array, got shape {image.shape}."
-        )
+        raise ValueError(f"to_cv2: expected an HWC 3-channel array, got shape {image.shape}.")
     return np.ascontiguousarray(image[..., ::-1])
 
 
@@ -170,8 +172,8 @@ def letterbox(
     target_w, target_h = size
     src_h, src_w = image.shape[:2]
     scale = min(target_w / src_w, target_h / src_h)
-    new_w = int(round(src_w * scale))
-    new_h = int(round(src_h * scale))
+    new_w = round(src_w * scale)
+    new_h = round(src_h * scale)
 
     resized = resize(image, (new_w, new_h))
 

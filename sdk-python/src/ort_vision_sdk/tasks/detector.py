@@ -90,9 +90,7 @@ class Detector(VisionTask):
             ValueError: If ``head`` is not a recognised value.
         """
         if head != "yolo":
-            raise ValueError(
-                f"Unsupported detector head {head!r}. Supported: 'yolo'."
-            )
+            raise ValueError(f"Unsupported detector head {head!r}. Supported: 'yolo'.")
         super().__init__(
             model_path,
             providers=providers,
@@ -178,12 +176,8 @@ class Detector(VisionTask):
             original_size=(original.shape[1], original.shape[0]),
             pad=pad,
             scale=scale,
-            conf_threshold=(
-                conf_threshold if conf_threshold is not None else self._conf_threshold
-            ),
-            iou_threshold=(
-                iou_threshold if iou_threshold is not None else self._iou_threshold
-            ),
+            conf_threshold=(conf_threshold if conf_threshold is not None else self._conf_threshold),
+            iou_threshold=(iou_threshold if iou_threshold is not None else self._iou_threshold),
             max_detections=self._max_detections,
         )
 
@@ -208,9 +202,7 @@ class Detector(VisionTask):
             )
         ]
 
-    def _preprocess(
-        self, image: ImageArray
-    ) -> tuple[np.ndarray, float, tuple[int, int]]:
+    def _preprocess(self, image: ImageArray) -> tuple[np.ndarray, float, tuple[int, int]]:
         """Letterbox → CHW float32/255 → batch."""
         boxed, scale, pad = letterbox(image, self._input_size)
         tensor = to_tensor(boxed)

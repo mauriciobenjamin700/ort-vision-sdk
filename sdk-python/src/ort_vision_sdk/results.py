@@ -87,7 +87,7 @@ class Boxes:
         xywh = self.xywh
         if xywh.size == 0 or w <= 0 or h <= 0:
             return np.empty((0, 4), dtype=np.float64)
-        out = xywh.copy()
+        out: NDArray[np.float64] = xywh.copy()
         out[:, [0, 2]] /= float(w)
         out[:, [1, 3]] /= float(h)
         return out
@@ -257,9 +257,7 @@ class DetectionResults:
     def __getitem__(self, index: int) -> DetectionResult: ...
     @overload
     def __getitem__(self, index: slice) -> tuple[DetectionResult, ...]: ...
-    def __getitem__(
-        self, index: int | slice
-    ) -> DetectionResult | tuple[DetectionResult, ...]:
+    def __getitem__(self, index: int | slice) -> DetectionResult | tuple[DetectionResult, ...]:
         """Index into the per-instance detections."""
         return self.detections[index]
 

@@ -234,9 +234,7 @@ def decode_yolo(
     channels = output.shape[1] if output.ndim == 3 else output.shape[0]
     num_classes = channels - 4
     if num_classes < 1:
-        raise ValueError(
-            f"decode_yolo: invalid output channel count {channels}; expected >= 5."
-        )
+        raise ValueError(f"decode_yolo: invalid output channel count {channels}; expected >= 5.")
 
     _, boxes, class_ids, confidences = decode_yolo_anchors(
         output,

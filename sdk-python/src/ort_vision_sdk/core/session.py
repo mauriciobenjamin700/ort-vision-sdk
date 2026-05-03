@@ -116,6 +116,7 @@ class OrtSession:
             InferenceError: If ORT raises any error during execution.
         """
         try:
-            return self._session.run(output_names, feeds)
+            outputs: list[np.ndarray] = self._session.run(output_names, feeds)
         except Exception as exc:
             raise InferenceError(f"Inference failed: {exc}") from exc
+        return outputs

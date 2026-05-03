@@ -18,7 +18,7 @@ from ort_vision_sdk.preprocess.image import (
 )
 from ort_vision_sdk.results import ClassificationResults, Probs
 from ort_vision_sdk.tasks.base import VisionTask
-from ort_vision_sdk.types import ClassProbability, ClassificationResult, ImageArray
+from ort_vision_sdk.types import ClassificationResult, ClassProbability, ImageArray
 
 _IMAGENET_MEAN: tuple[float, float, float] = (0.485, 0.456, 0.406)
 _IMAGENET_STD: tuple[float, float, float] = (0.229, 0.224, 0.225)
@@ -28,7 +28,7 @@ class Classifier(VisionTask):
     """Image classifier wrapping an ONNX model with ImageNet-style preprocessing.
 
     The default configuration matches the most common torchvision/ImageNet
-    convention: 224×224 RGB input, ``float32`` normalized with ImageNet mean
+    convention: 224x224 RGB input, ``float32`` normalized with ImageNet mean
     and standard deviation, NCHW layout, batch size 1, softmax applied to the
     raw output.
 
@@ -180,7 +180,21 @@ class Classifier(VisionTask):
         return add_batch_dim(chw).astype(np.float32, copy=False)
 
     def _postprocess(self, output: np.ndarray) -> np.ndarray:
-        """Squeeze batch dim and (optionally) apply softmax."""
+        """Squeeze batch dim and (optionally) apply softmax.
+
+        Args:
+            output: Raw classifier output, ``(1, num_classes)`` or
+                ``(num_classes,)``.
+
+        Returns:
+            A 1-D ``float32`` per-class probability vector. Softmax is
+            applied when :pyattr:`_apply_softmax` is ``True``; otherwise the
+            input is returned cast to ``float32``.
+
+        Raises:
+            ValueError: If the output cannot be squeezed down to a 1-D vector
+                (i.e. the model emits an unexpected shape).
+        """
         scores = np.squeeze(output, axis=0) if output.ndim == 2 else output
         if scores.ndim != 1:
             raise ValueError(

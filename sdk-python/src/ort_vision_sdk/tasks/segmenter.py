@@ -55,7 +55,7 @@ class Segmenter(VisionTask):
     - per-instance :class:`SegmentationResult` dataclasses via iteration /
       indexing.
 
-    Defaults match Ultralytics YOLOv8/v11 segmentation models (640×640 input,
+    Defaults match Ultralytics YOLOv8/v11 segmentation models (640x640 input,
     COCO 80 classes). Override via constructor arguments for other models.
 
     Example:
@@ -104,9 +104,7 @@ class Segmenter(VisionTask):
             ValueError: If ``head`` is not a recognised value.
         """
         if head != "yolo-seg":
-            raise ValueError(
-                f"Unsupported segmenter head {head!r}. Supported: 'yolo-seg'."
-            )
+            raise ValueError(f"Unsupported segmenter head {head!r}. Supported: 'yolo-seg'.")
         super().__init__(
             model_path,
             providers=providers,
@@ -196,12 +194,8 @@ class Segmenter(VisionTask):
             original_size=(original.shape[1], original.shape[0]),
             pad=pad,
             scale=scale,
-            conf_threshold=(
-                conf_threshold if conf_threshold is not None else self._conf_threshold
-            ),
-            iou_threshold=(
-                iou_threshold if iou_threshold is not None else self._iou_threshold
-            ),
+            conf_threshold=(conf_threshold if conf_threshold is not None else self._conf_threshold),
+            iou_threshold=(iou_threshold if iou_threshold is not None else self._iou_threshold),
             max_detections=self._max_detections,
             mask_threshold=self._mask_threshold,
         )
@@ -231,17 +225,13 @@ class Segmenter(VisionTask):
             )
         ]
 
-    def _preprocess(
-        self, image: ImageArray
-    ) -> tuple[np.ndarray, float, tuple[int, int]]:
+    def _preprocess(self, image: ImageArray) -> tuple[np.ndarray, float, tuple[int, int]]:
         """Letterbox → CHW float32/255 → batch."""
         boxed, scale, pad = letterbox(image, self._input_size)
         tensor = to_tensor(boxed)
         return np.ascontiguousarray(add_batch_dim(tensor)), scale, pad
 
-    def _split_outputs(
-        self, outputs: list[np.ndarray]
-    ) -> tuple[np.ndarray, np.ndarray]:
+    def _split_outputs(self, outputs: list[np.ndarray]) -> tuple[np.ndarray, np.ndarray]:
         """Identify which output is the per-anchor tensor and which is the prototypes.
 
         Per-anchor output is 3-D ``(1, channels, anchors)``; prototypes are
@@ -256,9 +246,7 @@ class Segmenter(VisionTask):
                 prototypes = out
         if per_anchor is None or prototypes is None:
             shapes = [tuple(o.shape) for o in outputs]
-            raise ValueError(
-                f"Segmenter expected one 3-D and one 4-D output, got shapes={shapes}."
-            )
+            raise ValueError(f"Segmenter expected one 3-D and one 4-D output, got shapes={shapes}.")
         return per_anchor, prototypes
 
     def _build_instance(

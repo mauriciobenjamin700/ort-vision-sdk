@@ -1,5 +1,10 @@
 # ort-vision-sdk
 
+> **Documentação / Docs:** site bilíngue no GitHub Pages —
+> **[Português (BR)](https://mauriciobenjamin700.github.io/ort-vision-sdk/)** ·
+> **[English (US)](https://mauriciobenjamin700.github.io/ort-vision-sdk/en/)**.
+> Use o seletor PT-BR / EN-US no topo do site para alternar o idioma.
+
 High-level SDKs for computer vision inference on top of [ONNX Runtime](https://onnxruntime.ai/).
 
 The repo distributes two sibling packages — same task-oriented API (`Classifier`, `Detector`), same typed result shapes (`BoundingBox`, `ClassificationResult`, `DetectionResult`) — one for Python servers/scripts and one for the browser.
@@ -19,6 +24,20 @@ See [docs/publishing.md](docs/publishing.md) for the full step-by-step (Trusted 
 - Web release: bump version in `sdk-js-web/`, tag `web-v<x.y.z>`, push.
 
 GitHub Actions ([.github/workflows](.github/workflows)) handles the rest.
+
+## Documentation
+
+The full bilingual documentation lives on GitHub Pages:
+
+- Português (BR): <https://mauriciobenjamin700.github.io/ort-vision-sdk/>
+- English (US): <https://mauriciobenjamin700.github.io/ort-vision-sdk/en/>
+
+The site is built with MkDocs Material + `mkdocs-static-i18n` and deployed by the
+[`Docs`](.github/workflows/docs.yml) GitHub Actions workflow on every push to
+`main` that touches `docs/`, `mkdocs.yml`, or the workflow itself. Sources live
+under [`docs/`](docs) (PT-BR base files; EN translations as `*.en.md`).
+
+> Local preview (optional): `pip install -r docs/requirements.txt && mkdocs serve`.
 
 ## Status
 

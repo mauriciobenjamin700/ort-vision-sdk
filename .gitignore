@@ -14,9 +14,13 @@ Thumbs.db
 
 # Local virtualenvs (anywhere)
 .venv/
+.docsvenv/
 venv/
 env/
 ENV/
+
+# MkDocs build output
+site/
 
 # Models and assets (keep repo lean)
 *.onnx

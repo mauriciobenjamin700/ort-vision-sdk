@@ -1,0 +1,91 @@
+site_name: ort-vision-sdk
+site_description: >-
+  SDKs de alto nível para inferência de visão computacional sobre o ONNX Runtime
+  (Python + browser/TypeScript).
+site_url: https://mauriciobenjamin700.github.io/ort-vision-sdk/
+repo_url: https://github.com/mauriciobenjamin700/ort-vision-sdk
+repo_name: mauriciobenjamin700/ort-vision-sdk
+docs_dir: docs
+
+theme:
+  name: material
+  language: pt-BR
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle: { icon: material/weather-night, name: Tema escuro }
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle: { icon: material/weather-sunny, name: Tema claro }
+  features:
+    - navigation.tracking
+    - navigation.sections
+    - navigation.top
+    - navigation.indexes
+    - content.code.copy
+    - search.suggest
+    - search.highlight
+    - toc.follow
+
+plugins:
+  - search
+  - i18n:
+      docs_structure: suffix
+      fallback_to_default: true
+      reconfigure_material: true
+      reconfigure_search: true
+      languages:
+        - locale: pt
+          name: "Português (BR)"
+          default: true
+          build: true
+        - locale: en
+          name: English (US)
+          build: true
+          nav_translations:
+            Início: Home
+            Instalação: Installation
+            Início rápido: Quick start
+            Guia: Guide
+            Classificação: Classification
+            Detecção: Detection
+            Segmentação: Segmentation
+            Python: Python
+            Web (browser): Web (browser)
+            Referência: Reference
+            API Python: Python API
+            API Web: Web API
+            Projeto: Project
+            Publicação: Publishing
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - def_list
+  - tables
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight
+  - pymdownx.inlinehilite
+  - pymdownx.tabbed:
+      alternate_style: true
+
+validation:
+  nav:
+    omitted_files: ignore
+
+nav:
+  - Início: index.md
+  - Instalação: instalacao.md
+  - Início rápido: inicio-rapido.md
+  - Guia:
+      - Classificação: guia/classificacao.md
+      - Detecção: guia/deteccao.md
+      - Segmentação: guia/segmentacao.md
+      - Python: guia/python.md
+      - Web (browser): guia/web.md
+  - Referência:
+      - API Python: referencia/python.md
+      - API Web: referencia/web.md
+  - Projeto:
+      - Publicação: publishing.md

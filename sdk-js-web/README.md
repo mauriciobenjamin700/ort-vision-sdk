@@ -4,6 +4,11 @@
 [![GitHub](https://img.shields.io/badge/github-mauriciobenjamin700%2Fort--vision--sdk-181717?logo=github)](https://github.com/mauriciobenjamin700/ort-vision-sdk)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/mauriciobenjamin700/ort-vision-sdk/blob/main/sdk-js-web/LICENSE)
 
+> **Documentation / Docs (bilingual):**
+> [Português (BR)](https://mauriciobenjamin700.github.io/ort-vision-sdk/) ·
+> [English (US)](https://mauriciobenjamin700.github.io/ort-vision-sdk/en/) —
+> use the PT-BR / EN-US selector at the top of the site to switch language.
+
 High-level TypeScript SDK for browser computer vision inference on top of [ONNX Runtime Web](https://onnxruntime.ai/docs/get-started/with-javascript/web.html).
 
 Mirrors the Python [`ort-vision-sdk`](https://pypi.org/project/ort-vision-sdk/) API: task-oriented classes (`Classifier`, `Detector`) that handle image loading, preprocessing, execution-provider selection and postprocessing. Output is the same typed shape as the Python version (`ClassificationResult`, `DetectionResult`, `BoundingBox`).

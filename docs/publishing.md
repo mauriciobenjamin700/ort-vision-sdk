@@ -7,7 +7,7 @@ Este projeto distribui dois pacotes a partir do mesmo monorepo, cada um isolado 
 | `ort-vision-sdk`      | PyPI     | `sdk-python/`   | `v<MAJOR.MINOR.PATCH>`     |
 | `@ort-vision-sdk/web` | npm      | `sdk-js-web/`   | `web-v<MAJOR.MINOR.PATCH>` |
 
-Os fluxos de release são automatizados em [.github/workflows/release-pypi.yml](../.github/workflows/release-pypi.yml) e [.github/workflows/release-npm.yml](../.github/workflows/release-npm.yml). Você publica empurrando uma tag — o GitHub Actions faz o resto.
+Os fluxos de release são automatizados em [.github/workflows/release-pypi.yml](https://github.com/mauriciobenjamin700/ort-vision-sdk/blob/main/.github/workflows/release-pypi.yml) e [.github/workflows/release-npm.yml](https://github.com/mauriciobenjamin700/ort-vision-sdk/blob/main/.github/workflows/release-npm.yml). Você publica empurrando uma tag — o GitHub Actions faz o resto.
 
 Há duas etapas: **configuração inicial** (uma vez por pacote) e **release** (toda vez que sai uma versão nova).
 
@@ -69,10 +69,10 @@ O `package.json` atual usa `@ort-vision-sdk/web`. Esse escopo é uma **organiza�
 | Opção                                     | O que fazer                                                                                                                                                                                                |
 | ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Criar a org `ort-vision-sdk` no npm**   | <https://www.npmjs.com/org/create> → free tier. Mantém o nome atual.                                                                                                                                     |
-| **Publicar no seu escopo pessoal**        | Renomeie em [sdk-js-web/package.json](../sdk-js-web/package.json) para `@mauriciobenjamin700/ort-vision-sdk-web` (seu username já é um escopo).                                                          |
+| **Publicar no seu escopo pessoal**        | Renomeie em [sdk-js-web/package.json](https://github.com/mauriciobenjamin700/ort-vision-sdk/blob/main/sdk-js-web/package.json) para `@mauriciobenjamin700/ort-vision-sdk-web` (seu username já é um escopo).                                                          |
 | **Publicar sem escopo**                   | Renomeie para `ort-vision-sdk-web` (precisa estar disponível em <https://www.npmjs.com/package/ort-vision-sdk-web>). Nesse caso, remova `publishConfig.access` do `package.json` (irrelevante para nomes não-escopados). |
 
-> Se renomear, atualize também o link `homepage` e os exemplos no [sdk-js-web/README.md](../sdk-js-web/README.md).
+> Se renomear, atualize também o link `homepage` e os exemplos no [sdk-js-web/README.md](https://github.com/mauriciobenjamin700/ort-vision-sdk/blob/main/sdk-js-web/README.md).
 
 ### 2.2. Gere o automation token
 
@@ -94,13 +94,13 @@ O workflow já passa `--provenance`. Para isso funcionar:
 - O pacote precisa ser **publicado a partir de um repositório público** com OIDC habilitado (já é o caso do GitHub Actions).
 - O `repository.url` no `package.json` precisa apontar para o repo correto (já configurado).
 
-Se preferir desabilitar, edite [.github/workflows/release-npm.yml](../.github/workflows/release-npm.yml) e remova `--provenance`.
+Se preferir desabilitar, edite [.github/workflows/release-npm.yml](https://github.com/mauriciobenjamin700/ort-vision-sdk/blob/main/.github/workflows/release-npm.yml) e remova `--provenance`.
 
 ---
 
 ## 3. Fluxo de release com `make` (recomendado)
 
-O [Makefile](../Makefile) (que delega para [scripts/release.sh](../scripts/release.sh)) automatiza todo o fluxo: cria uma **release branch** dedicada, faz bump de versão, valida local, faz commit, cria a tag, faz push da branch + tag e abre um **PR** para a `main` via `gh`. A `main` nunca recebe push direto — toda mudança passa por revisão.
+O [Makefile](https://github.com/mauriciobenjamin700/ort-vision-sdk/blob/main/Makefile) (que delega para [scripts/release.sh](https://github.com/mauriciobenjamin700/ort-vision-sdk/blob/main/scripts/release.sh)) automatiza todo o fluxo: cria uma **release branch** dedicada, faz bump de versão, valida local, faz commit, cria a tag, faz push da branch + tag e abre um **PR** para a `main` via `gh`. A `main` nunca recebe push direto — toda mudança passa por revisão.
 
 ### 3.1. Quick reference
 
@@ -125,7 +125,7 @@ make release-web    TAG=0.3.0
 
 Exemplo: subir o sdk-python para `0.3.0`.
 
-1. **Atualize o CHANGELOG** — em [sdk-python/CHANGELOG.md](../sdk-python/CHANGELOG.md), mova o que está em `## [Unreleased]` para `## [0.3.0] - YYYY-MM-DD`. Esse é o único passo manual.
+1. **Atualize o CHANGELOG** — em [sdk-python/CHANGELOG.md](https://github.com/mauriciobenjamin700/ort-vision-sdk/blob/main/sdk-python/CHANGELOG.md), mova o que está em `## [Unreleased]` para `## [0.3.0] - YYYY-MM-DD`. Esse é o único passo manual.
 
 2. **Faça commit do CHANGELOG** (o Makefile exige working tree limpa):
 
@@ -162,7 +162,7 @@ Exemplo: subir o sdk-python para `0.3.0`.
    - Atualizar a versão em `pyproject.toml` e em `src/ort_vision_sdk/__init__.py`
    - Rodar lint + typecheck + build + `twine check` (mesmos checks do CI)
    - Criar o commit `chore(python): release v0.3.0` e a tag `v0.3.0` na branch
-   - Regenerar [RELEASES.md](../RELEASES.md) e fazer commit dele
+   - Regenerar [RELEASES.md](https://github.com/mauriciobenjamin700/ort-vision-sdk/blob/main/RELEASES.md) e fazer commit dele
    - `git push -u origin release/v0.3.0` + `git push origin v0.3.0`
    - Abrir um PR via `gh pr create` com o template padrão em PT-BR
 
@@ -184,7 +184,7 @@ Para o npm é o mesmo fluxo, só trocando `PROJECT=python` por `PROJECT=web`. O 
 
 ### 3.4. Histórico de releases
 
-A fonte da verdade é o `git tag`. Após cada release, o Makefile regenera [RELEASES.md](../RELEASES.md) com tag, data e SHA do commit por projeto. Para regenerar manualmente:
+A fonte da verdade é o `git tag`. Após cada release, o Makefile regenera [RELEASES.md](https://github.com/mauriciobenjamin700/ort-vision-sdk/blob/main/RELEASES.md) com tag, data e SHA do commit por projeto. Para regenerar manualmente:
 
 ```bash
 make releases-md
@@ -330,8 +330,8 @@ Os dois pacotes seguem [SemVer](https://semver.org). Mantenha-os em **lockstep**
 
 Locais que carregam a versão e precisam ficar em sincronia:
 
-- Python: [sdk-python/pyproject.toml](../sdk-python/pyproject.toml) (`project.version`) e [sdk-python/src/ort_vision_sdk/\_\_init\_\_.py](../sdk-python/src/ort_vision_sdk/__init__.py) (`__version__`).
-- Web: [sdk-js-web/package.json](../sdk-js-web/package.json) (`version`) e [sdk-js-web/src/index.ts](../sdk-js-web/src/index.ts) (`VERSION`).
+- Python: [sdk-python/pyproject.toml](https://github.com/mauriciobenjamin700/ort-vision-sdk/blob/main/sdk-python/pyproject.toml) (`project.version`) e [sdk-python/src/ort_vision_sdk/\_\_init\_\_.py](https://github.com/mauriciobenjamin700/ort-vision-sdk/blob/main/sdk-python/src/ort_vision_sdk/__init__.py) (`__version__`).
+- Web: [sdk-js-web/package.json](https://github.com/mauriciobenjamin700/ort-vision-sdk/blob/main/sdk-js-web/package.json) (`version`) e [sdk-js-web/src/index.ts](https://github.com/mauriciobenjamin700/ort-vision-sdk/blob/main/sdk-js-web/src/index.ts) (`VERSION`).
 
 ---
 

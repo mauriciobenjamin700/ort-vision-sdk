@@ -4,6 +4,11 @@
 [![Python](https://img.shields.io/pypi/pyversions/ort-vision-sdk.svg)](https://pypi.org/project/ort-vision-sdk/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/mauriciobenjamin700/ort-vision-sdk/blob/main/LICENSE)
 
+> **Documentation / Docs (bilingual):**
+> [Português (BR)](https://mauriciobenjamin700.github.io/ort-vision-sdk/) ·
+> [English (US)](https://mauriciobenjamin700.github.io/ort-vision-sdk/en/) —
+> use the PT-BR / EN-US selector at the top of the site to switch language.
+
 A high-level Python SDK for computer-vision inference on top of [ONNX Runtime](https://onnxruntime.ai/).
 
 `ort-vision-sdk` wraps the low-level `InferenceSession` API behind task-oriented classes — `Classifier`, `Detector`, `Segmenter` — that handle preprocessing, execution-provider selection, and postprocessing for you. You go from a raw image (path, bytes, NumPy array, or PIL image) to a typed result in **one call**, with an output shape that matches the [Ultralytics](https://docs.ultralytics.com/) idiom (`boxes.xyxy`, `cls`, `conf`, `names`, ...) so existing code ports over with minimal edits.

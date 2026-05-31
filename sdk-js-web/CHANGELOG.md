@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-05-31
+
+### Changed
+
+- README now links to the bilingual (PT-BR + EN-US) documentation site on
+  GitHub Pages (<https://mauriciobenjamin700.github.io/ort-vision-sdk/>) so the
+  npm package page points readers to the full guide and API reference.
+  Documentation-only release; no public API changes.
+
 ## [0.2.1] - 2026-05-03
 
 First **published** release on npm. The previous `0.2.0` tag never produced a

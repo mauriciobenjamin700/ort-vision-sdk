@@ -120,6 +120,24 @@ for (const inst of result) {
 }
 ```
 
+## Problemas comuns
+
+| Sintoma | Causa / solução |
+|---|---|
+| `ModuleNotFoundError: ort_vision_sdk` | Pacote não instalado no ambiente. Rode `pip install ort-vision-sdk`. Veja [Instalação](instalacao.md). |
+| Erro de import do `onnxruntime-web` no navegador | É *peer dependency* — instale-o ao lado do SDK e sirva os `.wasm` correspondentes. |
+| Arquivo de modelo não encontrado / falha ao carregar | Confira o caminho do `.onnx`. Exporte um com `yolo export model=yolov8n.pt format=onnx` (veja [Instalação](instalacao.md)). |
+| `predict(...)` parece devolver "uma lista" estranha | É por design: cada `predict` devolve uma **lista de um envelope por imagem** — pegue `[0]`. |
+| Rótulos saem como `class_0`, `class_1`, … | O modelo não trouxe nomes e nenhum `labels` foi passado. Passe `labels="coco"`, uma lista, um dict ou um arquivo — veja [Guia Python](guia/python.md#rotulos). |
+| Inferência trava o servidor `async` | Não chame `predict` síncrono num handler `async`; use `async_predict`. Veja [Guia Python](guia/python.md#inferencia-assincrona). |
+
+## Recapitulando
+
+- Cada tarefa é uma classe (`Classifier`, `Detector`, `Segmenter`); `predict`
+  devolve uma **lista de um envelope** por imagem — use `[0]`.
+- Itere o envelope para os itens, ou use as views em bloco (`.boxes`, `.probs`).
+- A API é a mesma em Python e no navegador; só muda `snake_case` ↔ `camelCase`.
+
 ## Próximos passos
 
 - Guias por tarefa: [classificação](guia/classificacao.md),

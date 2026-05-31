@@ -119,6 +119,25 @@ for (const inst of result) {
 }
 ```
 
+## Common problems
+
+| Symptom | Cause / fix |
+|---|---|
+| `ModuleNotFoundError: ort_vision_sdk` | Package not installed in the env. Run `pip install ort-vision-sdk`. See [Installation](instalacao.md). |
+| `onnxruntime-web` import error in the browser | It's a peer dependency — install it alongside the SDK and serve the matching `.wasm` files. |
+| Model file not found / load failure | Check the `.onnx` path. Export one with `yolo export model=yolov8n.pt format=onnx` (see [Installation](instalacao.md)). |
+| `predict(...)` seems to return a weird "list" | By design: every `predict` returns a **list of one envelope per image** — take `[0]`. |
+| Labels come out as `class_0`, `class_1`, … | The model carried no names and no `labels` was passed. Pass `labels="coco"`, a list, a dict, or a file — see [Python guide](guia/python.md#labels). |
+| Inference freezes the `async` server | Don't call sync `predict` in an `async` handler; use `async_predict`. See [Python guide](guia/python.md#async-inference). |
+
+## Recap
+
+- Each task is a class (`Classifier`, `Detector`, `Segmenter`); `predict` returns
+  a **list of one envelope** per image — use `[0]`.
+- Iterate the envelope for items, or use the bulk views (`.boxes`, `.probs`).
+- The API is the same in Python and the browser; only `snake_case` ↔ `camelCase`
+  changes.
+
 ## Next steps
 
 - Per-task guides: [classification](guia/classificacao.md),

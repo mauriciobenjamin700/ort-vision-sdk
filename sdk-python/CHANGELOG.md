@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-06-13
+
+### Changed
+
+- **`onnxruntime` is now an optional / lazy import.** Preprocessing,
+  postprocessing, `load_image`, types and labels now import in environments
+  **without** an `onnxruntime` wheel (e.g. Pyodide/WASM in a browser, where
+  inference is bridged to `onnxruntime-web`). `onnxruntime` is imported lazily
+  inside `OrtSession.__init__` and `providers.available_providers`, and is
+  annotation-only (guarded by `TYPE_CHECKING`) in the task modules.
+- Behavior is **unchanged** when `onnxruntime` is installed: constructing
+  `Detector` / `Classifier` / `Segmenter` still requires it (the lazy import
+  raises a clear `ImportError` if absent). All existing tests pass.
+
 ## [0.3.0] - 2026-05-03
 
 ### Added

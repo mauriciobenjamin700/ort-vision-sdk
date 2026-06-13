@@ -4,12 +4,19 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import numpy as np
-import onnxruntime as ort
 
 from ort_vision_sdk.core.exceptions import InferenceError, ModelLoadError
 from ort_vision_sdk.core.providers import resolve_providers
+
+if TYPE_CHECKING:
+    # onnxruntime is imported lazily at runtime (inside ``OrtSession.__init__``) so
+    # the rest of the SDK — preprocessing/postprocessing, types, labels — imports
+    # in environments without an onnxruntime wheel (e.g. Pyodide/WASM in a browser,
+    # where inference is bridged to onnxruntime-web instead).
+    import onnxruntime as ort
 
 
 class OrtSession:
@@ -44,6 +51,8 @@ class OrtSession:
             ModelLoadError: If the model file does not exist or cannot be loaded.
             ProviderNotAvailableError: If a requested provider is not installed.
         """
+        import onnxruntime as ort
+
         path = Path(model_path)
         if not path.is_file():
             raise ModelLoadError(f"Model file not found: {path}")

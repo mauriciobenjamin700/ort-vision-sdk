@@ -11,10 +11,14 @@ type onto callers.
 from __future__ import annotations
 
 from pathlib import Path
-
-import onnxruntime as ort
+from typing import TYPE_CHECKING
 
 from ort_vision_sdk.core.session import OrtSession
+
+if TYPE_CHECKING:
+    # Only used in type annotations; imported lazily by OrtSession at runtime so
+    # the package imports without an onnxruntime wheel (Pyodide/WASM).
+    import onnxruntime as ort
 
 
 class VisionTask:

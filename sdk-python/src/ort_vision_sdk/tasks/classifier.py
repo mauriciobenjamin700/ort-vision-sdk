@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import numpy as np
-import onnxruntime as ort
 
 from ort_vision_sdk.io.image import ImageInput, load_image
 from ort_vision_sdk.labels import LabelSpec, resolve_labels
@@ -20,6 +20,10 @@ from ort_vision_sdk.preprocess.image import (
 from ort_vision_sdk.results import ClassificationResults, Probs
 from ort_vision_sdk.tasks.base import VisionTask
 from ort_vision_sdk.types import ClassificationResult, ClassProbability, ImageArray
+
+if TYPE_CHECKING:
+    # Annotation-only; OrtSession imports onnxruntime lazily at runtime.
+    import onnxruntime as ort
 
 _IMAGENET_MEAN: tuple[float, float, float] = (0.485, 0.456, 0.406)
 _IMAGENET_STD: tuple[float, float, float] = (0.229, 0.224, 0.225)

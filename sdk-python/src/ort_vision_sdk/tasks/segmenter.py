@@ -4,10 +4,9 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 import numpy as np
-import onnxruntime as ort
 from numpy.typing import NDArray
 
 from ort_vision_sdk.io.image import ImageInput, load_image
@@ -21,6 +20,10 @@ from ort_vision_sdk.types import (
     ImageArray,
     SegmentationResult,
 )
+
+if TYPE_CHECKING:
+    # Annotation-only; OrtSession imports onnxruntime lazily at runtime.
+    import onnxruntime as ort
 
 SegmenterHead = Literal["yolo-seg"]
 """Decoder family for the segmentation head.

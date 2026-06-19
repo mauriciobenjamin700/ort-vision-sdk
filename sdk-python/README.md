@@ -218,6 +218,24 @@ det = Detector("yolov8n.onnx", session_options=opts)
 
 ---
 
+## Inference backends
+
+The default backend is the in-process ONNX Runtime (`OrtSession`). Everything
+else in the SDK — preprocessing, postprocessing, result decoding — is pure NumPy,
+so you can swap **just the inference engine** by passing a `backend=` that
+satisfies the `InferenceBackend` protocol. This runs the SDK where there is no
+`onnxruntime` Python wheel — `onnxruntime-web` in the browser, or the native
+`onnxruntime-android` AAR over a bridge — with the pipeline still in Python:
+
+```python
+det = Detector("model.onnx", backend=my_backend)  # model_path/providers ignored
+```
+
+See the [inference-backends guide](https://mauriciobenjamin700.github.io/ort-vision-sdk/guia/backends/)
+for the protocol and a complete example.
+
+---
+
 ## Result objects
 
 Each `predict()` call returns `list[Results]` of length 1 (per image), so the typical pattern is `results[0]`. The envelope is **iterable and indexable** — iterating yields per-instance dataclasses, so legacy "list of detections" code works with one extra `[0]`.

@@ -20,6 +20,8 @@ if TYPE_CHECKING:
     # Annotation-only; OrtSession imports onnxruntime lazily at runtime.
     import onnxruntime as ort
 
+    from ort_vision_sdk.core.backend import InferenceBackend
+
 DetectorHead = Literal["yolo"]
 """Decoder family for the detection head.
 
@@ -66,6 +68,7 @@ class Detector(VisionTask):
         labels: LabelSpec = "coco",
         providers: list[str] | None = None,
         session_options: ort.SessionOptions | None = None,
+        backend: InferenceBackend | None = None,
         input_size: tuple[int, int] = (640, 640),
         conf_threshold: float = 0.25,
         iou_threshold: float = 0.45,
@@ -74,15 +77,22 @@ class Detector(VisionTask):
         """Initialize the detector.
 
         Args:
-            model_path: Path to the ``.onnx`` model.
+            model_path: Path to the ``.onnx`` model. Ignored when ``backend``
+                is provided.
             head: Decoder family for the model's detection head — see
                 :data:`DetectorHead`. Default ``"yolo"`` covers YOLOv8/v9/v10/v11/v12/v26.
             labels: Class label spec (see :func:`resolve_labels`). Defaults to
                 the 80-class COCO preset.
             providers: Execution providers in preference order. Accepts short
                 aliases (``"cuda"``, ``"cpu"``, ``"tensorrt"``, ...) as well
-                as canonical ORT names. Auto if ``None``.
-            session_options: Optional ORT session options.
+                as canonical ORT names. Auto if ``None``. Ignored when
+                ``backend`` is provided.
+            session_options: Optional ORT session options. Ignored when
+                ``backend`` is provided.
+            backend: An explicit
+                :class:`~ort_vision_sdk.core.backend.InferenceBackend` to run
+                inference through (browser/Android bridge). ``None`` (default)
+                uses the in-process ONNX Runtime via :class:`OrtSession`.
             input_size: Model input ``(width, height)`` for letterboxing.
             conf_threshold: Default minimum class score to keep a candidate.
                 Can be overridden per :meth:`predict` call.
@@ -99,6 +109,7 @@ class Detector(VisionTask):
             model_path,
             providers=providers,
             session_options=session_options,
+            backend=backend,
         )
         self._head: DetectorHead = head
         self._input_size: tuple[int, int] = input_size
@@ -351,10 +362,10 @@ class Detector(VisionTask):
 
     def _infer_num_classes(self) -> int | None:
         """Infer ``num_classes`` from the YOLO output shape ``(B, 4 + nc, N)``."""
-        outputs = self._session.raw.get_outputs()
-        if not outputs:
+        output_shapes = self._session.output_shapes
+        if not output_shapes:
             return None
-        shape = tuple(outputs[0].shape)
+        shape = output_shapes[0]
         non_batch = [d for d in shape if isinstance(d, int) and d > 1]
         if not non_batch:
             return None

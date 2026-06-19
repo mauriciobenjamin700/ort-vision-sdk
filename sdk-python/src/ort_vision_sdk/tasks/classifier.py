@@ -25,6 +25,8 @@ if TYPE_CHECKING:
     # Annotation-only; OrtSession imports onnxruntime lazily at runtime.
     import onnxruntime as ort
 
+    from ort_vision_sdk.core.backend import InferenceBackend
+
 _IMAGENET_MEAN: tuple[float, float, float] = (0.485, 0.456, 0.406)
 _IMAGENET_STD: tuple[float, float, float] = (0.229, 0.224, 0.225)
 
@@ -62,6 +64,7 @@ class Classifier(VisionTask):
         labels: LabelSpec = None,
         providers: list[str] | None = None,
         session_options: ort.SessionOptions | None = None,
+        backend: InferenceBackend | None = None,
         input_size: tuple[int, int] = (224, 224),
         mean: tuple[float, float, float] = _IMAGENET_MEAN,
         std: tuple[float, float, float] = _IMAGENET_STD,
@@ -70,12 +73,18 @@ class Classifier(VisionTask):
         """Initialize the classifier.
 
         Args:
-            model_path: Path to the ``.onnx`` model.
+            model_path: Path to the ``.onnx`` model. Ignored when ``backend``
+                is provided.
             labels: Class label spec — see :func:`resolve_labels`.
             providers: Execution providers in preference order. Accepts short
                 aliases (``"cuda"``, ``"cpu"``, ...) or canonical ORT names.
-                Auto if ``None``.
-            session_options: Optional ORT session options.
+                Auto if ``None``. Ignored when ``backend`` is provided.
+            session_options: Optional ORT session options. Ignored when
+                ``backend`` is provided.
+            backend: An explicit
+                :class:`~ort_vision_sdk.core.backend.InferenceBackend` to run
+                inference through (browser/Android bridge). ``None`` (default)
+                uses the in-process ONNX Runtime via :class:`OrtSession`.
             input_size: Model input ``(width, height)`` in pixels.
             mean: Per-channel RGB mean used for normalization.
             std: Per-channel RGB standard deviation used for normalization.
@@ -87,6 +96,7 @@ class Classifier(VisionTask):
             model_path,
             providers=providers,
             session_options=session_options,
+            backend=backend,
         )
         self._input_size: tuple[int, int] = input_size
         self._mean: tuple[float, float, float] = mean
@@ -265,8 +275,8 @@ class Classifier(VisionTask):
 
     def _infer_num_classes(self) -> int | None:
         """Read num_classes from the model's first output last static dim."""
-        outputs = self._session.raw.get_outputs()
-        if not outputs:
+        output_shapes = self._session.output_shapes
+        if not output_shapes:
             return None
-        last_dim = tuple(outputs[0].shape)[-1]
+        last_dim = output_shapes[0][-1]
         return int(last_dim) if isinstance(last_dim, int) else None

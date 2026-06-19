@@ -23,19 +23,33 @@ por imagem.
 
 ```python
 Classifier(model_path, *, labels=None, providers=None, session_options=None,
-           input_size=(224, 224), mean=..., std=..., apply_softmax=True)
+           backend=None, input_size=(224, 224), mean=..., std=..., apply_softmax=True)
 
 Detector(model_path, *, head="yolo", labels="coco", providers=None,
-         session_options=None, input_size=(640, 640), conf_threshold=0.25,
-         iou_threshold=0.45, max_detections=300)
+         session_options=None, backend=None, input_size=(640, 640),
+         conf_threshold=0.25, iou_threshold=0.45, max_detections=300)
 
 Segmenter(model_path, *, head="yolo-seg", labels="coco", providers=None,
-          session_options=None, input_size=(640, 640), conf_threshold=0.25,
-          iou_threshold=0.45, max_detections=300, mask_threshold=0.5)
+          session_options=None, backend=None, input_size=(640, 640),
+          conf_threshold=0.25, iou_threshold=0.45, max_detections=300,
+          mask_threshold=0.5)
 ```
+
+Os três construtores aceitam `backend=` (v0.4.0): injeta um `InferenceBackend`
+para rodar a inferência fora do ONNX Runtime in-process (navegador, Android).
+Quando fornecido, `model_path`/`providers`/`session_options` são ignorados. Veja
+o [guia de backends](../guia/backends.md). (Adicionei `backend=None` às
+assinaturas de `Classifier`/`Detector` acima também.)
 
 `Detector.predict()` e `Segmenter.predict()` aceitam overrides por chamada:
 `conf_threshold`, `iou_threshold`, `classes`.
+
+## Backends de inferência
+
+| Símbolo | Descrição |
+| --- | --- |
+| `InferenceBackend` | Protocolo do motor de inferência — metadata (`input_name`/`input_shape`/`output_names`/`output_shapes`) + `run`/`async_run`/`ort_async_run`. |
+| `OrtSession` | Backend padrão (ONNX Runtime in-process); satisfaz o protocolo. |
 
 ## Envelopes de resultado
 

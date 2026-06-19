@@ -25,6 +25,8 @@ if TYPE_CHECKING:
     # Annotation-only; OrtSession imports onnxruntime lazily at runtime.
     import onnxruntime as ort
 
+    from ort_vision_sdk.core.backend import InferenceBackend
+
 SegmenterHead = Literal["yolo-seg"]
 """Decoder family for the segmentation head.
 
@@ -78,6 +80,7 @@ class Segmenter(VisionTask):
         labels: LabelSpec = "coco",
         providers: list[str] | None = None,
         session_options: ort.SessionOptions | None = None,
+        backend: InferenceBackend | None = None,
         input_size: tuple[int, int] = (640, 640),
         conf_threshold: float = 0.25,
         iou_threshold: float = 0.45,
@@ -87,7 +90,8 @@ class Segmenter(VisionTask):
         """Initialize the segmenter.
 
         Args:
-            model_path: Path to the ``.onnx`` model.
+            model_path: Path to the ``.onnx`` model. Ignored when ``backend``
+                is provided.
             head: Decoder family for the model's segmentation head — see
                 :data:`SegmenterHead`. Default ``"yolo-seg"`` covers
                 YOLOv8-seg/v11-seg/v26-seg.
@@ -95,8 +99,13 @@ class Segmenter(VisionTask):
                 the 80-class COCO preset.
             providers: Execution providers in preference order. Accepts short
                 aliases (``"cuda"``, ``"cpu"``, ...) or canonical ORT names.
-                Auto if ``None``.
-            session_options: Optional ORT session options.
+                Auto if ``None``. Ignored when ``backend`` is provided.
+            session_options: Optional ORT session options. Ignored when
+                ``backend`` is provided.
+            backend: An explicit
+                :class:`~ort_vision_sdk.core.backend.InferenceBackend` to run
+                inference through (browser/Android bridge). ``None`` (default)
+                uses the in-process ONNX Runtime via :class:`OrtSession`.
             input_size: Model input ``(width, height)`` for letterboxing.
             conf_threshold: Default minimum class score to keep a candidate.
             iou_threshold: Default IoU threshold for non-maximum suppression.
@@ -113,6 +122,7 @@ class Segmenter(VisionTask):
             model_path,
             providers=providers,
             session_options=session_options,
+            backend=backend,
         )
         self._head: SegmenterHead = head
         self._input_size: tuple[int, int] = input_size
@@ -430,11 +440,10 @@ class Segmenter(VisionTask):
         of 32. If the user passes the wrong labels the constructor's
         validation will catch it; otherwise ``predict`` will raise.
         """
-        outputs = self._session.raw.get_outputs()
-        if not outputs:
+        output_shapes = self._session.output_shapes
+        if not output_shapes:
             return None
-        for o in outputs:
-            shape = tuple(o.shape)
+        for shape in output_shapes:
             if len(shape) != 3:
                 continue
             int_dims = [d for d in shape if isinstance(d, int) and d > 1]

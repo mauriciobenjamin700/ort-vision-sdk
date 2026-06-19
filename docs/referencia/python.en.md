@@ -22,19 +22,32 @@ Each task exposes three inference variants with the **same signature**:
 
 ```python
 Classifier(model_path, *, labels=None, providers=None, session_options=None,
-           input_size=(224, 224), mean=..., std=..., apply_softmax=True)
+           backend=None, input_size=(224, 224), mean=..., std=..., apply_softmax=True)
 
 Detector(model_path, *, head="yolo", labels="coco", providers=None,
-         session_options=None, input_size=(640, 640), conf_threshold=0.25,
-         iou_threshold=0.45, max_detections=300)
+         session_options=None, backend=None, input_size=(640, 640),
+         conf_threshold=0.25, iou_threshold=0.45, max_detections=300)
 
 Segmenter(model_path, *, head="yolo-seg", labels="coco", providers=None,
-          session_options=None, input_size=(640, 640), conf_threshold=0.25,
-          iou_threshold=0.45, max_detections=300, mask_threshold=0.5)
+          session_options=None, backend=None, input_size=(640, 640),
+          conf_threshold=0.25, iou_threshold=0.45, max_detections=300,
+          mask_threshold=0.5)
 ```
+
+All three constructors accept `backend=` (v0.4.0): inject an `InferenceBackend`
+to run inference outside the in-process ONNX Runtime (browser, Android). When
+given, `model_path`/`providers`/`session_options` are ignored. See the
+[backends guide](../guia/backends.en.md).
 
 `Detector.predict()` and `Segmenter.predict()` accept per-call overrides:
 `conf_threshold`, `iou_threshold`, `classes`.
+
+## Inference backends
+
+| Symbol | Description |
+| --- | --- |
+| `InferenceBackend` | Inference-engine protocol — metadata (`input_name`/`input_shape`/`output_names`/`output_shapes`) + `run`/`async_run`/`ort_async_run`. |
+| `OrtSession` | Default backend (in-process ONNX Runtime); satisfies the protocol. |
 
 ## Result envelopes
 

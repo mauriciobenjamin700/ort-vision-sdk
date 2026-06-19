@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-06-19
+
+### Added
+
+- **Pluggable inference backend.** A new `InferenceBackend` protocol
+  (`ort_vision_sdk.core.backend`) formalizes the interface every task drives
+  inference through — input/output metadata plus `run` / `async_run` /
+  `ort_async_run`. The default backend is `OrtSession` (unchanged), but tasks now
+  accept a `backend=` argument to run inference through a **different runtime**
+  without an `onnxruntime` Python wheel: `onnxruntime-web` in the browser, or the
+  native `onnxruntime-android` AAR over a bridge. Preprocessing, postprocessing
+  and result parsing still run in Python (NumPy); only `run` crosses the bridge.
+
+  ```python
+  # Default: in-process ONNX Runtime (unchanged)
+  det = Detector("yolov8n.onnx")
+
+  # Bridged: inference runs on a native/remote runtime, pre/post stays in Python
+  det = Detector("yolov8n.onnx", backend=my_backend)
+  ```
+
+- `OrtSession.output_shapes` — declared output shapes, so tasks infer
+  `num_classes` from output metadata through the backend interface instead of the
+  ONNX-Runtime-specific `OrtSession.raw`.
+- `InferenceBackend` and `OrtSession` are now re-exported at the package root.
+
+### Changed
+
+- `VisionTask` (and `Detector` / `Classifier` / `Segmenter`) take an optional
+  `backend: InferenceBackend | None = None`. When given, `model_path` /
+  `providers` / `session_options` are ignored (the backend owns model loading).
+  `Task.session` now returns an `InferenceBackend`. **Fully backward compatible**:
+  omit `backend` and behavior is identical to 0.3.x.
+
 ## [0.3.2] - 2026-06-13
 
 ### Changed

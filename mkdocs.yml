@@ -51,6 +51,7 @@ plugins:
             Detecção: Detection
             Segmentação: Segmentation
             Python: Python
+            Backends de inferência: Inference backends
             Web (browser): Web (browser)
             Referência: Reference
             API Python: Python API
@@ -83,6 +84,7 @@ nav:
       - Detecção: guia/deteccao.md
       - Segmentação: guia/segmentacao.md
       - Python: guia/python.md
+      - Backends de inferência: guia/backends.md
       - Web (browser): guia/web.md
   - Referência:
       - API Python: referencia/python.md

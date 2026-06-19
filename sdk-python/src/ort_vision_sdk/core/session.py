@@ -74,6 +74,9 @@ class OrtSession:
         self._input_shapes: list[tuple[int | str, ...]] = [
             tuple(i.shape) for i in self._session.get_inputs()
         ]
+        self._output_shapes: list[tuple[int | str, ...]] = [
+            tuple(o.shape) for o in self._session.get_outputs()
+        ]
 
     @property
     def input_names(self) -> list[str]:
@@ -99,6 +102,18 @@ class OrtSession:
     def input_shape(self) -> tuple[int | str, ...]:
         """Declared shape of the first input."""
         return tuple(self._input_shapes[0])
+
+    @property
+    def output_shapes(self) -> list[tuple[int | str, ...]]:
+        """Declared shapes of the model's outputs (dynamic dims appear as strings).
+
+        Exposed so tasks can introspect output metadata (e.g. inferring
+        ``num_classes`` from the last static dim) without reaching into the
+        backend-specific :attr:`raw` session — which lets an alternative
+        :class:`~ort_vision_sdk.core.backend.InferenceBackend` (Pyodide/WASM,
+        a native Android bridge) satisfy the same interface.
+        """
+        return [tuple(s) for s in self._output_shapes]
 
     @property
     def raw(self) -> ort.InferenceSession:

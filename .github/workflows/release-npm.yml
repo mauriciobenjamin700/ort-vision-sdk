@@ -25,10 +25,17 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           registry-url: "https://registry.npmjs.org"
           cache: npm
           cache-dependency-path: sdk-js-web/package-lock.json
+
+      # The runner's bundled npm 10 has no OIDC trusted publishing, so
+      # `npm publish` falls back to NODE_AUTH_TOKEN and 404s when that secret
+      # is absent or stale. npm >= 11.5 mints a short-lived token from the
+      # GitHub OIDC identity instead — same setup as tempest-react-sdk.
+      - name: Upgrade npm (OIDC trusted publishing)
+        run: npm install -g npm@latest
 
       - name: Install dependencies
         run: npm ci
@@ -57,7 +64,7 @@ jobs:
             console.log('Smoke OK · VERSION =', m.VERSION); \
           })"
 
+      # No NODE_AUTH_TOKEN: publish authenticates via GitHub OIDC against the
+      # trusted publisher configured for the package on npmjs.
       - name: Publish (with provenance)
         run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

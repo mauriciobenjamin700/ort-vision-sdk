@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-08-02
+
+### Added
+
+- **`predict()` now fills the `speed` field it always advertised.** Every
+  `Results` dataclass declared `speed: dict[str, float]` and documented it as
+  the Ultralytics-style timing breakdown — and it was always `{}`, because no
+  task ever populated it. `Classifier`, `Detector` and `Segmenter` now time
+  each stage, in all three scheduling modes (`predict`, `async_predict`,
+  `ort_async_predict`):
+
+  ```python
+  results = detector.predict("street.jpg")
+  print(results[0].speed)
+  # {"load": 84.2, "preprocess": 11.7, "inference": 118.9, "postprocess": 6.4}
+  ```
+
+  Four keys instead of Ultralytics' three: `preprocess`, `inference` and
+  `postprocess` measure the same boundaries Ultralytics does, and `load`
+  covers the read/decode this SDK performs inside `predict()` — on a cold page
+  cache it dominates everything else, and folding it into `preprocess` would
+  misreport where the cost is.
+
+  `SpeedTimer` and `STAGES` are exported from `ort_vision_sdk.core` so callers
+  can time their own pipeline stages around the SDK calls using the same
+  boundaries. This matches the `@mauriciobenjamin700/ort-vision-sdk-web@0.3.0`
+  release, keeping the two SDKs' surfaces aligned.
+
 ## [0.4.0] - 2026-06-19
 
 ### Added

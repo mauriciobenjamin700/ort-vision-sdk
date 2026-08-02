@@ -203,7 +203,7 @@ function sigmoid(x: number): number {
 
 let _warnedDecodeYoloV8Seg = false;
 
-/** @deprecated since 0.2.0 — use {@link decodeYoloSeg}. Will be removed in 0.3.0. */
+/** @deprecated since 0.2.0 — use {@link decodeYoloSeg}. Will be removed in 0.4.0. */
 export function decodeYoloV8Seg(
   perAnchorData: Float32Array,
   perAnchorDims: readonly number[],
@@ -215,7 +215,7 @@ export function decodeYoloV8Seg(
     _warnedDecodeYoloV8Seg = true;
     console.warn(
       "[@ort-vision-sdk/web] decodeYoloV8Seg is deprecated since 0.2.0; use decodeYoloSeg. " +
-        "The alias will be removed in 0.3.0.",
+        "The alias will be removed in 0.4.0.",
     );
   }
   return decodeYoloSeg(

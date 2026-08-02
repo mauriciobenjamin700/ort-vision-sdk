@@ -57,8 +57,10 @@ given, `model_path`/`providers`/`session_options` are ignored. See the
 | `DetectionResults` | `boxes` | `DetectionResult` | `cls`, `conf`, `box.xyxy`, `cropped_image` |
 | `SegmentationResults` | `boxes`, `masks` | `SegmentationResult` | `cls`, `conf`, `box.xyxy`, `mask`, `segmented_image` |
 
-Every envelope also exposes `names`, `orig_img`, `orig_shape`, `path`, and an
-optional `speed` timings dict.
+Every envelope also exposes `names`, `orig_img`, `orig_shape`, `path`, and
+`speed` — a `dict[str, float]` holding `load`, `preprocess`, `inference` and
+`postprocess` in milliseconds, filled in by every `predict()`. See
+[Inference cost](../guia/velocidade.md).
 
 ## Bulk views (Ultralytics-style)
 

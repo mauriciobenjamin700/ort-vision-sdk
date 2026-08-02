@@ -32,6 +32,11 @@ per image. Each task exposes a `run()` alias.
 | `DetectionResults` | `boxes` | `DetectionResult` |
 | `SegmentationResults` | `boxes`, `masks` | `SegmentationResult` |
 
+Every envelope exposes `names`, `origImg`, `origShape`, `path` and `speed` —
+a `Speed` object holding `load`, `preprocess`, `inference` and `postprocess`
+in milliseconds, filled in by every `predict()`. See
+[Inference cost](../guia/velocidade.md).
+
 Bulk views: `Boxes`, `Probs`, `Masks` (same attributes as Python).
 
 Per-instance types/classes: `DetectionResult`, `SegmentationResult`,

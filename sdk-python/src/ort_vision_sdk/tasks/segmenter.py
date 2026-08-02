@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Literal
 import numpy as np
 from numpy.typing import NDArray
 
+from ort_vision_sdk.core.timing import SpeedTimer
 from ort_vision_sdk.io.image import ImageInput, load_image
 from ort_vision_sdk.labels import LabelSpec, resolve_labels
 from ort_vision_sdk.postprocess.segmentation import decode_yolo_seg
@@ -193,12 +194,17 @@ class Segmenter(VisionTask):
             A 1-element list containing a :class:`SegmentationResults`
             envelope.
         """
+        timer = SpeedTimer()
         path = str(image) if isinstance(image, (str, Path)) else None
         original = load_image(image)
+        timer.stage("load")
         tensor, scale, pad = self._preprocess(original)
+        timer.stage("preprocess")
         outputs = self._session.run({self._session.input_name: tensor})
+        timer.stage("inference")
         return self._build_results(
             outputs,
+            timer=timer,
             original=original,
             path=path,
             scale=scale,
@@ -249,12 +255,17 @@ class Segmenter(VisionTask):
 
         Args and return type match :meth:`predict` exactly.
         """
+        timer = SpeedTimer()
         path = str(image) if isinstance(image, (str, Path)) else None
         original = load_image(image)
+        timer.stage("load")
         tensor, scale, pad = self._preprocess(original)
+        timer.stage("preprocess")
         outputs = await self._session.ort_async_run({self._session.input_name: tensor})
+        timer.stage("inference")
         return self._build_results(
             outputs,
+            timer=timer,
             original=original,
             path=path,
             scale=scale,
@@ -268,6 +279,7 @@ class Segmenter(VisionTask):
         self,
         outputs: list[np.ndarray],
         *,
+        timer: SpeedTimer,
         original: ImageArray,
         path: str | None,
         scale: float,
@@ -309,6 +321,7 @@ class Segmenter(VisionTask):
         orig_shape = (int(original.shape[0]), int(original.shape[1]))
         boxes = self._build_boxes(detections, orig_shape=orig_shape)
         masks = self._build_masks(detections, orig_shape=orig_shape)
+        timer.stage("postprocess")
 
         return [
             SegmentationResults(
@@ -319,6 +332,7 @@ class Segmenter(VisionTask):
                 orig_img=original,
                 orig_shape=orig_shape,
                 path=path,
+                speed=timer.speed(),
             )
         ]
 

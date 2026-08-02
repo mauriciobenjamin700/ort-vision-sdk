@@ -246,7 +246,15 @@ Each `predict()` call returns `list[Results]` of length 1 (per image), so the ty
 | `DetectionResults`      | `boxes`          | `DetectionResult`    | `cls`, `conf`, `box.xyxy`, `cropped_image`           |
 | `SegmentationResults`   | `boxes`, `masks` | `SegmentationResult` | `cls`, `conf`, `box.xyxy`, `mask`, `segmented_image` |
 
-Every envelope also exposes `names`, `orig_img`, `orig_shape`, `path`, and an optional `speed` timings dict.
+Every envelope also exposes `names`, `orig_img`, `orig_shape`, `path`, and `speed` — a per-stage timing breakdown filled in by every `predict()`:
+
+```python
+results = detector.predict("street.jpg")
+print(results[0].speed)
+# {"load": 84.2, "preprocess": 11.7, "inference": 118.9, "postprocess": 6.4}
+```
+
+Milliseconds. `preprocess` / `inference` / `postprocess` measure the same boundaries Ultralytics reports; `load` is the read/decode this SDK does inside `predict()`, which on a cold page cache dominates everything else. Loading the model is *not* included — that is startup cost. `SpeedTimer` (from `ort_vision_sdk.core`) times your own pipeline stages with the same boundaries.
 
 The bulk views (`Boxes`, `Probs`, `Masks`) match Ultralytics one-to-one: `boxes.xyxy`, `boxes.xywh`, `boxes.xyxyn`, `boxes.xywhn`, `boxes.cls`, `boxes.conf`, `boxes.data`; `probs.top1`, `probs.top5`, `probs.top1conf`, `probs.top5conf`, `probs.data`; `masks.data`, `masks.xyxy`.
 

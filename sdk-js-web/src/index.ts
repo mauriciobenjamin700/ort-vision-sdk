@@ -44,6 +44,7 @@ export {
   OrtSession,
 } from "./core/session.js";
 export { DEFAULT_PROVIDERS, resolveProviders } from "./core/providers.js";
+export { type Speed, SpeedTimer } from "./core/timing.js";
 
 export { type ImageInput, loadImage } from "./io/image.js";
 
@@ -108,4 +109,4 @@ export {
   Segmenter,
 } from "./tasks/segmenter.js";
 
-export const VERSION: string = "0.2.1";
+export const VERSION: string = "0.3.0";

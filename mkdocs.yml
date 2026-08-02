@@ -52,6 +52,7 @@ plugins:
             Segmentação: Segmentation
             Python: Python
             Backends de inferência: Inference backends
+            Custo da inferência: Inference cost
             Web (browser): Web (browser)
             Referência: Reference
             API Python: Python API
@@ -85,6 +86,7 @@ nav:
       - Segmentação: guia/segmentacao.md
       - Python: guia/python.md
       - Backends de inferência: guia/backends.md
+      - Custo da inferência: guia/velocidade.md
       - Web (browser): guia/web.md
   - Referência:
       - API Python: referencia/python.md

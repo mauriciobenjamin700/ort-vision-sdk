@@ -32,6 +32,11 @@ por imagem. Cada tarefa expõe um alias `run()`.
 | `DetectionResults` | `boxes` | `DetectionResult` |
 | `SegmentationResults` | `boxes`, `masks` | `SegmentationResult` |
 
+Todo envelope expõe `names`, `origImg`, `origShape`, `path` e `speed` — um
+objeto `Speed` com `load`, `preprocess`, `inference` e `postprocess` em
+milissegundos, preenchido por todo `predict()`. Ver
+[Custo da inferência](../guia/velocidade.md).
+
 Visões em massa: `Boxes`, `Probs`, `Masks` (mesmos atributos do Python).
 
 Tipos/classes por instância: `DetectionResult`, `SegmentationResult`,

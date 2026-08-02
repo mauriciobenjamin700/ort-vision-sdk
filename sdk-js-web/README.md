@@ -57,6 +57,18 @@ for (const d of detections) {
 }
 ```
 
+## Inference speed
+
+Every result envelope carries a per-stage timing breakdown:
+
+```typescript
+const results = await det.predict("/images/street.jpg");
+console.log(results[0].speed);
+// { load: 84.2, preprocess: 11.7, inference: 118.9, postprocess: 6.4 }
+```
+
+Milliseconds. `preprocess` / `inference` / `postprocess` measure the same boundaries Ultralytics reports; `load` is the fetch/decode this SDK does inside `predict()`, which on a cold cache dominates everything else. Loading the model is *not* included — that is startup cost. Export `SpeedTimer` to time your own pipeline stages with the same boundaries.
+
 ## Accepted image inputs
 
 `predict(image)` and `loadImage(image)` both accept:

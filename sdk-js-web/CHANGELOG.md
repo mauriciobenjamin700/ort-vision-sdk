@@ -7,6 +7,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-08-02
+
+### Added
+
+- **`predict()` now reports where the time went.** Every `Results` envelope
+  already carried a `speed` field, mirroring Ultralytics' `results[0].speed` —
+  and it was always empty, because no task ever filled it. `Classifier`,
+  `Detector` and `Segmenter` now time each stage and hand the breakdown to the
+  envelope:
+
+  ```typescript
+  const results = await det.predict("/images/street.jpg");
+  console.log(results[0].speed);
+  // { load: 84.2, preprocess: 11.7, inference: 118.9, postprocess: 6.4 }
+  ```
+
+  Four keys instead of Ultralytics' three: `preprocess`, `inference` and
+  `postprocess` measure the same boundaries Ultralytics does, and `load` covers
+  the fetch/decode this SDK performs inside `predict()` — on a cold cache it
+  dominates everything else, and folding it into `preprocess` would misreport
+  where the cost is.
+
+  New exports `Speed` (the four-key breakdown) and `SpeedTimer` (the stage
+  accumulator) let callers time their own pipeline stages around the SDK calls
+  using the same boundaries.
+
+### Changed
+
+- `Results.speed` is typed `Readonly<Speed>` instead of
+  `Readonly<Record<string, number>>`, so `speed.inference` is a `number` rather
+  than `number | undefined`. Envelopes built by hand default to all-zeros.
+
+### Deprecated
+
+- The `decodeYoloV8` / `decodeYoloV8Anchors` / `decodeYoloV8Seg` aliases were
+  announced for removal in `0.3.0`. They survive this release — dropping them
+  would break `tempest-react-sdk`, which re-exports all three from its vendored
+  copy. The warning now points at `0.4.0`.
+
 ## [0.2.1] - 2026-05-03
 
 First **published** release on npm. The previous `0.2.0` tag never produced a

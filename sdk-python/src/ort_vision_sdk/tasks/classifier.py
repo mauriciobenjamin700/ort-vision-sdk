@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
+from ort_vision_sdk.core.timing import SpeedTimer
 from ort_vision_sdk.io.image import ImageInput, load_image
 from ort_vision_sdk.labels import LabelSpec, resolve_labels
 from ort_vision_sdk.postprocess.classification import softmax, topk
@@ -150,11 +151,21 @@ class Classifier(VisionTask):
             A 1-element list containing a :class:`ClassificationResults`
             envelope.
         """
+        timer = SpeedTimer()
         path = str(image) if isinstance(image, (str, Path)) else None
         original = load_image(image)
+        timer.stage("load")
         tensor = self._preprocess(original)
+        timer.stage("preprocess")
         outputs = self._session.run({self._session.input_name: tensor})
-        return self._build_results(outputs, original=original, path=path, top_k=top_k)
+        timer.stage("inference")
+        return self._build_results(
+            outputs,
+            timer=timer,
+            original=original,
+            path=path,
+            top_k=top_k,
+        )
 
     async def async_predict(
         self,
@@ -190,16 +201,27 @@ class Classifier(VisionTask):
 
         Args and return type match :meth:`predict` exactly.
         """
+        timer = SpeedTimer()
         path = str(image) if isinstance(image, (str, Path)) else None
         original = load_image(image)
+        timer.stage("load")
         tensor = self._preprocess(original)
+        timer.stage("preprocess")
         outputs = await self._session.ort_async_run({self._session.input_name: tensor})
-        return self._build_results(outputs, original=original, path=path, top_k=top_k)
+        timer.stage("inference")
+        return self._build_results(
+            outputs,
+            timer=timer,
+            original=original,
+            path=path,
+            top_k=top_k,
+        )
 
     def _build_results(
         self,
         outputs: list[np.ndarray],
         *,
+        timer: SpeedTimer,
         original: ImageArray,
         path: str | None,
         top_k: int | None,
@@ -231,6 +253,7 @@ class Classifier(VisionTask):
             probabilities=probabilities,
         )
         probs_view = Probs(data=full_probs.astype(np.float64, copy=False))
+        timer.stage("postprocess")
 
         return [
             ClassificationResults(
@@ -240,6 +263,7 @@ class Classifier(VisionTask):
                 orig_img=original,
                 orig_shape=(int(original.shape[0]), int(original.shape[1])),
                 path=path,
+                speed=timer.speed(),
             )
         ]
 

@@ -59,8 +59,10 @@ assinaturas de `Classifier`/`Detector` acima também.)
 | `DetectionResults` | `boxes` | `DetectionResult` | `cls`, `conf`, `box.xyxy`, `cropped_image` |
 | `SegmentationResults` | `boxes`, `masks` | `SegmentationResult` | `cls`, `conf`, `box.xyxy`, `mask`, `segmented_image` |
 
-Todo envelope expõe também `names`, `orig_img`, `orig_shape`, `path` e um
-`speed` opcional (timings).
+Todo envelope expõe também `names`, `orig_img`, `orig_shape`, `path` e
+`speed` — um `dict[str, float]` com `load`, `preprocess`, `inference` e
+`postprocess` em milissegundos, preenchido por todo `predict()`. Ver
+[Custo da inferência](../guia/velocidade.md).
 
 ## Visões em massa (estilo Ultralytics)
 

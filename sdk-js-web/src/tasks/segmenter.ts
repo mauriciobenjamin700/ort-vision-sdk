@@ -9,6 +9,7 @@ import {
   type OrtSessionOptions,
   OrtSession,
 } from "../core/session.js";
+import { SpeedTimer } from "../core/timing.js";
 import { type ImageInput, loadImage } from "../io/image.js";
 import { type LabelSpec, resolveLabels } from "../labels.js";
 import { decodeYoloSeg } from "../postprocess/segmentation.js";
@@ -174,10 +175,14 @@ export class Segmenter extends VisionTask {
     image: ImageInput,
     options: SegmenterPredictOptions = {},
   ): Promise<SegmentationResults[]> {
+    const timer = new SpeedTimer();
     const path = typeof image === "string" ? image : null;
     const original = await loadImage(image);
+    timer.stage("load");
     const { tensor, scale, padLeft, padTop } = this._preprocess(original);
+    timer.stage("preprocess");
     const outputs = await this._session.run({ [this._session.inputName]: tensor });
+    timer.stage("inference");
 
     const { perAnchor, prototypes } = this._splitOutputs(outputs);
 
@@ -215,15 +220,19 @@ export class Segmenter extends VisionTask {
     );
 
     const orig: readonly [number, number] = [original.height, original.width];
+    const boxes = this._buildBoxes(detections, orig);
+    const masks = this._buildMasks(detections, orig);
+    timer.stage("postprocess");
     return [
       new SegmentationResults(
-        this._buildBoxes(detections, orig),
-        this._buildMasks(detections, orig),
+        boxes,
+        masks,
         detections,
         this._names,
         original,
         orig,
         path,
+        timer.speed(),
       ),
     ];
   }

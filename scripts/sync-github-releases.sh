@@ -115,8 +115,22 @@ case "$ONLY" in
   *) echo "ERROR: argumento inválido '$ONLY' — esperado python|web (ou nenhum)"; exit 1 ;;
 esac
 
+# O badge "Latest" do GitHub segue o Release criado mais recentemente, não a
+# maior versão. Um backfill em ordem crescente terminaria apontando Latest para
+# uma tag histórica, então ele é reafirmado na maior tag do sdk-python — a mesma
+# política que o release-pypi.yml aplica.
+restore_latest_badge() {
+  local newest
+  newest=$(git tag -l "v*.*.*" --sort=-v:refname | head -n 1)
+  [[ -z "$newest" ]] && return 0
+  gh release view "$newest" >/dev/null 2>&1 || return 0
+  gh release edit "$newest" --latest >/dev/null
+  echo "· badge Latest reafirmado em $newest"
+}
+
 if [[ "$DRY_RUN" == "1" ]]; then
   printf "\n· dry-run: %d Release(s) faltando, %d já existentes\n" "$created" "$skipped"
 else
+  [[ "$created" -gt 0 ]] && restore_latest_badge
   printf "\n✓ %d Release(s) criado(s), %d já existentes\n" "$created" "$skipped"
 fi

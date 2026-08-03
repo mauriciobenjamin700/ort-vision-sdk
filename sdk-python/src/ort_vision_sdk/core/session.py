@@ -116,6 +116,21 @@ class OrtSession:
         return [tuple(s) for s in self._output_shapes]
 
     @property
+    def metadata(self) -> dict[str, str]:
+        """Custom metadata the exporter baked into the model.
+
+        For an Ultralytics export this carries ``names`` (the class map),
+        ``task``, ``imgsz``, ``stride`` and friends. Exposed so tasks can read
+        what the model says about itself — its class names, for instance —
+        without reaching into the backend-specific :attr:`raw` session.
+
+        Returns:
+            dict[str, str]: The model's custom metadata map. Empty when the
+            model carries none.
+        """
+        return dict(self._session.get_modelmeta().custom_metadata_map)
+
+    @property
     def raw(self) -> ort.InferenceSession:
         """The underlying ``onnxruntime.InferenceSession``, for advanced use cases."""
         return self._session

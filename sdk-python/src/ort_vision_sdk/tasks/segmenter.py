@@ -9,7 +9,9 @@ from typing import TYPE_CHECKING, Literal
 import numpy as np
 from numpy.typing import NDArray
 
+from ort_vision_sdk.core.backend import read_metadata
 from ort_vision_sdk.core.timing import SpeedTimer
+from ort_vision_sdk.graph import model_names, resolve_input_size
 from ort_vision_sdk.io.image import ImageInput, load_image
 from ort_vision_sdk.labels import LabelSpec, resolve_labels
 from ort_vision_sdk.postprocess.segmentation import decode_yolo_seg
@@ -78,11 +80,11 @@ class Segmenter(VisionTask):
         model_path: str | Path,
         *,
         head: SegmenterHead = "yolo-seg",
-        labels: LabelSpec = "coco",
+        labels: LabelSpec = None,
         providers: list[str] | None = None,
         session_options: ort.SessionOptions | None = None,
         backend: InferenceBackend | None = None,
-        input_size: tuple[int, int] = (640, 640),
+        input_size: tuple[int, int] | None = None,
         conf_threshold: float = 0.25,
         iou_threshold: float = 0.45,
         max_detections: int = 300,
@@ -96,8 +98,11 @@ class Segmenter(VisionTask):
             head: Decoder family for the model's segmentation head — see
                 :data:`SegmenterHead`. Default ``"yolo-seg"`` covers
                 YOLOv8-seg/v11-seg/v26-seg.
-            labels: Class label spec (see :func:`resolve_labels`). Defaults to
-                the 80-class COCO preset.
+            labels: Class label spec (see :func:`resolve_labels`). ``None``
+                (default) reads the class names the export baked into the model
+                metadata (Ultralytics' ``names``), falling back to the 80-class
+                COCO preset when the model carries none. Pass a spec to override
+                what the model declares.
             providers: Execution providers in preference order. Accepts short
                 aliases (``"cuda"``, ``"cpu"``, ...) or canonical ORT names.
                 Auto if ``None``. Ignored when ``backend`` is provided.
@@ -107,7 +112,11 @@ class Segmenter(VisionTask):
                 :class:`~ort_vision_sdk.core.backend.InferenceBackend` to run
                 inference through (browser/Android bridge). ``None`` (default)
                 uses the in-process ONNX Runtime via :class:`OrtSession`.
-            input_size: Model input ``(width, height)`` for letterboxing.
+            input_size: Model input ``(width, height)`` for letterboxing. Only
+                used when the model's graph leaves its spatial axes dynamic: a
+                graph that declares a static size always wins, since that is the
+                only shape ONNX Runtime will accept. ``None`` (default) means
+                "ask the graph, fall back to ``(640, 640)``".
             conf_threshold: Default minimum class score to keep a candidate.
             iou_threshold: Default IoU threshold for non-maximum suppression.
             max_detections: Maximum number of instances to return per image.
@@ -126,20 +135,37 @@ class Segmenter(VisionTask):
             backend=backend,
         )
         self._head: SegmenterHead = head
-        self._input_size: tuple[int, int] = input_size
+        self._input_size: tuple[int, int] = resolve_input_size(
+            graph_shape=self._session.input_shape,
+            requested=input_size,
+            fallback=(640, 640),
+        )
         self._conf_threshold: float = conf_threshold
         self._iou_threshold: float = iou_threshold
         self._max_detections: int = max_detections
         self._mask_threshold: float = mask_threshold
 
         num_classes = self._infer_num_classes()
-        self._labels: tuple[str, ...] = resolve_labels(labels, num_classes=num_classes)
+        spec: LabelSpec = (
+            labels if labels is not None else model_names(read_metadata(self._session)) or "coco"
+        )
+        self._labels: tuple[str, ...] = resolve_labels(spec, num_classes=num_classes)
         self._names: dict[int, str] = {i: name for i, name in enumerate(self._labels)}
 
     @property
     def head(self) -> SegmenterHead:
         """The decoder family used to interpret the model's output."""
         return self._head
+
+    @property
+    def input_size(self) -> tuple[int, int]:
+        """The ``(width, height)`` this task preprocesses to.
+
+        Resolved at construction time from the model's graph when it declares a
+        static input, so reading it back tells you the resolution inference
+        really runs at — not merely what was requested.
+        """
+        return self._input_size
 
     @property
     def labels(self) -> tuple[str, ...]:

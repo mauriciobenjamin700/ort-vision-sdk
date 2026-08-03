@@ -7,6 +7,74 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-08-03
+
+### Added
+
+- **Tasks read their input resolution off the model instead of trusting
+  configuration.** `Classifier`, `Detector` and `Segmenter` now ask the ONNX
+  graph what shape it declares and preprocess to that. The resolution a session
+  must be fed at is a property of the export — feeding a 640x640 tensor to a
+  graph exported at 224x224 makes ORT abort mid-run with:
+
+  ```text
+  [ONNXRuntimeError] Got invalid dimensions for input: images for the following
+  indices index: 2 Got: 640 Expected: 224
+  ```
+
+  A caller had no way to see that coming: the number lives in the file. So it is
+  read from there now.
+
+  ```python
+  # An Ultralytics -cls export is 224; nothing to configure, nothing to get wrong
+  clf = Classifier("classify.onnx")
+  print(clf.input_size)  # (224, 224)
+  ```
+
+  `input_size` became `None` by default and is now a *fallback*, used only when
+  the graph leaves its spatial axes dynamic. Passing a size that contradicts a
+  static graph emits a `UserWarning` and the graph wins — honoring the caller
+  there would only turn a fixable mismatch into a failed run.
+
+- **`input_size` property on every task**, so callers can read back the
+  resolution inference actually runs at rather than the one they asked for.
+
+- **Class names come from the model when the caller passes none.** Ultralytics
+  bakes `names` into the model metadata; a hand-maintained list beside it can be
+  reordered by accident, which silently swaps predictions between classes instead
+  of failing. `labels=None` (now the default for `Detector` and `Segmenter` too)
+  reads `names` from the export, falling back to the COCO preset for detection
+  and generated `class_<id>` names for classification.
+
+  ```python
+  det = Detector("detect.onnx")   # a single-class custom export
+  print(det.labels)               # ("ocular-mucosa",) — read from the model
+  ```
+
+  This also fixes a papercut: a custom detector used to *fail* without explicit
+  labels, because the 80-name COCO default disagreed with its class count.
+
+- **`OrtSession.metadata`** exposes the model's custom metadata map (`names`,
+  `task`, `imgsz`, ...), so tasks can read what a model says about itself
+  without reaching into the ORT-specific `raw` session.
+
+- **`MetadataBackend` + `read_metadata`** (`ort_vision_sdk.core.backend`): the
+  metadata map is a *capability*, declared as its own protocol rather than added
+  to `InferenceBackend`. A bridge that only forwards tensors to a native runtime
+  cannot read it, and requiring it of every backend would break implementations
+  that are otherwise complete. Existing backends keep satisfying
+  `InferenceBackend` unchanged.
+
+- **`ort_vision_sdk.graph`**: `spatial_input_size`, `resolve_input_size` and
+  `model_names` — the pure helpers behind all of the above, exported so callers
+  building their own pipeline can reuse the same precedence rules.
+
+### Changed
+
+- `Detector`/`Segmenter` default `labels` from `"coco"` to `None`, which means
+  "read the model, fall back to COCO". A COCO-trained export resolves to the
+  same 80 names as before; a custom export now resolves to its own.
+
 ## [0.5.0] - 2026-08-02
 
 ### Added

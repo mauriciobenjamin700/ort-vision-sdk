@@ -151,6 +151,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `Detector` / `Classifier` / `Segmenter` still requires it (the lazy import
   raises a clear `ImportError` if absent). All existing tests pass.
 
+## [0.3.1] - 2026-05-31
+
+### Changed
+
+- README now links to the bilingual (PT-BR + EN-US) documentation site on
+  GitHub Pages (<https://mauriciobenjamin700.github.io/ort-vision-sdk/>) so the
+  PyPI project page points readers to the full guide and API reference.
+  Documentation-only release; no public API changes.
+
 ## [0.3.0] - 2026-05-03
 
 ### Added

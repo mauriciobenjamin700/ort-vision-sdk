@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 import numpy as np
-import onnxruntime as ort
 
+from ort_vision_sdk.core.backend import read_metadata
+from ort_vision_sdk.core.timing import SpeedTimer
+from ort_vision_sdk.graph import model_names, resolve_input_size
 from ort_vision_sdk.io.image import ImageInput, load_image
 from ort_vision_sdk.labels import LabelSpec, resolve_labels
 from ort_vision_sdk.postprocess.detection import decode_yolo
@@ -16,6 +18,12 @@ from ort_vision_sdk.preprocess.image import add_batch_dim, letterbox, to_tensor
 from ort_vision_sdk.results import Boxes, DetectionResults
 from ort_vision_sdk.tasks.base import VisionTask
 from ort_vision_sdk.types import BoundingBox, DetectionResult, ImageArray
+
+if TYPE_CHECKING:
+    # Annotation-only; OrtSession imports onnxruntime lazily at runtime.
+    import onnxruntime as ort
+
+    from ort_vision_sdk.core.backend import InferenceBackend
 
 DetectorHead = Literal["yolo"]
 """Decoder family for the detection head.
@@ -60,10 +68,11 @@ class Detector(VisionTask):
         model_path: str | Path,
         *,
         head: DetectorHead = "yolo",
-        labels: LabelSpec = "coco",
+        labels: LabelSpec = None,
         providers: list[str] | None = None,
         session_options: ort.SessionOptions | None = None,
-        input_size: tuple[int, int] = (640, 640),
+        backend: InferenceBackend | None = None,
+        input_size: tuple[int, int] | None = None,
         conf_threshold: float = 0.25,
         iou_threshold: float = 0.45,
         max_detections: int = 300,
@@ -71,16 +80,30 @@ class Detector(VisionTask):
         """Initialize the detector.
 
         Args:
-            model_path: Path to the ``.onnx`` model.
+            model_path: Path to the ``.onnx`` model. Ignored when ``backend``
+                is provided.
             head: Decoder family for the model's detection head — see
                 :data:`DetectorHead`. Default ``"yolo"`` covers YOLOv8/v9/v10/v11/v12/v26.
-            labels: Class label spec (see :func:`resolve_labels`). Defaults to
-                the 80-class COCO preset.
+            labels: Class label spec (see :func:`resolve_labels`). ``None``
+                (default) reads the class names the export baked into the model
+                metadata (Ultralytics' ``names``), falling back to the 80-class
+                COCO preset when the model carries none. Pass a spec to override
+                what the model declares.
             providers: Execution providers in preference order. Accepts short
                 aliases (``"cuda"``, ``"cpu"``, ``"tensorrt"``, ...) as well
-                as canonical ORT names. Auto if ``None``.
-            session_options: Optional ORT session options.
-            input_size: Model input ``(width, height)`` for letterboxing.
+                as canonical ORT names. Auto if ``None``. Ignored when
+                ``backend`` is provided.
+            session_options: Optional ORT session options. Ignored when
+                ``backend`` is provided.
+            backend: An explicit
+                :class:`~ort_vision_sdk.core.backend.InferenceBackend` to run
+                inference through (browser/Android bridge). ``None`` (default)
+                uses the in-process ONNX Runtime via :class:`OrtSession`.
+            input_size: Model input ``(width, height)`` for letterboxing. Only
+                used when the model's graph leaves its spatial axes dynamic: a
+                graph that declares a static size always wins, since that is the
+                only shape ONNX Runtime will accept. ``None`` (default) means
+                "ask the graph, fall back to ``(640, 640)``".
             conf_threshold: Default minimum class score to keep a candidate.
                 Can be overridden per :meth:`predict` call.
             iou_threshold: Default IoU threshold for non-maximum suppression.
@@ -96,21 +119,39 @@ class Detector(VisionTask):
             model_path,
             providers=providers,
             session_options=session_options,
+            backend=backend,
         )
         self._head: DetectorHead = head
-        self._input_size: tuple[int, int] = input_size
+        self._input_size: tuple[int, int] = resolve_input_size(
+            graph_shape=self._session.input_shape,
+            requested=input_size,
+            fallback=(640, 640),
+        )
         self._conf_threshold: float = conf_threshold
         self._iou_threshold: float = iou_threshold
         self._max_detections: int = max_detections
 
         num_classes = self._infer_num_classes()
-        self._labels: tuple[str, ...] = resolve_labels(labels, num_classes=num_classes)
+        spec: LabelSpec = (
+            labels if labels is not None else model_names(read_metadata(self._session)) or "coco"
+        )
+        self._labels: tuple[str, ...] = resolve_labels(spec, num_classes=num_classes)
         self._names: dict[int, str] = {i: name for i, name in enumerate(self._labels)}
 
     @property
     def head(self) -> DetectorHead:
         """The decoder family used to interpret the model's output."""
         return self._head
+
+    @property
+    def input_size(self) -> tuple[int, int]:
+        """The ``(width, height)`` this task preprocesses to.
+
+        Resolved at construction time from the model's graph when it declares a
+        static input, so reading it back tells you the resolution inference
+        really runs at — not merely what was requested.
+        """
+        return self._input_size
 
     @property
     def labels(self) -> tuple[str, ...]:
@@ -167,12 +208,17 @@ class Detector(VisionTask):
             :class:`DetectionResult` dataclasses, or use the bulk-array
             ``boxes`` view.
         """
+        timer = SpeedTimer()
         path = str(image) if isinstance(image, (str, Path)) else None
         original = load_image(image)
+        timer.stage("load")
         tensor, scale, pad = self._preprocess(original)
+        timer.stage("preprocess")
         outputs = self._session.run({self._session.input_name: tensor})
+        timer.stage("inference")
         return self._build_results(
             outputs,
+            timer=timer,
             original=original,
             path=path,
             scale=scale,
@@ -225,12 +271,17 @@ class Detector(VisionTask):
 
         Args and return type match :meth:`predict` exactly.
         """
+        timer = SpeedTimer()
         path = str(image) if isinstance(image, (str, Path)) else None
         original = load_image(image)
+        timer.stage("load")
         tensor, scale, pad = self._preprocess(original)
+        timer.stage("preprocess")
         outputs = await self._session.ort_async_run({self._session.input_name: tensor})
+        timer.stage("inference")
         return self._build_results(
             outputs,
+            timer=timer,
             original=original,
             path=path,
             scale=scale,
@@ -244,6 +295,7 @@ class Detector(VisionTask):
         self,
         outputs: list[np.ndarray],
         *,
+        timer: SpeedTimer,
         original: ImageArray,
         path: str | None,
         scale: float,
@@ -278,6 +330,7 @@ class Detector(VisionTask):
 
         orig_shape: tuple[int, int] = (int(original.shape[0]), int(original.shape[1]))
         boxes = self._build_boxes(detections, orig_shape=orig_shape)
+        timer.stage("postprocess")
         return [
             DetectionResults(
                 boxes=boxes,
@@ -286,6 +339,7 @@ class Detector(VisionTask):
                 orig_img=original,
                 orig_shape=orig_shape,
                 path=path,
+                speed=timer.speed(),
             )
         ]
 
@@ -348,10 +402,10 @@ class Detector(VisionTask):
 
     def _infer_num_classes(self) -> int | None:
         """Infer ``num_classes`` from the YOLO output shape ``(B, 4 + nc, N)``."""
-        outputs = self._session.raw.get_outputs()
-        if not outputs:
+        output_shapes = self._session.output_shapes
+        if not output_shapes:
             return None
-        shape = tuple(outputs[0].shape)
+        shape = output_shapes[0]
         non_batch = [d for d in shape if isinstance(d, int) and d > 1]
         if not non_batch:
             return None

@@ -50,7 +50,10 @@ plugins:
             Classificação: Classification
             Detecção: Detection
             Segmentação: Segmentation
+            O modelo manda: The model decides
             Python: Python
+            Backends de inferência: Inference backends
+            Custo da inferência: Inference cost
             Web (browser): Web (browser)
             Referência: Reference
             API Python: Python API
@@ -82,7 +85,10 @@ nav:
       - Classificação: guia/classificacao.md
       - Detecção: guia/deteccao.md
       - Segmentação: guia/segmentacao.md
+      - O modelo manda: guia/modelo.md
       - Python: guia/python.md
+      - Backends de inferência: guia/backends.md
+      - Custo da inferência: guia/velocidade.md
       - Web (browser): guia/web.md
   - Referência:
       - API Python: referencia/python.md

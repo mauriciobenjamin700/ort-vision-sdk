@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "ort-vision-sdk"
-version = "0.3.1"
+version = "0.6.0"
 description = "High-level Python SDK for computer vision inference with ONNX Runtime."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -103,7 +103,15 @@ quote-style = "double"
 indent-style = "space"
 
 [tool.mypy]
-python_version = "3.10"
+# Versão que o mypy assume ao *parsear* — não o piso suportado pelo pacote, que
+# segue em `requires-python = ">=3.10"`. numpy >= 2.4 escreve seus stubs com
+# `type` statements (PEP 695, 3.12+), e com 3.10 aqui o mypy recusa parsear
+# `numpy/__init__.pyi` e aborta antes de checar o nosso código. Baixar numpy ou
+# pular seus stubs sai pior (o segundo degrada `ndarray` para `Any` e invalida
+# nossos aliases). A compatibilidade com 3.10 fica coberta pelo ruff
+# (`target-version = "py310"`) e pela matriz 3.10/3.11/3.12 do CI, que roda os
+# testes de verdade em cada versão.
+python_version = "3.12"
 strict = true
 # numpy 2.x marca `ndarray` como genérico; defaults via PEP 696 só funcionam em
 # Python 3.13+, então em 3.10/3.11/3.12 mypy strict pediria type args em todo

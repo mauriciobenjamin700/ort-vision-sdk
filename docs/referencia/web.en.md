@@ -32,6 +32,11 @@ per image. Each task exposes a `run()` alias.
 | `DetectionResults` | `boxes` | `DetectionResult` |
 | `SegmentationResults` | `boxes`, `masks` | `SegmentationResult` |
 
+Every envelope exposes `names`, `origImg`, `origShape`, `path` and `speed` —
+a `Speed` object holding `load`, `preprocess`, `inference` and `postprocess`
+in milliseconds, filled in by every `predict()`. See
+[Inference cost](../guia/velocidade.md).
+
 Bulk views: `Boxes`, `Probs`, `Masks` (same attributes as Python).
 
 Per-instance types/classes: `DetectionResult`, `SegmentationResult`,
@@ -51,6 +56,11 @@ Per-instance types/classes: `DetectionResult`, `SegmentationResult`,
 | `DEFAULT_PROVIDERS` | `["webgpu", "wasm"]`. |
 | `resolveProviders(...)` | Resolves the provider list into ORT-Web names. |
 | `OrtSession` / `OrtSessionOptions` / `ModelSource` | Low-level session. |
+| `OrtSession.inputShape` / `.inputShapes` | Shapes the graph declares, dynamic axes as `null`. |
+| `OrtSession.release()` | Frees the native session (needed when discarding a session while the page lives on). |
+| `task.inputSize` | The resolution the task actually preprocesses to. |
+| `spatialInputSize` / `resolveInputSize` / `declaredShapesFrom` | Pure helpers behind the graph → caller → fallback precedence. |
+| `DeclaredShape` / `DeclaredDim` | A declared shape and one dimension (`number`, or `null` when symbolic). |
 
 ## Errors
 

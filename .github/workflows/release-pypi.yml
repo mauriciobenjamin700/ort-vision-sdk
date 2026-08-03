@@ -16,13 +16,52 @@ jobs:
     defaults:
       run:
         working-directory: sdk-python
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+
+      # Guard: the git tag, pyproject.toml and __version__ must all agree before
+      # anything is published, otherwise PyPI gets a version the tag does not
+      # describe and the GitHub Release ends up pointing at the wrong code.
+      # PyPI never lets a version be replaced, so this has to fail *before* the
+      # upload, not after.
+      - name: Resolve version and check it matches the tag
+        id: version
+        run: |
+          PKG_VERSION=$(python -c "import tomllib,pathlib; \
+            print(tomllib.loads(pathlib.Path('pyproject.toml').read_text())['project']['version'])")
+          DUNDER_VERSION=$(python -c "import re,pathlib; \
+            src = pathlib.Path('src/ort_vision_sdk/__init__.py').read_text(); \
+            print(re.search(r'__version__.*\"([^\"]+)\"', src).group(1))")
+          if [ "$DUNDER_VERSION" != "$PKG_VERSION" ]; then
+            echo "::error::__version__ ${DUNDER_VERSION} does not match pyproject version ${PKG_VERSION}"
+            exit 1
+          fi
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            TAG_VERSION="${GITHUB_REF_NAME#v}"
+            if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
+              echo "::error::tag ${GITHUB_REF_NAME} does not match sdk-python version ${PKG_VERSION}"
+              exit 1
+            fi
+            echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=v${PKG_VERSION}" >> "$GITHUB_OUTPUT"
+          fi
+          echo "version=${PKG_VERSION}" >> "$GITHUB_OUTPUT"
+          case "$PKG_VERSION" in
+            *[a-zA-Z]*) echo "prerelease=true" >> "$GITHUB_OUTPUT" ;;
+            *) echo "prerelease=false" >> "$GITHUB_OUTPUT" ;;
+          esac
 
       - name: Install build tooling
         run: |
@@ -49,6 +88,7 @@ jobs:
             assert m.__version__, 'no __version__'; \
             assert m.Detector and m.Classifier and m.Segmenter, 'tasks missing'; \
             assert m.Boxes and m.Probs and m.Masks, 'result envelopes missing'; \
+            assert m.spatial_input_size and m.resolve_input_size and m.model_names, 'graph helpers missing'; \
             print('Smoke OK · version =', m.__version__)"
 
       - name: Verify wheel contains package source (guards against empty-wheel bug)
@@ -72,11 +112,28 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     environment:
+      # The Trusted Publisher on PyPI is configured with this environment name,
+      # so the OIDC claim only validates from here — renaming or dropping it
+      # breaks authentication.
       name: pypi
       url: https://pypi.org/p/ort-vision-sdk
     permissions:
+      # contents: write is what lets the last step cut the GitHub Release for
+      # the tag that triggered this run.
+      contents: write
       id-token: write
     steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      # Only needed by the Release step below, which reads the notes out of the
+      # CHANGELOG with scripts/changelog.mjs.
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+
       - name: Download distributions artifact
         uses: actions/download-artifact@v4
         with:
@@ -85,3 +142,56 @@ jobs:
 
       - name: Publish to PyPI (Trusted Publishing)
         uses: pypa/gh-action-pypi-publish@release/v1
+
+      # Registry read-back: PyPI must actually serve this version as the latest
+      # one. A publish that landed but left the index stale — or that uploaded
+      # under a different version — would otherwise look like a green release.
+      - name: Verify PyPI serves this version as latest
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          for attempt in 1 2 3 4 5; do
+            if curl -sf "https://pypi.org/pypi/ort-vision-sdk/${VERSION}/json" -o /tmp/pypi.json; then
+              break
+            fi
+            echo "· index has not caught up yet (attempt ${attempt}); retrying in 10s"
+            sleep 10
+          done
+          if [ ! -s /tmp/pypi.json ]; then
+            echo "::error::PyPI does not serve ort-vision-sdk ${VERSION}"
+            exit 1
+          fi
+          LATEST=$(curl -sf https://pypi.org/pypi/ort-vision-sdk/json | python -c "import json,sys; print(json.load(sys.stdin)['info']['version'])")
+          if [ "$LATEST" != "$VERSION" ]; then
+            echo "::error::PyPI latest is '${LATEST}', expected '${VERSION}'"
+            exit 1
+          fi
+          echo "✓ PyPI: ort-vision-sdk ${VERSION} published and served as latest"
+
+      # Keeps GitHub in step with PyPI: every published version gets the
+      # matching GitHub Release, with its CHANGELOG section as the notes and the
+      # built distributions attached. Idempotent — re-running a tag edits the
+      # existing Release instead of failing.
+      - name: Create or update the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.build.outputs.tag }}
+          VERSION: ${{ needs.build.outputs.version }}
+          PRERELEASE: ${{ needs.build.outputs.prerelease }}
+        run: |
+          node scripts/changelog.mjs notes python "$VERSION" --allow-unreleased > /tmp/release-notes.md
+          {
+            echo ""
+            echo "---"
+            echo ""
+            echo "🐍 PyPI: [\`ort-vision-sdk==${VERSION}\`](https://pypi.org/project/ort-vision-sdk/${VERSION}/) — publicado via Trusted Publishing (OIDC)."
+          } >> /tmp/release-notes.md
+          FLAGS=(--title "ort-vision-sdk (Python) ${VERSION}" --notes-file /tmp/release-notes.md)
+          [ "$PRERELEASE" = "true" ] && FLAGS+=(--prerelease)
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release edit "$TAG" "${FLAGS[@]}"
+            gh release upload "$TAG" dist/* --clobber
+          else
+            gh release create "$TAG" dist/* "${FLAGS[@]}"
+          fi
+          echo "✓ GitHub Release ${TAG} em sincronia com PyPI ${VERSION}"

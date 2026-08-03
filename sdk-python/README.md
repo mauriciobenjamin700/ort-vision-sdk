@@ -71,8 +71,9 @@ from ort_vision_sdk import Classifier
 
 clf = Classifier(
     "resnet50.onnx",
-    labels="imagenet_labels.txt",   # one class per line, or pass a list/dict
-    input_size=(224, 224),          # default
+    labels="imagenet_labels.txt",   # one class per line, or pass a list/dict;
+                                    # omit it to use the model's own `names`
+    input_size=(224, 224),          # optional — the graph's own size wins
     apply_softmax=True,             # set False if your model already outputs probs
 )
 
@@ -92,8 +93,9 @@ from ort_vision_sdk import Detector
 
 det = Detector(
     "yolov8n.onnx",
-    labels="coco",                   # default — 80-class COCO preset
-    input_size=(640, 640),
+    labels="coco",                   # omit it to use the model's own `names`,
+                                     # falling back to the 80-class COCO preset
+    input_size=(640, 640),           # optional — the graph's own size wins
     conf_threshold=0.25,
     iou_threshold=0.45,
 )
@@ -183,12 +185,19 @@ clf = Classifier("model.onnx", labels={0: "cat", 2: "fox"})
 # 4) File path — one class per line
 clf = Classifier("model.onnx", labels="imagenet_labels.txt")
 
-# 5) None — auto-generates "class_0", "class_1", ... (only works when the
-#    model's output shape is statically known)
+# 5) None (default) — reads the `names` the export baked into the model
+#    metadata; without them, auto-generates "class_0", "class_1", ...
+#    (classification) or uses the COCO preset (detection/segmentation)
 clf = Classifier("model.onnx", labels=None)
 ```
 
 `names` on every result is the canonical `dict[int, str]` mapping (mirrors Ultralytics' `model.names`).
+
+> **The model decides.** Both the input resolution and the class names are read
+> from the `.onnx` itself: the graph's declared shape wins over `input_size`
+> (ORT would reject anything else), and `labels=None` resolves the `names`
+> Ultralytics baked into the export. See
+> [O modelo manda / The model decides](https://mauriciobenjamin700.github.io/ort-vision-sdk/guia/modelo/).
 
 ---
 
@@ -218,6 +227,24 @@ det = Detector("yolov8n.onnx", session_options=opts)
 
 ---
 
+## Inference backends
+
+The default backend is the in-process ONNX Runtime (`OrtSession`). Everything
+else in the SDK — preprocessing, postprocessing, result decoding — is pure NumPy,
+so you can swap **just the inference engine** by passing a `backend=` that
+satisfies the `InferenceBackend` protocol. This runs the SDK where there is no
+`onnxruntime` Python wheel — `onnxruntime-web` in the browser, or the native
+`onnxruntime-android` AAR over a bridge — with the pipeline still in Python:
+
+```python
+det = Detector("model.onnx", backend=my_backend)  # model_path/providers ignored
+```
+
+See the [inference-backends guide](https://mauriciobenjamin700.github.io/ort-vision-sdk/guia/backends/)
+for the protocol and a complete example.
+
+---
+
 ## Result objects
 
 Each `predict()` call returns `list[Results]` of length 1 (per image), so the typical pattern is `results[0]`. The envelope is **iterable and indexable** — iterating yields per-instance dataclasses, so legacy "list of detections" code works with one extra `[0]`.
@@ -228,7 +255,15 @@ Each `predict()` call returns `list[Results]` of length 1 (per image), so the ty
 | `DetectionResults`      | `boxes`          | `DetectionResult`    | `cls`, `conf`, `box.xyxy`, `cropped_image`           |
 | `SegmentationResults`   | `boxes`, `masks` | `SegmentationResult` | `cls`, `conf`, `box.xyxy`, `mask`, `segmented_image` |
 
-Every envelope also exposes `names`, `orig_img`, `orig_shape`, `path`, and an optional `speed` timings dict.
+Every envelope also exposes `names`, `orig_img`, `orig_shape`, `path`, and `speed` — a per-stage timing breakdown filled in by every `predict()`:
+
+```python
+results = detector.predict("street.jpg")
+print(results[0].speed)
+# {"load": 84.2, "preprocess": 11.7, "inference": 118.9, "postprocess": 6.4}
+```
+
+Milliseconds. `preprocess` / `inference` / `postprocess` measure the same boundaries Ultralytics reports; `load` is the read/decode this SDK does inside `predict()`, which on a cold page cache dominates everything else. Loading the model is *not* included — that is startup cost. `SpeedTimer` (from `ort_vision_sdk.core`) times your own pipeline stages with the same boundaries.
 
 The bulk views (`Boxes`, `Probs`, `Masks`) match Ultralytics one-to-one: `boxes.xyxy`, `boxes.xywh`, `boxes.xyxyn`, `boxes.xywhn`, `boxes.cls`, `boxes.conf`, `boxes.data`; `probs.top1`, `probs.top5`, `probs.top1conf`, `probs.top5conf`, `probs.data`; `masks.data`, `masks.xyxy`.
 

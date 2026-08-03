@@ -4,12 +4,19 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import numpy as np
-import onnxruntime as ort
 
 from ort_vision_sdk.core.exceptions import InferenceError, ModelLoadError
 from ort_vision_sdk.core.providers import resolve_providers
+
+if TYPE_CHECKING:
+    # onnxruntime is imported lazily at runtime (inside ``OrtSession.__init__``) so
+    # the rest of the SDK — preprocessing/postprocessing, types, labels — imports
+    # in environments without an onnxruntime wheel (e.g. Pyodide/WASM in a browser,
+    # where inference is bridged to onnxruntime-web instead).
+    import onnxruntime as ort
 
 
 class OrtSession:
@@ -44,6 +51,8 @@ class OrtSession:
             ModelLoadError: If the model file does not exist or cannot be loaded.
             ProviderNotAvailableError: If a requested provider is not installed.
         """
+        import onnxruntime as ort
+
         path = Path(model_path)
         if not path.is_file():
             raise ModelLoadError(f"Model file not found: {path}")
@@ -64,6 +73,9 @@ class OrtSession:
         self._output_names: list[str] = [o.name for o in self._session.get_outputs()]
         self._input_shapes: list[tuple[int | str, ...]] = [
             tuple(i.shape) for i in self._session.get_inputs()
+        ]
+        self._output_shapes: list[tuple[int | str, ...]] = [
+            tuple(o.shape) for o in self._session.get_outputs()
         ]
 
     @property
@@ -90,6 +102,33 @@ class OrtSession:
     def input_shape(self) -> tuple[int | str, ...]:
         """Declared shape of the first input."""
         return tuple(self._input_shapes[0])
+
+    @property
+    def output_shapes(self) -> list[tuple[int | str, ...]]:
+        """Declared shapes of the model's outputs (dynamic dims appear as strings).
+
+        Exposed so tasks can introspect output metadata (e.g. inferring
+        ``num_classes`` from the last static dim) without reaching into the
+        backend-specific :attr:`raw` session — which lets an alternative
+        :class:`~ort_vision_sdk.core.backend.InferenceBackend` (Pyodide/WASM,
+        a native Android bridge) satisfy the same interface.
+        """
+        return [tuple(s) for s in self._output_shapes]
+
+    @property
+    def metadata(self) -> dict[str, str]:
+        """Custom metadata the exporter baked into the model.
+
+        For an Ultralytics export this carries ``names`` (the class map),
+        ``task``, ``imgsz``, ``stride`` and friends. Exposed so tasks can read
+        what the model says about itself — its class names, for instance —
+        without reaching into the backend-specific :attr:`raw` session.
+
+        Returns:
+            dict[str, str]: The model's custom metadata map. Empty when the
+            model carries none.
+        """
+        return dict(self._session.get_modelmeta().custom_metadata_map)
 
     @property
     def raw(self) -> ort.InferenceSession:

@@ -234,7 +234,10 @@ class DetectionResults:
         orig_img: The original input image as HWC uint8 RGB.
         orig_shape: ``(height, width)`` of ``orig_img``.
         path: Source path of the input image, or ``None`` if it wasn't a path.
-        speed: Optional ``(preprocess_ms, inference_ms, postprocess_ms)`` timings.
+        speed: Per-stage durations in milliseconds — ``load``,
+            ``preprocess``, ``inference`` and ``postprocess`` — as measured by
+            the ``predict()`` call that produced this envelope. Empty for
+            envelopes built by hand.
     """
 
     boxes: Boxes
@@ -275,7 +278,10 @@ class ClassificationResults:
         orig_img: The original input image as HWC uint8 RGB.
         orig_shape: ``(height, width)`` of ``orig_img``.
         path: Source path of the input image, or ``None`` if it wasn't a path.
-        speed: Optional ``(preprocess_ms, inference_ms, postprocess_ms)`` timings.
+        speed: Per-stage durations in milliseconds — ``load``,
+            ``preprocess``, ``inference`` and ``postprocess`` — as measured by
+            the ``predict()`` call that produced this envelope. Empty for
+            envelopes built by hand.
     """
 
     probs: Probs
@@ -322,7 +328,10 @@ class SegmentationResults:
         orig_img: The original input image as HWC uint8 RGB.
         orig_shape: ``(height, width)`` of ``orig_img``.
         path: Source path of the input image, or ``None`` if it wasn't a path.
-        speed: Optional ``(preprocess_ms, inference_ms, postprocess_ms)`` timings.
+        speed: Per-stage durations in milliseconds — ``load``,
+            ``preprocess``, ``inference`` and ``postprocess`` — as measured by
+            the ``predict()`` call that produced this envelope. Empty for
+            envelopes built by hand.
     """
 
     boxes: Boxes

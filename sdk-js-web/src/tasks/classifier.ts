@@ -5,6 +5,8 @@
 import type * as ort from "onnxruntime-web";
 
 import { type ModelSource, type OrtSessionOptions, OrtSession } from "../core/session.js";
+import { SpeedTimer } from "../core/timing.js";
+import { resolveInputSize } from "../core/graph.js";
 import { type ImageInput, loadImage } from "../io/image.js";
 import { type LabelSpec, resolveLabels } from "../labels.js";
 import { softmax, topK } from "../postprocess/classification.js";
@@ -33,7 +35,13 @@ export interface ClassifierOptions extends OrtSessionOptions {
    * or when you want to validate that the supplied labels match the model.
    */
   readonly numClasses?: number;
-  /** Model input `[width, height]` in pixels. Defaults to `[224, 224]`. */
+  /**
+   * Model input `[width, height]` in pixels.
+   *
+   * Only used when the model's graph leaves its spatial axes dynamic: a graph
+   * that declares a static size always wins, since that is the only shape ONNX
+   * Runtime will accept. Defaults to `[224, 224]`.
+   */
   readonly inputSize?: readonly [number, number];
   /** Per-channel RGB mean used for normalization. Defaults to ImageNet. */
   readonly mean?: readonly [number, number, number];
@@ -105,7 +113,11 @@ export class Classifier extends VisionTask {
       session,
       labels,
       names,
-      options.inputSize ?? [224, 224],
+      resolveInputSize({
+        graphShape: session.inputShape,
+        requested: options.inputSize,
+        fallback: [224, 224],
+      }),
       options.mean ?? IMAGENET_MEAN,
       options.std ?? IMAGENET_STD,
       options.applySoftmax ?? true,
@@ -120,6 +132,17 @@ export class Classifier extends VisionTask {
   /** Class id → class name dict (matches Ultralytics' `model.names`). */
   get names(): Readonly<Record<number, string>> {
     return this._names;
+  }
+
+  /**
+   * The `[width, height]` this task preprocesses to.
+   *
+   * Resolved at creation time from the model's graph when it declares a static
+   * input, so reading it back tells you the resolution inference really runs at
+   * — not merely what was requested.
+   */
+  get inputSize(): readonly [number, number] {
+    return this._inputSize;
   }
 
   /** Number of classes the model can predict. */
@@ -140,10 +163,14 @@ export class Classifier extends VisionTask {
     image: ImageInput,
     options: ClassifierPredictOptions = {},
   ): Promise<ClassificationResults[]> {
+    const timer = new SpeedTimer();
     const path = typeof image === "string" ? image : null;
     const original = await loadImage(image);
+    timer.stage("load");
     const tensor = this._preprocess(original);
+    timer.stage("preprocess");
     const outputs = await this._session.run({ [this._session.inputName]: tensor });
+    timer.stage("inference");
     const firstOutputName = this._session.outputNames[0];
     if (firstOutputName === undefined) {
       throw new Error("Classifier model has no outputs.");
@@ -185,14 +212,17 @@ export class Classifier extends VisionTask {
     };
 
     const orig: readonly [number, number] = [original.height, original.width];
+    const probs = new Probs(fullProbs);
+    timer.stage("postprocess");
     return [
       new ClassificationResults(
-        new Probs(fullProbs),
+        probs,
         result,
         this._names,
         original,
         orig,
         path,
+        timer.speed(),
       ),
     ];
   }

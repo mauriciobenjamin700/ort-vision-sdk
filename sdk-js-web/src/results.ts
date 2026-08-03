@@ -11,14 +11,25 @@
  *   `ClassProbability`) for callers who prefer the OO interface.
  * - `names`: `Record<number, string>` matching Ultralytics' `model.names`.
  * - `origImg` / `origShape` / `path`: provenance for the original input.
+ * - `speed`: per-stage timings of the `predict()` call that produced it.
  */
 
+import { type Speed } from "./core/timing.js";
 import {
   type ClassificationResult,
   type DetectionResult,
   type RGBImage,
   type SegmentationResult,
 } from "./types.js";
+
+/**
+ * Zero timings for an envelope built outside a `predict()` call.
+ *
+ * Hand-constructed envelopes (tests, adapters) have nothing to measure, and
+ * zeros keep `speed.inference` a plain `number` at every call site instead of
+ * forcing an optional check that only ever fires for synthetic data.
+ */
+const NO_SPEED: Speed = { load: 0, preprocess: 0, inference: 0, postprocess: 0 };
 
 /**
  * Bulk numpy-style view of detected boxes for a single image.
@@ -243,7 +254,7 @@ export class DetectionResults implements Iterable<DetectionResult> {
     public readonly origImg: RGBImage,
     public readonly origShape: readonly [number, number],
     public readonly path: string | null = null,
-    public readonly speed: Readonly<Record<string, number>> = {},
+    public readonly speed: Readonly<Speed> = NO_SPEED,
   ) {}
 
   /** Number of surviving detections. */
@@ -272,7 +283,7 @@ export class ClassificationResults {
     public readonly origImg: RGBImage,
     public readonly origShape: readonly [number, number],
     public readonly path: string | null = null,
-    public readonly speed: Readonly<Record<string, number>> = {},
+    public readonly speed: Readonly<Speed> = NO_SPEED,
   ) {}
 
   /** Top-1 class index (Ultralytics-style alias). */
@@ -311,7 +322,7 @@ export class SegmentationResults implements Iterable<SegmentationResult> {
     public readonly origImg: RGBImage,
     public readonly origShape: readonly [number, number],
     public readonly path: string | null = null,
-    public readonly speed: Readonly<Record<string, number>> = {},
+    public readonly speed: Readonly<Speed> = NO_SPEED,
   ) {}
 
   /** Number of surviving instances. */

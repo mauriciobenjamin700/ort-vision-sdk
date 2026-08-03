@@ -372,7 +372,7 @@ let _warnedDecodeYoloV8Anchors = false;
 
 /**
  * @deprecated since 0.2.0 — use {@link decodeYolo}. Same behavior; the
- * decoder covers v8/v9/v10/v11/v12 detect heads. Will be removed in 0.3.0.
+ * decoder covers v8/v9/v10/v11/v12 detect heads. Will be removed in 0.4.0.
  */
 export function decodeYoloV8(
   output: Float32Array,
@@ -383,14 +383,14 @@ export function decodeYoloV8(
     _warnedDecodeYoloV8 = true;
     console.warn(
       "[@ort-vision-sdk/web] decodeYoloV8 is deprecated since 0.2.0; use decodeYolo. " +
-        "The alias will be removed in 0.3.0.",
+        "The alias will be removed in 0.4.0.",
     );
   }
   return decodeYolo(output, outputDims, options);
 }
 
 /**
- * @deprecated since 0.2.0 — use {@link decodeYoloAnchors}. Will be removed in 0.3.0.
+ * @deprecated since 0.2.0 — use {@link decodeYoloAnchors}. Will be removed in 0.4.0.
  */
 export function decodeYoloV8Anchors(
   data: Float32Array,
@@ -401,7 +401,7 @@ export function decodeYoloV8Anchors(
     _warnedDecodeYoloV8Anchors = true;
     console.warn(
       "[@ort-vision-sdk/web] decodeYoloV8Anchors is deprecated since 0.2.0; use decodeYoloAnchors. " +
-        "The alias will be removed in 0.3.0.",
+        "The alias will be removed in 0.4.0.",
     );
   }
   return decodeYoloAnchors(data, dims, options);

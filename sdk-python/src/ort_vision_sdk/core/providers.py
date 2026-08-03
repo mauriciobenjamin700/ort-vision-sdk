@@ -12,8 +12,6 @@ addition to the canonical ORT names (``"CPUExecutionProvider"``,
 
 from __future__ import annotations
 
-import onnxruntime as ort
-
 from ort_vision_sdk.core.exceptions import ProviderNotAvailableError
 
 _PRIORITY: tuple[str, ...] = (
@@ -47,6 +45,8 @@ def available_providers() -> list[str]:
     Returns:
         List of provider names exactly as ONNX Runtime reports them.
     """
+    import onnxruntime as ort
+
     return list(ort.get_available_providers())
 
 

@@ -6,6 +6,7 @@ import type * as ort from "onnxruntime-web";
 import * as ortRuntime from "onnxruntime-web";
 
 import { InferenceError, ModelLoadError } from "./exceptions.js";
+import { type DeclaredShape, declaredShapesFrom } from "./graph.js";
 import { resolveProviders } from "./providers.js";
 
 /** Anything `InferenceSession.create` accepts. */
@@ -21,8 +22,9 @@ export interface OrtSessionOptions {
 /**
  * Wrap an ONNX Runtime Web `InferenceSession` with convenient metadata access.
  *
- * The wrapper exposes input/output names, manages execution-provider
- * selection, and provides a typed {@link OrtSession.run} method.
+ * The wrapper exposes input/output names and the shapes the graph declares,
+ * manages execution-provider selection, provides a typed {@link OrtSession.run}
+ * method, and releases the native session through {@link OrtSession.release}.
  */
 export class OrtSession {
   private constructor(
@@ -86,6 +88,42 @@ export class OrtSession {
   /** Names of the model's outputs, in declaration order. */
   get outputNames(): readonly string[] {
     return this._session.outputNames;
+  }
+
+  /**
+   * Shapes the graph declares for its inputs, in declaration order.
+   *
+   * Dynamic (symbolic) axes appear as `null`. Empty shapes mean the runtime
+   * reported no metadata — either a non-tensor input, or an `onnxruntime-web`
+   * older than 1.21, which predates input metadata.
+   */
+  get inputShapes(): readonly DeclaredShape[] {
+    return declaredShapesFrom(
+      this._session.inputMetadata as
+        | readonly ort.InferenceSession.ValueMetadata[]
+        | undefined,
+    );
+  }
+
+  /**
+   * Shape the graph declares for its first input, dynamic axes as `null`.
+   *
+   * Empty when the runtime reports no metadata for it.
+   */
+  get inputShape(): DeclaredShape {
+    return this.inputShapes[0] ?? [];
+  }
+
+  /**
+   * Release the native session and free its memory.
+   *
+   * Call it when a session is discarded while the page lives on — rebuilding a
+   * task at a different input size, swapping in a newer model. A failure from
+   * the runtime is ignored: a session being torn down has nothing left to fail
+   * at, and the caller is already moving on.
+   */
+  async release(): Promise<void> {
+    await this._session.release().catch(() => undefined);
   }
 
   /** The underlying `onnxruntime-web` session, for advanced use cases. */

@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import numpy as np
-import onnxruntime as ort
 
+from ort_vision_sdk.core.backend import read_metadata
+from ort_vision_sdk.core.timing import SpeedTimer
+from ort_vision_sdk.graph import model_names, resolve_input_size
 from ort_vision_sdk.io.image import ImageInput, load_image
 from ort_vision_sdk.labels import LabelSpec, resolve_labels
 from ort_vision_sdk.postprocess.classification import softmax, topk
@@ -20,6 +23,12 @@ from ort_vision_sdk.preprocess.image import (
 from ort_vision_sdk.results import ClassificationResults, Probs
 from ort_vision_sdk.tasks.base import VisionTask
 from ort_vision_sdk.types import ClassificationResult, ClassProbability, ImageArray
+
+if TYPE_CHECKING:
+    # Annotation-only; OrtSession imports onnxruntime lazily at runtime.
+    import onnxruntime as ort
+
+    from ort_vision_sdk.core.backend import InferenceBackend
 
 _IMAGENET_MEAN: tuple[float, float, float] = (0.485, 0.456, 0.406)
 _IMAGENET_STD: tuple[float, float, float] = (0.229, 0.224, 0.225)
@@ -58,7 +67,8 @@ class Classifier(VisionTask):
         labels: LabelSpec = None,
         providers: list[str] | None = None,
         session_options: ort.SessionOptions | None = None,
-        input_size: tuple[int, int] = (224, 224),
+        backend: InferenceBackend | None = None,
+        input_size: tuple[int, int] | None = None,
         mean: tuple[float, float, float] = _IMAGENET_MEAN,
         std: tuple[float, float, float] = _IMAGENET_STD,
         apply_softmax: bool = True,
@@ -66,13 +76,26 @@ class Classifier(VisionTask):
         """Initialize the classifier.
 
         Args:
-            model_path: Path to the ``.onnx`` model.
-            labels: Class label spec — see :func:`resolve_labels`.
+            model_path: Path to the ``.onnx`` model. Ignored when ``backend``
+                is provided.
+            labels: Class label spec — see :func:`resolve_labels`. ``None``
+                (default) reads the class names the export baked into the model
+                metadata (Ultralytics' ``names``), and only falls back to
+                generated ``class_<id>`` names when the model carries none.
             providers: Execution providers in preference order. Accepts short
                 aliases (``"cuda"``, ``"cpu"``, ...) or canonical ORT names.
-                Auto if ``None``.
-            session_options: Optional ORT session options.
-            input_size: Model input ``(width, height)`` in pixels.
+                Auto if ``None``. Ignored when ``backend`` is provided.
+            session_options: Optional ORT session options. Ignored when
+                ``backend`` is provided.
+            backend: An explicit
+                :class:`~ort_vision_sdk.core.backend.InferenceBackend` to run
+                inference through (browser/Android bridge). ``None`` (default)
+                uses the in-process ONNX Runtime via :class:`OrtSession`.
+            input_size: Model input ``(width, height)`` in pixels. Only used
+                when the model's graph leaves its spatial axes dynamic: a graph
+                that declares a static size always wins, since that is the only
+                shape ONNX Runtime will accept. ``None`` (default) means "ask
+                the graph, fall back to ``(224, 224)``".
             mean: Per-channel RGB mean used for normalization.
             std: Per-channel RGB standard deviation used for normalization.
             apply_softmax: If ``True`` (default), apply softmax to the raw model
@@ -83,15 +106,33 @@ class Classifier(VisionTask):
             model_path,
             providers=providers,
             session_options=session_options,
+            backend=backend,
         )
-        self._input_size: tuple[int, int] = input_size
+        self._input_size: tuple[int, int] = resolve_input_size(
+            graph_shape=self._session.input_shape,
+            requested=input_size,
+            fallback=(224, 224),
+        )
         self._mean: tuple[float, float, float] = mean
         self._std: tuple[float, float, float] = std
         self._apply_softmax: bool = apply_softmax
 
         num_classes = self._infer_num_classes()
-        self._labels: tuple[str, ...] = resolve_labels(labels, num_classes=num_classes)
+        spec: LabelSpec = (
+            labels if labels is not None else model_names(read_metadata(self._session))
+        )
+        self._labels: tuple[str, ...] = resolve_labels(spec, num_classes=num_classes)
         self._names: dict[int, str] = {i: name for i, name in enumerate(self._labels)}
+
+    @property
+    def input_size(self) -> tuple[int, int]:
+        """The ``(width, height)`` this task preprocesses to.
+
+        Resolved at construction time from the model's graph when it declares a
+        static input, so reading it back tells you the resolution inference
+        really runs at — not merely what was requested.
+        """
+        return self._input_size
 
     @property
     def labels(self) -> tuple[str, ...]:
@@ -136,11 +177,21 @@ class Classifier(VisionTask):
             A 1-element list containing a :class:`ClassificationResults`
             envelope.
         """
+        timer = SpeedTimer()
         path = str(image) if isinstance(image, (str, Path)) else None
         original = load_image(image)
+        timer.stage("load")
         tensor = self._preprocess(original)
+        timer.stage("preprocess")
         outputs = self._session.run({self._session.input_name: tensor})
-        return self._build_results(outputs, original=original, path=path, top_k=top_k)
+        timer.stage("inference")
+        return self._build_results(
+            outputs,
+            timer=timer,
+            original=original,
+            path=path,
+            top_k=top_k,
+        )
 
     async def async_predict(
         self,
@@ -176,16 +227,27 @@ class Classifier(VisionTask):
 
         Args and return type match :meth:`predict` exactly.
         """
+        timer = SpeedTimer()
         path = str(image) if isinstance(image, (str, Path)) else None
         original = load_image(image)
+        timer.stage("load")
         tensor = self._preprocess(original)
+        timer.stage("preprocess")
         outputs = await self._session.ort_async_run({self._session.input_name: tensor})
-        return self._build_results(outputs, original=original, path=path, top_k=top_k)
+        timer.stage("inference")
+        return self._build_results(
+            outputs,
+            timer=timer,
+            original=original,
+            path=path,
+            top_k=top_k,
+        )
 
     def _build_results(
         self,
         outputs: list[np.ndarray],
         *,
+        timer: SpeedTimer,
         original: ImageArray,
         path: str | None,
         top_k: int | None,
@@ -217,6 +279,7 @@ class Classifier(VisionTask):
             probabilities=probabilities,
         )
         probs_view = Probs(data=full_probs.astype(np.float64, copy=False))
+        timer.stage("postprocess")
 
         return [
             ClassificationResults(
@@ -226,6 +289,7 @@ class Classifier(VisionTask):
                 orig_img=original,
                 orig_shape=(int(original.shape[0]), int(original.shape[1])),
                 path=path,
+                speed=timer.speed(),
             )
         ]
 
@@ -261,8 +325,8 @@ class Classifier(VisionTask):
 
     def _infer_num_classes(self) -> int | None:
         """Read num_classes from the model's first output last static dim."""
-        outputs = self._session.raw.get_outputs()
-        if not outputs:
+        output_shapes = self._session.output_shapes
+        if not output_shapes:
             return None
-        last_dim = tuple(outputs[0].shape)[-1]
+        last_dim = output_shapes[0][-1]
         return int(last_dim) if isinstance(last_dim, int) else None

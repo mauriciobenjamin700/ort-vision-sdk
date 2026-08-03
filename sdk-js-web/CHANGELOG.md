@@ -7,6 +7,92 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-08-03
+
+### Added
+
+- **Tasks read their input resolution off the model instead of trusting
+  configuration.** `Classifier`, `Detector` and `Segmenter` now ask the ONNX
+  graph what shape it declares and preprocess to that. The resolution a session
+  must be fed at is a property of the export — feeding a 640x640 tensor to a
+  graph exported at 224x224 makes ORT abort mid-run with:
+
+  ```text
+  Inference failed: failed to call OrtRun(). ERROR_CODE: 2, ERROR_MESSAGE: Got
+  invalid dimensions for input: images for the following indices index: 2
+  Got: 640 Expected: 224
+  ```
+
+  A caller had no way to see that coming: the number lives in the file. So it is
+  read from there now.
+
+  ```typescript
+  // An Ultralytics -cls export is 224; nothing to configure, nothing to get wrong
+  const clf = await Classifier.create("/models/classify.onnx", { labels: LABELS });
+  console.log(clf.inputSize); // [224, 224]
+  ```
+
+  `inputSize` is now a *fallback*, used only when the graph leaves its spatial
+  axes dynamic. Passing a size that contradicts a static graph logs a warning
+  and the graph wins — honoring the caller there would only turn a fixable
+  mismatch into a failed run.
+
+- **`inputSize` getter on every task**, so callers can read back the resolution
+  inference actually runs at rather than the one they asked for.
+
+- **`OrtSession.inputShapes` / `OrtSession.inputShape`** expose what the graph
+  declares, with dynamic axes as `null`. Empty when the runtime reports no
+  metadata (`onnxruntime-web` older than 1.21).
+
+- **`OrtSession.release()`** frees the native session. Needed whenever a session
+  is discarded while the page lives on — rebuilding a task at a different input
+  size, swapping in a newer model — which previously required reaching into
+  `session.raw`.
+
+- **`declaredShapesFrom`, `spatialInputSize`, `resolveInputSize`** (plus the
+  `DeclaredShape` / `DeclaredDim` types): the pure helpers behind the above,
+  exported so callers building their own pipeline can reuse the same precedence
+  rules without importing `onnxruntime-web` types themselves.
+
+## [0.3.0] - 2026-08-02
+
+### Added
+
+- **`predict()` now reports where the time went.** Every `Results` envelope
+  already carried a `speed` field, mirroring Ultralytics' `results[0].speed` —
+  and it was always empty, because no task ever filled it. `Classifier`,
+  `Detector` and `Segmenter` now time each stage and hand the breakdown to the
+  envelope:
+
+  ```typescript
+  const results = await det.predict("/images/street.jpg");
+  console.log(results[0].speed);
+  // { load: 84.2, preprocess: 11.7, inference: 118.9, postprocess: 6.4 }
+  ```
+
+  Four keys instead of Ultralytics' three: `preprocess`, `inference` and
+  `postprocess` measure the same boundaries Ultralytics does, and `load` covers
+  the fetch/decode this SDK performs inside `predict()` — on a cold cache it
+  dominates everything else, and folding it into `preprocess` would misreport
+  where the cost is.
+
+  New exports `Speed` (the four-key breakdown) and `SpeedTimer` (the stage
+  accumulator) let callers time their own pipeline stages around the SDK calls
+  using the same boundaries.
+
+### Changed
+
+- `Results.speed` is typed `Readonly<Speed>` instead of
+  `Readonly<Record<string, number>>`, so `speed.inference` is a `number` rather
+  than `number | undefined`. Envelopes built by hand default to all-zeros.
+
+### Deprecated
+
+- The `decodeYoloV8` / `decodeYoloV8Anchors` / `decodeYoloV8Seg` aliases were
+  announced for removal in `0.3.0`. They survive this release — dropping them
+  would break `tempest-react-sdk`, which re-exports all three from its vendored
+  copy. The warning now points at `0.4.0`.
+
 ## [0.2.2] - 2026-05-31
 
 ### Changed

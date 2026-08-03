@@ -46,13 +46,21 @@ clf = Classifier("model.onnx", labels={0: "cat", 2: "fox"})
 # 4) Caminho de arquivo — uma classe por linha
 clf = Classifier("model.onnx", labels="imagenet_labels.txt")
 
-# 5) None — auto-gera "class_0", "class_1", ... (só quando o formato de saída
-#    do modelo é estaticamente conhecido)
+# 5) None (default) — lê os `names` gravados nos metadados do modelo; sem eles,
+#    auto-gera "class_0", "class_1", ... (classificação) ou usa o preset COCO
+#    (detecção/segmentação)
 clf = Classifier("model.onnx", labels=None)
 ```
 
 `names` em todo resultado é o mapeamento canônico `dict[int, str]` (espelha o
 `model.names` do Ultralytics).
+
+!!! tip "O modelo já sabe os nomes dele"
+    Um export do Ultralytics carrega `names` nos metadados, e o SDK usa isso
+    quando você não passa `labels` — assim uma lista mantida à mão não pode ser
+    reordenada por acidente e trocar suas predições de classe em silêncio. O
+    mesmo vale para a resolução de entrada. Ver
+    [O modelo manda](modelo.md).
 
 ## Execution providers
 

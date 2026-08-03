@@ -11,31 +11,57 @@ permissions:
 
 jobs:
   publish:
-    name: Publish @ort-vision-sdk/web
+    name: Publish @mauriciobenjamin700/ort-vision-sdk-web
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: sdk-js-web
     permissions:
-      contents: read
+      # contents: write is what lets the last step cut the GitHub Release for
+      # the tag that triggered this run.
+      contents: write
       id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: "22"
           registry-url: "https://registry.npmjs.org"
           cache: npm
           cache-dependency-path: sdk-js-web/package-lock.json
 
-      # The runner's bundled npm 10 has no OIDC trusted publishing, so
-      # `npm publish` falls back to NODE_AUTH_TOKEN and 404s when that secret
-      # is absent or stale. npm >= 11.5 mints a short-lived token from the
-      # GitHub OIDC identity instead — same setup as tempest-react-sdk.
-      - name: Upgrade npm (OIDC trusted publishing)
+      # Trusted Publishing (OIDC) requires npm >= 11.5.1; Node 22 still ships
+      # npm 10.x. Upgrade so `npm publish` mints a short-lived token from the
+      # GitHub OIDC identity — no NPM_TOKEN needed.
+      - name: Upgrade npm for Trusted Publishing
         run: npm install -g npm@latest
+
+      # Guard: the git tag and package.json must agree before anything is
+      # published, otherwise npm gets a version the tag does not describe and
+      # the GitHub Release ends up pointing at the wrong code.
+      - name: Resolve version and check it matches the tag
+        id: version
+        run: |
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            TAG_VERSION="${GITHUB_REF_NAME#web-v}"
+            if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
+              echo "::error::tag ${GITHUB_REF_NAME} does not match sdk-js-web/package.json version ${PKG_VERSION}"
+              exit 1
+            fi
+            echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=web-v${PKG_VERSION}" >> "$GITHUB_OUTPUT"
+          fi
+          echo "version=${PKG_VERSION}" >> "$GITHUB_OUTPUT"
+          case "$PKG_VERSION" in
+            *-*) echo "prerelease=true" >> "$GITHUB_OUTPUT" ;;
+            *) echo "prerelease=false" >> "$GITHUB_OUTPUT" ;;
+          esac
 
       - name: Install dependencies
         run: npm ci
@@ -60,11 +86,69 @@ jobs:
           PKG_NAME="$PKG_NAME" node -e "import(process.env.PKG_NAME).then(m => { \
             if (!m.Detector || !m.Segmenter || !m.Classifier) throw new Error('tasks missing'); \
             if (!m.Boxes || !m.Probs || !m.Masks) throw new Error('result envelopes missing'); \
+            if (!m.spatialInputSize || !m.resolveInputSize) throw new Error('graph helpers missing'); \
             if (!m.VERSION) throw new Error('no VERSION'); \
             console.log('Smoke OK · VERSION =', m.VERSION); \
           })"
 
-      # No NODE_AUTH_TOKEN: publish authenticates via GitHub OIDC against the
-      # trusted publisher configured for the package on npmjs.
-      - name: Publish (with provenance)
+      # No NODE_AUTH_TOKEN: publish authenticates via GitHub OIDC (npm Trusted
+      # Publishing). Provenance is generated automatically. Requires a Trusted
+      # Publisher configured on npmjs.com for this package, pointing at this
+      # repo + workflow file (release-npm.yml) — without it npm answers E404 to
+      # the PUT and nothing is published, however green the build looks.
+      - name: Publish (Trusted Publishing / OIDC)
         run: npm publish --provenance --access public
+
+      # Registry read-back: npm must actually serve this version, and the
+      # `latest` dist-tag must point at it — a publish that silently landed
+      # under another tag would otherwise look like a green release.
+      - name: Verify the npm registry serves this version as latest
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          PKG_NAME=$(node -p "require('./package.json').name")
+          for attempt in 1 2 3 4 5; do
+            PUBLISHED=$(npm view "${PKG_NAME}@${VERSION}" version 2>/dev/null || true)
+            [ -n "$PUBLISHED" ] && break
+            echo "· registry has not caught up yet (attempt ${attempt}); retrying in 10s"
+            sleep 10
+          done
+          if [ "$PUBLISHED" != "$VERSION" ]; then
+            echo "::error::npm does not serve ${PKG_NAME}@${VERSION} (got '${PUBLISHED}')"
+            exit 1
+          fi
+          LATEST=$(npm view "${PKG_NAME}" dist-tags.latest 2>/dev/null || true)
+          if [ "$LATEST" != "$VERSION" ]; then
+            echo "::error::npm dist-tag latest is '${LATEST}', expected '${VERSION}'"
+            exit 1
+          fi
+          echo "✓ npm: ${PKG_NAME}@${VERSION} published and tagged latest"
+
+      # Keeps GitHub in step with npm: every published version gets the matching
+      # GitHub Release, with its CHANGELOG section as the notes and the packed
+      # tarball attached. Idempotent — re-running a tag edits the existing
+      # Release instead of failing.
+      - name: Create or update the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+          VERSION: ${{ steps.version.outputs.version }}
+          PRERELEASE: ${{ steps.version.outputs.prerelease }}
+        run: |
+          PKG_NAME=$(node -p "require('./package.json').name")
+          node ../scripts/changelog.mjs notes web "$VERSION" --allow-unreleased > /tmp/release-notes.md
+          {
+            echo ""
+            echo "---"
+            echo ""
+            echo "📦 npm: [\`${PKG_NAME}@${VERSION}\`](https://www.npmjs.com/package/${PKG_NAME}/v/${VERSION}) — publicado com provenance (OIDC)."
+          } >> /tmp/release-notes.md
+          TARBALL=$(npm pack --silent)
+          FLAGS=(--title "${PKG_NAME} ${VERSION}" --notes-file /tmp/release-notes.md)
+          [ "$PRERELEASE" = "true" ] && FLAGS+=(--prerelease)
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release edit "$TAG" "${FLAGS[@]}"
+            gh release upload "$TAG" "$TARBALL" --clobber
+          else
+            gh release create "$TAG" "$TARBALL" "${FLAGS[@]}" --latest=false
+          fi
+          echo "✓ GitHub Release ${TAG} em sincronia com npm ${VERSION}"

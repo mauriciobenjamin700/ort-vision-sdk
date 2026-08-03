@@ -46,13 +46,20 @@ clf = Classifier("model.onnx", labels={0: "cat", 2: "fox"})
 # 4) File path — one class per line
 clf = Classifier("model.onnx", labels="imagenet_labels.txt")
 
-# 5) None — auto-generates "class_0", "class_1", ... (only when the model's
-#    output shape is statically known)
+# 5) None (default) — reads the `names` baked into the model metadata; without
+#    them, auto-generates "class_0", "class_1", ... (classification) or uses the
+#    COCO preset (detection/segmentation)
 clf = Classifier("model.onnx", labels=None)
 ```
 
 `names` on every result is the canonical `dict[int, str]` mapping (mirrors
 Ultralytics' `model.names`).
+
+!!! tip "The model already knows its own names"
+    An Ultralytics export carries `names` in its metadata, and the SDK uses it
+    when you pass no `labels` — so a hand-maintained list cannot be reordered by
+    accident and silently swap your predictions between classes. The same goes
+    for the input resolution. See [The model decides](modelo.md).
 
 ## Execution providers
 

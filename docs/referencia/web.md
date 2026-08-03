@@ -56,6 +56,11 @@ Tipos/classes por instância: `DetectionResult`, `SegmentationResult`,
 | `DEFAULT_PROVIDERS` | `["webgpu", "wasm"]`. |
 | `resolveProviders(...)` | Resolve a lista de providers para nomes do ORT-Web. |
 | `OrtSession` / `OrtSessionOptions` / `ModelSource` | Sessão de baixo nível. |
+| `OrtSession.inputShape` / `.inputShapes` | Shapes declarados pelo grafo, eixos dinâmicos como `null`. |
+| `OrtSession.release()` | Libera a sessão nativa (necessário ao descartar uma sessão com a página viva). |
+| `task.inputSize` | Resolução em que a tarefa realmente pré-processa. |
+| `spatialInputSize` / `resolveInputSize` / `declaredShapesFrom` | Helpers puros da precedência grafo → chamador → fallback. |
+| `DeclaredShape` / `DeclaredDim` | Shape declarado e uma dimensão (`number`, ou `null` quando simbólica). |
 
 ## Erros
 

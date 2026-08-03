@@ -32,6 +32,32 @@ use `[0]`. Each task also exposes a `run()` alias (parity with PyTorch's
 - `ImageData` — a raw pixel buffer (RGBA from canvas `getImageData()`).
 - `RGBImage` — the SDK's canonical HWC RGB `Uint8Array` wrapper.
 
+## Input resolution
+
+`inputSize` is optional and acts as a fallback: the resolution comes from the
+shape the graph declares.
+
+```typescript
+const clf = await Classifier.create("/models/classify.onnx", { labels: LABELS });
+console.log(clf.inputSize); // [224, 224] — read from the .onnx, not configured
+```
+
+!!! danger "Why this matters"
+    An Ultralytics `-cls` export comes out at 224×224 and a detector at 640×640.
+    Feeding the wrong one makes ORT abort with `Got invalid dimensions for input:
+    images ... Got: 640 Expected: 224` — and the number only exists inside the
+    file, so no configuration could get it right on its own.
+
+Passing an `inputSize` that contradicts a static graph logs a warning and is
+ignored (ORT would reject it anyway). On dynamic-axis models your value stands,
+with `[224, 224]`/`[640, 640]` as the last resort. See
+[The model decides](modelo.en.md).
+
+```typescript
+console.log(clf.session.inputShape); // [1, 3, 224, 224] — null on a dynamic axis
+await clf.session.release();         // frees the native session
+```
+
 ## Labels
 
 Label resolution mirrors Python via `resolveLabels`:

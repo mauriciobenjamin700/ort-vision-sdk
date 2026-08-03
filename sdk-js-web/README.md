@@ -37,7 +37,16 @@ const result = await clf.predict("/images/dog.jpg", { topK: 5 });
 console.log(result.className, result.confidence);
 console.log(result.probabilities);
 // result.image is an RGBImage (HWC RGB Uint8Array) — the original input.
+console.log(clf.inputSize);
+// [224, 224] — read from the .onnx graph, not configured.
 ```
+
+> **The model decides its input size.** `inputSize` is optional: the resolution
+> the graph declares always wins, because it is the only shape ONNX Runtime will
+> accept. An Ultralytics `-cls` export is 224x224 while a detector is 640x640 —
+> get it wrong and ORT aborts with `Got invalid dimensions for input: images`.
+> Read it back with `task.inputSize`, or inspect `session.inputShape`. See
+> [O modelo manda / The model decides](https://mauriciobenjamin700.github.io/ort-vision-sdk/en/guia/modelo/).
 
 ### Object detection
 

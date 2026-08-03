@@ -23,14 +23,14 @@ por imagem.
 
 ```python
 Classifier(model_path, *, labels=None, providers=None, session_options=None,
-           backend=None, input_size=(224, 224), mean=..., std=..., apply_softmax=True)
+           backend=None, input_size=None, mean=..., std=..., apply_softmax=True)
 
-Detector(model_path, *, head="yolo", labels="coco", providers=None,
-         session_options=None, backend=None, input_size=(640, 640),
+Detector(model_path, *, head="yolo", labels=None, providers=None,
+         session_options=None, backend=None, input_size=None,
          conf_threshold=0.25, iou_threshold=0.45, max_detections=300)
 
-Segmenter(model_path, *, head="yolo-seg", labels="coco", providers=None,
-          session_options=None, backend=None, input_size=(640, 640),
+Segmenter(model_path, *, head="yolo-seg", labels=None, providers=None,
+          session_options=None, backend=None, input_size=None,
           conf_threshold=0.25, iou_threshold=0.45, max_detections=300,
           mask_threshold=0.5)
 ```
@@ -41,6 +41,11 @@ Quando fornecido, `model_path`/`providers`/`session_options` são ignorados. Vej
 o [guia de backends](../guia/backends.md). (Adicionei `backend=None` às
 assinaturas de `Classifier`/`Detector` acima também.)
 
+`input_size=None` e `labels=None` (v0.6.0) significam "pergunte ao modelo":
+a resolução vem do shape declarado pelo grafo e os nomes vêm dos `names` nos
+metadados, com os defaults antigos (224/640, preset COCO) como fallback. Ver
+[O modelo manda](../guia/modelo.md).
+
 `Detector.predict()` e `Segmenter.predict()` aceitam overrides por chamada:
 `conf_threshold`, `iou_threshold`, `classes`.
 
@@ -49,7 +54,11 @@ assinaturas de `Classifier`/`Detector` acima também.)
 | Símbolo | Descrição |
 | --- | --- |
 | `InferenceBackend` | Protocolo do motor de inferência — metadata (`input_name`/`input_shape`/`output_names`/`output_shapes`) + `run`/`async_run`/`ort_async_run`. |
-| `OrtSession` | Backend padrão (ONNX Runtime in-process); satisfaz o protocolo. |
+| `MetadataBackend` | Protocolo de capacidade: backends que leem o mapa de metadados do modelo. Separado porque um bridge nativo pode não conseguir. |
+| `read_metadata(backend)` | Lê o mapa de metadados de um backend, devolvendo `{}` quando ele não oferece a capacidade. |
+| `OrtSession` | Backend padrão (ONNX Runtime in-process); satisfaz os dois protocolos. |
+| `OrtSession.metadata` | Mapa de metadados customizados do modelo (`names`, `task`, `imgsz`, ...). |
+| `OrtSession.input_shape` | Shape declarado da primeira entrada (eixos dinâmicos como string). |
 
 ## Envelopes de resultado
 
@@ -92,6 +101,15 @@ Todo envelope expõe também `names`, `orig_img`, `orig_shape`, `path` e
 | `resolve_labels(spec, ...)` | Resolve uma `LabelSpec` para `dict[int, str]`. |
 | `LabelSpec` | Tipo de união aceito por `labels=` (preset, lista, dict, path, None). |
 | `COCO_CLASSES` | Tupla com as 80 classes do preset COCO. |
+
+## O que o modelo declara
+
+| Símbolo | Descrição |
+| --- | --- |
+| `spatial_input_size(shape)` | Extrai `(largura, altura)` de um shape NCHW estático; `None` quando os eixos são dinâmicos. |
+| `resolve_input_size(...)` | Aplica a precedência grafo → chamador → fallback, avisando quando o chamador contradiz um grafo estático. |
+| `model_names(metadata)` | Interpreta o `names` do Ultralytics (`repr` de `dict[int, str]`) via `ast.literal_eval`; `None` quando ausente ou inutilizável. |
+| `task.input_size` | Resolução em que a tarefa realmente pré-processa. |
 
 !!! note "Fonte da verdade"
     As assinaturas completas, com tipos e docstrings, vivem no código-fonte em

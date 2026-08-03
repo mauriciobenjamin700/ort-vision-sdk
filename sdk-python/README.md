@@ -71,8 +71,9 @@ from ort_vision_sdk import Classifier
 
 clf = Classifier(
     "resnet50.onnx",
-    labels="imagenet_labels.txt",   # one class per line, or pass a list/dict
-    input_size=(224, 224),          # default
+    labels="imagenet_labels.txt",   # one class per line, or pass a list/dict;
+                                    # omit it to use the model's own `names`
+    input_size=(224, 224),          # optional — the graph's own size wins
     apply_softmax=True,             # set False if your model already outputs probs
 )
 
@@ -92,8 +93,9 @@ from ort_vision_sdk import Detector
 
 det = Detector(
     "yolov8n.onnx",
-    labels="coco",                   # default — 80-class COCO preset
-    input_size=(640, 640),
+    labels="coco",                   # omit it to use the model's own `names`,
+                                     # falling back to the 80-class COCO preset
+    input_size=(640, 640),           # optional — the graph's own size wins
     conf_threshold=0.25,
     iou_threshold=0.45,
 )
@@ -183,12 +185,19 @@ clf = Classifier("model.onnx", labels={0: "cat", 2: "fox"})
 # 4) File path — one class per line
 clf = Classifier("model.onnx", labels="imagenet_labels.txt")
 
-# 5) None — auto-generates "class_0", "class_1", ... (only works when the
-#    model's output shape is statically known)
+# 5) None (default) — reads the `names` the export baked into the model
+#    metadata; without them, auto-generates "class_0", "class_1", ...
+#    (classification) or uses the COCO preset (detection/segmentation)
 clf = Classifier("model.onnx", labels=None)
 ```
 
 `names` on every result is the canonical `dict[int, str]` mapping (mirrors Ultralytics' `model.names`).
+
+> **The model decides.** Both the input resolution and the class names are read
+> from the `.onnx` itself: the graph's declared shape wins over `input_size`
+> (ORT would reject anything else), and `labels=None` resolves the `names`
+> Ultralytics baked into the export. See
+> [O modelo manda / The model decides](https://mauriciobenjamin700.github.io/ort-vision-sdk/guia/modelo/).
 
 ---
 

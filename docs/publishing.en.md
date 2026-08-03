@@ -41,13 +41,29 @@ workflow `release-pypi.yml`, environment `pypi`. Validate first on
 **Settings → Environments** (optionally with required reviewers) — no secret is
 needed, OIDC handles authentication.
 
-## npm
+## npm — Trusted Publishing
 
-The `package.json` uses `@mauriciobenjamin700/ort-vision-sdk-web` (a personal
-scope). Generate a granular automation token with read/write on the package and
-store it as the `NPM_TOKEN` repository secret. The workflow passes
-`--provenance`, which requires a public repo with OIDC and a correct
-`repository.url`.
+The published package is `@mauriciobenjamin700/ort-vision-sdk-web` (a personal
+scope, which already exists since it is your username). The workflow publishes
+over **OIDC**, exactly like PyPI: no token is stored in the repository.
+
+Register the Trusted Publisher on npmjs — this is the step that is **currently
+missing**, and the only reason the npm workflow fails with `E404`:
+
+1. Go to the package page → **Settings** → **Trusted publisher** → **GitHub
+   Actions**.
+2. Organization or user `mauriciobenjamin700`, repository `ort-vision-sdk`,
+   workflow filename `release-npm.yml`, environment empty (the job uses none).
+
+!!! danger "Without this, publish fails with an error that reads like permissions"
+    With no Trusted Publisher and no `NODE_AUTH_TOKEN`, the registry answers
+    `npm error code E404` on the `PUT`. The whole build stays green up to that
+    step, so it is easy to read as network trouble. It is authentication.
+
+Registering an `NPM_TOKEN` secret instead also works, but it keeps a long-lived
+credential in the repository and loses the provenance attestation. The workflow
+passes `--provenance`, which with OIDC needs no extra setup: a public repo and a
+correct `repository.url`, both already in place.
 
 ## Release flow with `make` (recommended)
 
@@ -94,6 +110,27 @@ locally without pushing or opening a PR.
 | `DRY_RUN=1` | Do everything locally (branch + commit + tag) but skip push and PR. |
 | `SKIP_VALIDATE=1` | Skip lint/typecheck/build (only if just validated manually). |
 | `BASE_BRANCH=...` | Target branch of the PR (default `main`). |
+
+### What the workflow does on its own once the tag lands
+
+Pushing the tag is the last manual step. From there GitHub Actions, in order:
+
+1. **Checks version against tag.** `web-v0.4.0` only publishes if `sdk-js-web/package.json` says `0.4.0`; `v0.6.0` only publishes if both `pyproject.toml` and `__version__` say `0.6.0`. A mismatch aborts **before** the upload — PyPI never lets a version be replaced, so this guard has to run before, not after.
+2. **Validates.** Typecheck, tests, build, and a smoke-install of the packed artifact in a clean project (web imports it with `onnxruntime-web`; Python installs the wheel in a fresh venv). Python also checks the wheel did not come out empty.
+3. **Publishes** over OIDC — provenance on npm, Trusted Publishing on PyPI.
+4. **Reads back from the registry.** Confirms the registry really serves that version and that it is `latest`. A publish that landed under a different dist-tag, or an index that never propagated, fails here instead of passing as a green release.
+5. **Creates (or updates) the GitHub Release.** Notes from the matching CHANGELOG section, artifacts attached (tarball for web, sdist + wheel for Python), titled `ort-vision-sdk (Python) X.Y.Z` / `@mauriciobenjamin700/ort-vision-sdk-web X.Y.Z`. Idempotent — re-running a tag edits the existing Release instead of failing.
+
+!!! tip "Reconciling what was left behind"
+    Old releases that never got a GitHub Release can be backfilled at once:
+
+    ```bash
+    make releases-sync-dry   # list what is missing, create nothing
+    make releases-sync       # create the missing Releases
+    make releases-check      # tags x published versions x Releases, side by side
+    ```
+
+    `releases-check` is the quick way to spot a tag with no published package — or the other way around.
 
 ## Versioning
 

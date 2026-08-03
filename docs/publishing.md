@@ -5,7 +5,7 @@ Este projeto distribui dois pacotes a partir do mesmo monorepo, cada um isolado 
 | Pacote                | Registro | Diretório       | Tag de release             |
 | --------------------- | -------- | --------------- | -------------------------- |
 | `ort-vision-sdk`      | PyPI     | `sdk-python/`   | `v<MAJOR.MINOR.PATCH>`     |
-| `@ort-vision-sdk/web` | npm      | `sdk-js-web/`   | `web-v<MAJOR.MINOR.PATCH>` |
+| `@mauriciobenjamin700/ort-vision-sdk-web` | npm      | `sdk-js-web/`   | `web-v<MAJOR.MINOR.PATCH>` |
 
 Os fluxos de release são automatizados em [.github/workflows/release-pypi.yml](https://github.com/mauriciobenjamin700/ort-vision-sdk/blob/main/.github/workflows/release-pypi.yml) e [.github/workflows/release-npm.yml](https://github.com/mauriciobenjamin700/ort-vision-sdk/blob/main/.github/workflows/release-npm.yml). Você publica empurrando uma tag — o GitHub Actions faz o resto.
 
@@ -60,41 +60,38 @@ Não precisa de secret nenhum aqui — OIDC cuida da autenticação.
 
 ---
 
-## 2. Configuração inicial — npm
+## 2. Configuração inicial — npm (Trusted Publishing)
 
-### 2.1. Decida o nome do pacote
+O pacote publicado é **`@mauriciobenjamin700/ort-vision-sdk-web`** (escopo pessoal, que já existe por ser o seu username). O workflow publica por **OIDC**, exatamente como o PyPI: nenhum token fica guardado no repositório.
 
-O `package.json` atual usa `@ort-vision-sdk/web`. Esse escopo é uma **organização npm** que precisa existir e estar sob seu controle. Suas opções:
+### 2.1. Cadastre o Trusted Publisher no npmjs
 
-| Opção                                     | O que fazer                                                                                                                                                                                                |
-| ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Criar a org `ort-vision-sdk` no npm**   | <https://www.npmjs.com/org/create> → free tier. Mantém o nome atual.                                                                                                                                     |
-| **Publicar no seu escopo pessoal**        | Renomeie em [sdk-js-web/package.json](https://github.com/mauriciobenjamin700/ort-vision-sdk/blob/main/sdk-js-web/package.json) para `@mauriciobenjamin700/ort-vision-sdk-web` (seu username já é um escopo).                                                          |
-| **Publicar sem escopo**                   | Renomeie para `ort-vision-sdk-web` (precisa estar disponível em <https://www.npmjs.com/package/ort-vision-sdk-web>). Nesse caso, remova `publishConfig.access` do `package.json` (irrelevante para nomes não-escopados). |
+Este é o passo que **falta hoje** e o único motivo de o workflow do npm falhar com `E404`:
 
-> Se renomear, atualize também o link `homepage` e os exemplos no [sdk-js-web/README.md](https://github.com/mauriciobenjamin700/ort-vision-sdk/blob/main/sdk-js-web/README.md).
+1. Entre em <https://www.npmjs.com/package/@mauriciobenjamin700/ort-vision-sdk-web/access> (ou **Settings** do pacote).
+2. Seção **Trusted publisher** → **GitHub Actions**.
+3. Preencha:
+   - Organization or user: `mauriciobenjamin700`
+   - Repository: `ort-vision-sdk`
+   - Workflow filename: `release-npm.yml`
+   - Environment: *(deixe vazio — o job não usa environment)*
+4. Salve.
 
-### 2.2. Gere o automation token
+!!! danger "Sem isso, o publish falha com um erro que parece de permissão"
+    Sem Trusted Publisher e sem `NODE_AUTH_TOKEN`, o registry responde:
 
-1. <https://www.npmjs.com/settings/SEU_USUARIO/tokens/granular-access-tokens/new>.
-2. Tipo: **Granular access token** (preferido) ou **Classic → Automation**.
-3. Permissions: **Read and write** no pacote (`@ort-vision-sdk/web` ou o nome que você escolheu).
-4. Expiration: o que fizer sentido (ex.: 1 ano). Anote: o token só aparece **uma vez**.
+    ```text
+    npm error code E404
+    npm error 404 Not Found - PUT https://registry.npmjs.org/@mauriciobenjamin700%2fort-vision-sdk-web
+    ```
 
-### 2.3. Cadastre o secret no GitHub
+    O build inteiro aparece verde até esse passo, então é fácil ler como "problema de rede". É autenticação.
 
-1. **Settings → Secrets and variables → Actions → New repository secret**.
-2. Nome: `NPM_TOKEN`.
-3. Valor: o token gerado em 2.2.
+> **Alternativa (não recomendada):** cadastrar um automation token como secret `NPM_TOKEN` e injetá-lo via `NODE_AUTH_TOKEN` no passo de publish. Funciona, mas guarda credencial de longa duração no repositório e **perde a attestation de provenance**.
 
-### 2.4. (Opcional) Habilite provenance
+### 2.2. Provenance
 
-O workflow já passa `--provenance`. Para isso funcionar:
-
-- O pacote precisa ser **publicado a partir de um repositório público** com OIDC habilitado (já é o caso do GitHub Actions).
-- O `repository.url` no `package.json` precisa apontar para o repo correto (já configurado).
-
-Se preferir desabilitar, edite [.github/workflows/release-npm.yml](https://github.com/mauriciobenjamin700/ort-vision-sdk/blob/main/.github/workflows/release-npm.yml) e remova `--provenance`.
+O workflow passa `--provenance`, e com OIDC isso funciona sem configuração extra: o pacote é publicado a partir de repositório público, e `repository.url` no `package.json` já aponta para o repo correto. A attestation aparece na página do pacote no npm e no log de transparência do Sigstore.
 
 ---
 
@@ -200,7 +197,28 @@ make last-python       # só a última tag do Python
 make last-web          # só a última tag do Web
 ```
 
-### 3.5. Quando algo dá errado
+### 3.5. O que o workflow faz sozinho quando a tag chega
+
+Empurrar a tag é o último passo manual. A partir dela o GitHub Actions faz, na ordem:
+
+1. **Confere versão × tag.** `web-v0.4.0` só publica se `sdk-js-web/package.json` disser `0.4.0`; `v0.6.0` só publica se `pyproject.toml` **e** `__version__` disserem `0.6.0`. Divergência aborta **antes** do upload — o PyPI nunca deixa uma versão ser substituída, então esse guard tem que rodar antes, não depois.
+2. **Valida.** Typecheck, testes, build e smoke-install do artefato empacotado num projeto limpo (o web importa via `onnxruntime-web`; o Python instala a wheel num venv novo). O Python ainda checa se a wheel não saiu vazia.
+3. **Publica** por OIDC — provenance no npm, Trusted Publishing no PyPI.
+4. **Relê do registry.** Confirma que o registry realmente serve aquela versão e que ela é a `latest`. Um publish que caiu em outra dist-tag, ou um índice que não propagou, falha aqui em vez de passar por release verde.
+5. **Cria (ou atualiza) o GitHub Release.** Notas vindas da seção correspondente do CHANGELOG do pacote, artefatos anexados (tarball no web, sdist + wheel no Python), título no padrão `ort-vision-sdk (Python) X.Y.Z` / `@mauriciobenjamin700/ort-vision-sdk-web X.Y.Z`. É idempotente: re-rodar a tag edita o Release existente em vez de falhar.
+
+!!! tip "Reconciliando o que ficou para trás"
+    Releases antigas que nunca ganharam GitHub Release podem ser preenchidas de uma vez:
+
+    ```bash
+    make releases-sync-dry   # lista o que falta, sem criar nada
+    make releases-sync       # cria os Releases faltantes
+    make releases-check      # tags × versões publicadas × Releases, lado a lado
+    ```
+
+    `releases-check` é o jeito rápido de ver se alguma tag existe sem pacote publicado — ou o contrário.
+
+### 3.6. Quando algo dá errado
 
 - **`working tree sujo`** → faça commit ou stash antes de tentar de novo. O Makefile não atualiza versão por cima de mudanças pendentes (evita levar para o commit coisa que não devia).
 - **`tag X já existe localmente`** → alguém (ou você) já criou essa tag. Veja com `git tag -l`. Se foi engano: `git tag -d <tag>` (e `git push origin :refs/tags/<tag>` caso já tenha sido pushed).
@@ -301,18 +319,15 @@ git push origin main
 git push origin web-v0.2.0
 ```
 
-A tag `web-v0.2.0` dispara o workflow `release-npm.yml`:
+A tag `web-v0.2.0` dispara o workflow `release-npm.yml`, que confere versão × tag, valida (typecheck/testes/build/smoke), publica com `npm publish --provenance --access public` autenticado por **OIDC** (sem token), relê do registry e cria o GitHub Release. Ver [3.5](#35-o-que-o-workflow-faz-sozinho-quando-a-tag-chega).
 
-1. Checkout, `npm ci`, `npm run typecheck`, `npm run build` (em `sdk-js-web/`).
-2. `npm publish --provenance --access public` autenticado pelo `NODE_AUTH_TOKEN` (`NPM_TOKEN`).
-
-Verifique em <https://www.npmjs.com/package/@ort-vision-sdk/web>. Para testar:
+Verifique em <https://www.npmjs.com/package/@mauriciobenjamin700/ort-vision-sdk-web>. Para testar:
 
 ```bash
 mkdir /tmp/smoke && cd /tmp/smoke
 npm init -y
-npm install @ort-vision-sdk/web@0.2.0 onnxruntime-web
-node -e "import('@ort-vision-sdk/web').then(m => console.log(Object.keys(m)))"
+npm install @mauriciobenjamin700/ort-vision-sdk-web@0.2.0 onnxruntime-web
+node -e "import('@mauriciobenjamin700/ort-vision-sdk-web').then(m => console.log(Object.keys(m)))"
 ```
 
 ---
@@ -369,13 +384,13 @@ Yank impede `pip install ort-vision-sdk` (sem versão) de pegar a versão proble
 `npm` permite `unpublish` em até 72 h após a publicação:
 
 ```bash
-npm unpublish @ort-vision-sdk/web@0.2.0
+npm unpublish @mauriciobenjamin700/ort-vision-sdk-web@0.2.0
 ```
 
 Depois de 72 h, o caminho é `npm deprecate`:
 
 ```bash
-npm deprecate @ort-vision-sdk/web@0.2.0 "Critical bug — use 0.2.1+"
+npm deprecate @mauriciobenjamin700/ort-vision-sdk-web@0.2.0 "Critical bug — use 0.2.1+"
 ```
 
 E publicar uma versão patch corrigida. **Nunca** reaproveite um número de versão que já foi unpublished — o npm bloqueia.

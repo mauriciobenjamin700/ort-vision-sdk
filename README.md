@@ -12,7 +12,7 @@ The repo distributes two sibling packages — same task-oriented API (`Classifie
 | Package               | Registry | Directory                          | Install                             |
 | --------------------- | -------- | ---------------------------------- | ----------------------------------- |
 | `ort-vision-sdk`      | PyPI     | [`sdk-python/`](sdk-python)        | `pip install ort-vision-sdk`        |
-| `@ort-vision-sdk/web` | npm      | [`sdk-js-web/`](sdk-js-web)        | `npm install @ort-vision-sdk/web onnxruntime-web` |
+| `@mauriciobenjamin700/ort-vision-sdk-web` | npm      | [`sdk-js-web/`](sdk-js-web)        | `npm install @mauriciobenjamin700/ort-vision-sdk-web onnxruntime-web` |
 
 Each package is self-contained: its own `README.md`, `LICENSE`, `CHANGELOG.md` and build tooling. Open the directory you care about for usage details.
 

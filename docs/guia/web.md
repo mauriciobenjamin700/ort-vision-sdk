@@ -33,6 +33,32 @@ Assim como no Python, `predict()` retorna uma lista de comprimento 1
 - `ImageData` — buffer de pixels cru (RGBA do `getImageData()` do canvas).
 - `RGBImage` — o wrapper canônico HWC RGB `Uint8Array` do SDK.
 
+## Resolução de entrada
+
+O `inputSize` é opcional e serve de fallback: a resolução vem do shape que o
+grafo declara.
+
+```typescript
+const clf = await Classifier.create("/models/classify.onnx", { labels: LABELS });
+console.log(clf.inputSize); // [224, 224] — lido do .onnx, não configurado
+```
+
+!!! danger "Por que isso importa"
+    Um export `-cls` do Ultralytics sai em 224×224 e um detector em 640×640.
+    Alimentar o grafo errado faz o ORT abortar com `Got invalid dimensions for
+    input: images ... Got: 640 Expected: 224` — e o número só existe dentro do
+    arquivo, então nenhuma configuração podia acertar sozinha.
+
+Passar um `inputSize` que contradiz um grafo estático emite um aviso no console
+e é ignorado (o ORT rejeitaria de todo jeito). Em modelos de eixo dinâmico o seu
+valor vale, com `[224, 224]`/`[640, 640]` como último recurso. Ver
+[O modelo manda](modelo.md).
+
+```typescript
+console.log(clf.session.inputShape); // [1, 3, 224, 224] — null em eixo dinâmico
+await clf.session.release();         // libera a sessão nativa
+```
+
 ## Rótulos
 
 A resolução de rótulos espelha a do Python via `resolveLabels`:

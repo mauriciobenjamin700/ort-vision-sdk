@@ -1,6 +1,12 @@
 """ort-vision-sdk: high-level Python SDK for computer vision inference with ONNX Runtime."""
 
-from ort_vision_sdk.core import InferenceBackend, OrtSession
+from ort_vision_sdk.core import (
+    InferenceBackend,
+    MetadataBackend,
+    OrtSession,
+    read_metadata,
+)
+from ort_vision_sdk.graph import model_names, resolve_input_size, spatial_input_size
 from ort_vision_sdk.io import ImageInput, load_image
 from ort_vision_sdk.labels import COCO_CLASSES, LabelSpec, resolve_labels
 from ort_vision_sdk.results import (
@@ -28,7 +34,7 @@ from ort_vision_sdk.types import (
     SegmentationResult,
 )
 
-__version__: str = "0.5.0"
+__version__: str = "0.6.0"
 
 __all__: list[str] = [
     "COCO_CLASSES",
@@ -47,6 +53,7 @@ __all__: list[str] = [
     "InferenceBackend",
     "LabelSpec",
     "Masks",
+    "MetadataBackend",
     "OrtSession",
     "Probs",
     "SegmentationResult",
@@ -56,5 +63,9 @@ __all__: list[str] = [
     "VisionTask",
     "__version__",
     "load_image",
+    "model_names",
+    "read_metadata",
+    "resolve_input_size",
     "resolve_labels",
+    "spatial_input_size",
 ]

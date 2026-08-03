@@ -28,7 +28,7 @@ from typing import TYPE_CHECKING, Protocol, runtime_checkable
 if TYPE_CHECKING:
     import numpy as np
 
-__all__ = ["InferenceBackend"]
+__all__ = ["InferenceBackend", "MetadataBackend", "read_metadata"]
 
 
 @runtime_checkable
@@ -128,3 +128,37 @@ class InferenceBackend(Protocol):
             One NumPy array per requested output, in order.
         """
         ...
+
+
+@runtime_checkable
+class MetadataBackend(Protocol):
+    """Capability protocol for backends that can read the model's metadata.
+
+    Kept separate from :class:`InferenceBackend` on purpose: reading the custom
+    metadata map is not something every runtime can do — a bridge that only
+    forwards tensors to a native runtime has no access to it — so requiring it
+    of every backend would break implementations that are otherwise complete.
+    Tasks probe for it with :func:`read_metadata` and simply get nothing when it
+    is absent.
+    """
+
+    @property
+    def metadata(self) -> dict[str, str]:
+        """Custom metadata the exporter baked into the model."""
+        ...
+
+
+def read_metadata(backend: InferenceBackend) -> dict[str, str]:
+    """Read a backend's model metadata, tolerating backends that expose none.
+
+    Args:
+        backend (InferenceBackend): The backend a task runs inference through.
+
+    Returns:
+        dict[str, str]: The model's custom metadata map — ``names``/``task``/
+        ``imgsz`` for an Ultralytics export — or an empty dict when the backend
+        does not satisfy :class:`MetadataBackend`.
+    """
+    if isinstance(backend, MetadataBackend):
+        return backend.metadata
+    return {}

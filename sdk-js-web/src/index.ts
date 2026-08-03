@@ -43,6 +43,14 @@ export {
   type OrtSessionOptions,
   OrtSession,
 } from "./core/session.js";
+export {
+  type DeclaredDim,
+  type DeclaredShape,
+  type ResolveInputSizeOptions,
+  declaredShapesFrom,
+  resolveInputSize,
+  spatialInputSize,
+} from "./core/graph.js";
 export { DEFAULT_PROVIDERS, resolveProviders } from "./core/providers.js";
 export { type Speed, SpeedTimer } from "./core/timing.js";
 
@@ -109,4 +117,4 @@ export {
   Segmenter,
 } from "./tasks/segmenter.js";
 
-export const VERSION: string = "0.3.0";
+export const VERSION: string = "0.4.0";

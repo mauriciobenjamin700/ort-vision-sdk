@@ -56,6 +56,11 @@ Per-instance types/classes: `DetectionResult`, `SegmentationResult`,
 | `DEFAULT_PROVIDERS` | `["webgpu", "wasm"]`. |
 | `resolveProviders(...)` | Resolves the provider list into ORT-Web names. |
 | `OrtSession` / `OrtSessionOptions` / `ModelSource` | Low-level session. |
+| `OrtSession.inputShape` / `.inputShapes` | Shapes the graph declares, dynamic axes as `null`. |
+| `OrtSession.release()` | Frees the native session (needed when discarding a session while the page lives on). |
+| `task.inputSize` | The resolution the task actually preprocesses to. |
+| `spatialInputSize` / `resolveInputSize` / `declaredShapesFrom` | Pure helpers behind the graph → caller → fallback precedence. |
+| `DeclaredShape` / `DeclaredDim` | A declared shape and one dimension (`number`, or `null` when symbolic). |
 
 ## Errors
 

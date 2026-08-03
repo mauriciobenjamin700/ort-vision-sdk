@@ -1,6 +1,10 @@
 """Core building blocks: session wrapper, providers, stage timing, and exceptions."""
 
-from ort_vision_sdk.core.backend import InferenceBackend
+from ort_vision_sdk.core.backend import (
+    InferenceBackend,
+    MetadataBackend,
+    read_metadata,
+)
 from ort_vision_sdk.core.exceptions import (
     ImageLoadError,
     InferenceError,
@@ -19,11 +23,13 @@ __all__: list[str] = [
     "InferenceBackend",
     "InferenceError",
     "LabelMapError",
+    "MetadataBackend",
     "ModelLoadError",
     "OrtSession",
     "OrtVisionError",
     "ProviderNotAvailableError",
     "SpeedTimer",
     "available_providers",
+    "read_metadata",
     "resolve_providers",
 ]

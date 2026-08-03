@@ -6,6 +6,7 @@ import type * as ort from "onnxruntime-web";
 
 import { type ModelSource, type OrtSessionOptions, OrtSession } from "../core/session.js";
 import { SpeedTimer } from "../core/timing.js";
+import { resolveInputSize } from "../core/graph.js";
 import { type ImageInput, loadImage } from "../io/image.js";
 import { type LabelSpec, resolveLabels } from "../labels.js";
 import { decodeYolo } from "../postprocess/detection.js";
@@ -45,7 +46,13 @@ export interface DetectorOptions extends OrtSessionOptions {
   readonly labels?: LabelSpec;
   /** Number of classes — used to validate the supplied labels. */
   readonly numClasses?: number;
-  /** Model input `[width, height]` for letterboxing. Defaults to `[640, 640]`. */
+  /**
+   * Model input `[width, height]` in pixels for letterboxing.
+   *
+   * Only used when the model's graph leaves its spatial axes dynamic: a graph
+   * that declares a static size always wins, since that is the only shape ONNX
+   * Runtime will accept. Defaults to `[640, 640]`.
+   */
   readonly inputSize?: readonly [number, number];
   /** Default minimum class score to keep a candidate. */
   readonly confThreshold?: number;
@@ -122,7 +129,11 @@ export class Detector extends VisionTask {
       head,
       labels,
       names,
-      options.inputSize ?? [640, 640],
+      resolveInputSize({
+        graphShape: session.inputShape,
+        requested: options.inputSize,
+        fallback: [640, 640],
+      }),
       options.confThreshold ?? 0.25,
       options.iouThreshold ?? 0.45,
       options.maxDetections ?? 300,
@@ -142,6 +153,17 @@ export class Detector extends VisionTask {
   /** Class id → class name dict (matches Ultralytics' `model.names`). */
   get names(): Readonly<Record<number, string>> {
     return this._names;
+  }
+
+  /**
+   * The `[width, height]` this task preprocesses to.
+   *
+   * Resolved at creation time from the model's graph when it declares a static
+   * input, so reading it back tells you the resolution inference really runs at
+   * — not merely what was requested.
+   */
+  get inputSize(): readonly [number, number] {
+    return this._inputSize;
   }
 
   /** Number of classes the model predicts. */

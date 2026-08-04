@@ -61,7 +61,34 @@ await clf.session.release();         // libera a sessão nativa
 
 ## Rótulos
 
-A resolução de rótulos espelha a do Python via `resolveLabels`:
+**`labels` é opcional: sem ele, valem os nomes que o modelo declara.** O
+Ultralytics grava `names` nos metadados do `.onnx`, e uma lista mantida à mão do
+lado pode ser reordenada por acidente — nada falha, as predições só trocam de
+classe.
+
+```typescript
+import { Detector } from "@mauriciobenjamin700/ort-vision-sdk-web";
+
+const det = await Detector.create("/models/detect.onnx");
+console.log(det.labels); // ["ocular-mucosa"] — do modelo, não de um preset
+console.log(det.numClasses); // 1 — deduzido do shape de saída (B, 4 + nc, N)
+```
+
+!!! check "Isso também conserta um tropeço antigo"
+    Antes, um detector de uma classe **falhava** sem `labels` explícito: o
+    default era o preset COCO de 80 nomes, que discordava da contagem de classes
+    do modelo.
+
+!!! note "De onde vêm os metadados no navegador"
+    O `onnxruntime-web` não expõe o mapa de metadados do modelo — diferente do
+    `custom_metadata_map` do Python. O SDK lê os `metadata_props` dos próprios
+    bytes do `.onnx` no carregamento, e por isso passa a buscar o modelo ele
+    mesmo quando você informa uma URL (é o mesmo download, só quem faz muda).
+    Para manter o caminho antigo, passe `readMetadata: false`. Um arquivo
+    truncado ou inesperado resulta em mapa vazio, nunca em erro.
+
+A precedência é a mesma do Python: o que você passa ganha, depois os `names` do
+modelo, e por último o preset:
 
 ```typescript
 import { Detector, Classifier, COCO_CLASSES } from "@mauriciobenjamin700/ort-vision-sdk-web";

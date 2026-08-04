@@ -7,6 +7,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-08-03
+
+### Added
+
+- **Tasks read their class names off the model, matching the Python SDK.**
+  `labels` is now optional on all three tasks: when omitted, the names the
+  exporter baked into the model are used (Ultralytics writes them as `names` in
+  the metadata map), and only a model carrying none falls back to the COCO
+  preset for detection/segmentation or generated `class_<id>` labels for
+  classification. Passing `labels` still wins, for a model whose names are
+  wrong or absent.
+
+  ```typescript
+  const det = await Detector.create("/models/detect.onnx");
+  console.log(det.labels); // ["ocular-mucosa"] — from the model, not a preset
+  ```
+
+  This also fixes a trap: a single-class detector used to **fail** without an
+  explicit `labels`, because the 80-name COCO default disagreed with its class
+  count.
+
+- **`numClasses` is inferred from the declared output shape.** A YOLO head
+  declares `(B, 4 + nc, N)` and a classifier `(B, nc)`, so the count no longer
+  has to be supplied. Passing it still validates the labels against the model.
+
+- **`OrtSession.metadata`** exposes the model's custom metadata map (`names`,
+  `task`, `imgsz`, ...). `onnxruntime-web` does not surface that map — unlike
+  Python's `custom_metadata_map` — so it is read from the model's own bytes at
+  load time by walking `metadata_props` in the ModelProto. A truncated or
+  unexpected file yields an empty map instead of an error, and every caller
+  falls back to what it was given.
+
+- **`OrtSession.outputShapes` / `.outputShape`**, the shapes the graph declares
+  for its outputs, with dynamic axes as `null` — the same treatment
+  `inputShapes` already got.
+
+- **`detectionNumClasses`, `classificationNumClasses`, `readModelMetadata`,
+  `modelNames`**: the pure helpers behind the above, exported for anyone
+  assembling their own pipeline.
+
+### Changed
+
+- **A URL model is fetched by the SDK instead of by ORT**, so its bytes are
+  available to read metadata from. It is the same single download, and
+  `readMetadata: false` on the session options restores the previous path (ORT
+  fetches the URL, `metadata` stays empty). A failed fetch falls back to handing
+  ORT the URL, so a model that ORT could load still loads.
+
 ## [0.4.0] - 2026-08-03
 
 ### Added

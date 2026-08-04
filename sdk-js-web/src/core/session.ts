@@ -7,16 +7,48 @@ import * as ortRuntime from "onnxruntime-web";
 
 import { InferenceError, ModelLoadError } from "./exceptions.js";
 import { type DeclaredShape, declaredShapesFrom } from "./graph.js";
+import { readModelMetadata } from "./metadata.js";
 import { resolveProviders } from "./providers.js";
 
 /** Anything `InferenceSession.create` accepts. */
 export type ModelSource = string | ArrayBufferLike | Uint8Array;
+
+/**
+ * Fetch a model URL as bytes so its metadata can be read.
+ *
+ * Falls back to the URL itself when the fetch fails, letting ORT try its own
+ * load path: losing the metadata map is a downgrade, but failing to load a model
+ * that ORT could have fetched would be a regression.
+ *
+ * @param url Where the `.onnx` lives.
+ * @returns The model bytes, or the original URL when they could not be fetched.
+ */
+async function fetchModel(url: string): Promise<Uint8Array | string> {
+  try {
+    const response = await fetch(url);
+    if (!response.ok) return url;
+    return new Uint8Array(await response.arrayBuffer());
+  } catch {
+    return url;
+  }
+}
 
 export interface OrtSessionOptions {
   /** Execution providers in preference order. `undefined` uses {@link DEFAULT_PROVIDERS}. */
   readonly providers?: readonly string[];
   /** Optional ORT session options forwarded to `InferenceSession.create`. */
   readonly sessionOptions?: ort.InferenceSession.SessionOptions;
+  /**
+   * Whether to read the model's custom metadata map (`names`, `task`, `imgsz`).
+   * Defaults to `true`.
+   *
+   * The runtime does not expose that map, so it is read from the file itself —
+   * which means a URL model is fetched here and handed to ORT as bytes instead
+   * of letting ORT fetch it. That is the same single download either way, and
+   * it is what lets a task resolve its labels off the model. Set to `false` to
+   * keep the URL path untouched and leave {@link OrtSession.metadata} empty.
+   */
+  readonly readMetadata?: boolean;
 }
 
 /**
@@ -30,13 +62,15 @@ export class OrtSession {
   private constructor(
     private readonly _session: ort.InferenceSession,
     public readonly providers: readonly string[],
+    private readonly _metadata: Readonly<Record<string, string>>,
   ) {}
 
   /**
    * Load an ONNX model into an ORT inference session.
    *
-   * @param model Either a URL string fetched by ORT, or a `Uint8Array`/`ArrayBuffer` containing the model bytes.
-   * @param options Provider list and pass-through `SessionOptions`.
+   * @param model Either a URL string, or a `Uint8Array`/`ArrayBuffer` containing the model bytes.
+   * @param options Provider list, pass-through `SessionOptions`, and whether to
+   *   read the model's metadata map (see {@link OrtSessionOptions.readMetadata}).
    * @throws {@link ModelLoadError} if the model cannot be loaded.
    */
   static async create(
@@ -48,16 +82,19 @@ export class OrtSession {
       ...(options.sessionOptions ?? {}),
       executionProviders: providers as ort.InferenceSession.SessionOptions["executionProviders"],
     };
+    const wantsMetadata = options.readMetadata !== false;
+    const source =
+      typeof model === "string" && wantsMetadata ? await fetchModel(model) : model;
 
     let session: ort.InferenceSession;
     try {
-      if (typeof model === "string") {
-        session = await ortRuntime.InferenceSession.create(model, sessionOptions);
-      } else if (model instanceof Uint8Array) {
-        session = await ortRuntime.InferenceSession.create(model, sessionOptions);
+      if (typeof source === "string") {
+        session = await ortRuntime.InferenceSession.create(source, sessionOptions);
+      } else if (source instanceof Uint8Array) {
+        session = await ortRuntime.InferenceSession.create(source, sessionOptions);
       } else {
         session = await ortRuntime.InferenceSession.create(
-          model as ArrayBuffer,
+          source as ArrayBuffer,
           sessionOptions,
         );
       }
@@ -68,7 +105,9 @@ export class OrtSession {
       );
     }
 
-    return new OrtSession(session, providers);
+    const metadata =
+      wantsMetadata && typeof source !== "string" ? readModelMetadata(source) : {};
+    return new OrtSession(session, providers, metadata);
   }
 
   /** Names of the model's inputs, in declaration order. */
@@ -112,6 +151,41 @@ export class OrtSession {
    */
   get inputShape(): DeclaredShape {
     return this.inputShapes[0] ?? [];
+  }
+
+  /**
+   * Shapes the graph declares for its outputs, in declaration order.
+   *
+   * Dynamic (symbolic) axes appear as `null`. Reading them is how a task can
+   * tell how many classes a head emits without being told.
+   */
+  get outputShapes(): readonly DeclaredShape[] {
+    return declaredShapesFrom(
+      this._session.outputMetadata as
+        | readonly ort.InferenceSession.ValueMetadata[]
+        | undefined,
+    );
+  }
+
+  /**
+   * Shape the graph declares for its first output, dynamic axes as `null`.
+   *
+   * Empty when the runtime reports no metadata for it.
+   */
+  get outputShape(): DeclaredShape {
+    return this.outputShapes[0] ?? [];
+  }
+
+  /**
+   * The model's custom metadata map — `names`, `task`, `imgsz`, ... for an
+   * Ultralytics export.
+   *
+   * Read from the model's bytes at load time, since the runtime does not expose
+   * it. Empty when the session was created with `readMetadata: false`, from a
+   * URL that could not be fetched here, or from a model carrying no metadata.
+   */
+  get metadata(): Readonly<Record<string, string>> {
+    return this._metadata;
   }
 
   /**

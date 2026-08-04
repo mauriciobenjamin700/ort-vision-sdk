@@ -6,8 +6,10 @@ import type * as ort from "onnxruntime-web";
 
 import { type ModelSource, type OrtSessionOptions, OrtSession } from "../core/session.js";
 import { SpeedTimer } from "../core/timing.js";
-import { resolveInputSize } from "../core/graph.js";
+
 import { type ImageInput, loadImage } from "../io/image.js";
+import { detectionNumClasses, resolveInputSize } from "../core/graph.js";
+import { modelNames } from "../core/metadata.js";
 import { type LabelSpec, resolveLabels } from "../labels.js";
 import { decodeYolo } from "../postprocess/detection.js";
 import {
@@ -117,8 +119,8 @@ export class Detector extends VisionTask {
       throw new Error(`Unsupported detector head '${head}'. Supported: 'yolo'.`);
     }
     const session = await OrtSession.create(model, options);
-    const labels = resolveLabels(options.labels ?? "coco", {
-      numClasses: options.numClasses,
+    const labels = resolveLabels(options.labels ?? modelNames(session.metadata) ?? "coco", {
+      numClasses: options.numClasses ?? detectionNumClasses(session.outputShape) ?? undefined,
     });
     const names: Record<number, string> = {};
     for (let i = 0; i < labels.length; i++) {

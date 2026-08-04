@@ -60,7 +60,34 @@ await clf.session.release();         // frees the native session
 
 ## Labels
 
-Label resolution mirrors Python via `resolveLabels`:
+**`labels` is optional: without it, the names the model declares are used.**
+Ultralytics writes `names` into the `.onnx` metadata, and a list kept by hand
+alongside can be reordered by accident — nothing fails, the predictions just
+swap classes.
+
+```typescript
+import { Detector } from "@mauriciobenjamin700/ort-vision-sdk-web";
+
+const det = await Detector.create("/models/detect.onnx");
+console.log(det.labels); // ["ocular-mucosa"] — from the model, not a preset
+console.log(det.numClasses); // 1 — inferred from the (B, 4 + nc, N) output shape
+```
+
+!!! check "This also fixes an old trap"
+    A single-class detector used to **fail** without an explicit `labels`: the
+    default was the 80-name COCO preset, which disagreed with the model's class
+    count.
+
+!!! note "Where the metadata comes from in the browser"
+    `onnxruntime-web` does not expose the model's metadata map — unlike Python's
+    `custom_metadata_map`. The SDK reads `metadata_props` out of the `.onnx`
+    bytes at load time, which is why it now fetches the model itself when you
+    pass a URL (same single download, different fetcher). Pass
+    `readMetadata: false` to keep the previous path. A truncated or unexpected
+    file yields an empty map, never an error.
+
+Precedence matches Python: what you pass wins, then the model's `names`, then
+the preset:
 
 ```typescript
 import { Detector, Classifier, COCO_CLASSES } from "@mauriciobenjamin700/ort-vision-sdk-web";

@@ -1,6 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { declaredShapesFrom, resolveInputSize, spatialInputSize } from "../src/core/graph.js";
+import {
+  classificationNumClasses,
+  declaredShapesFrom,
+  detectionNumClasses,
+  resolveInputSize,
+  spatialInputSize,
+} from "../src/core/graph.js";
 
 /**
  * Build the ORT metadata shape the runtime reports, without loading a model.
@@ -92,5 +98,32 @@ describe("resolveInputSize", () => {
       640, 640,
     ]);
     expect(resolveInputSize({ fallback: [640, 640] })).toEqual([640, 640]);
+  });
+});
+
+describe("detectionNumClasses", () => {
+  it("reads nc off a YOLO head declaring (B, 4 + nc, N)", () => {
+    expect(detectionNumClasses([1, 84, 8400])).toBe(80);
+    expect(detectionNumClasses([1, 5, 8400])).toBe(1);
+    expect(detectionNumClasses([1, 6, 2100])).toBe(2);
+  });
+
+  it("returns null when the shape cannot pin it", () => {
+    expect(detectionNumClasses([1, null, null])).toBeNull();
+    expect(detectionNumClasses([])).toBeNull();
+    // 4 channels would leave zero classes after the box coordinates.
+    expect(detectionNumClasses([1, 4, 8400])).toBeNull();
+  });
+});
+
+describe("classificationNumClasses", () => {
+  it("reads nc off a classifier head declaring (B, nc)", () => {
+    expect(classificationNumClasses([1, 2])).toBe(2);
+    expect(classificationNumClasses([1, 1000])).toBe(1000);
+  });
+
+  it("returns null when the last axis is dynamic or absent", () => {
+    expect(classificationNumClasses([1, null])).toBeNull();
+    expect(classificationNumClasses([])).toBeNull();
   });
 });

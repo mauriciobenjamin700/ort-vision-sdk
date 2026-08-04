@@ -47,10 +47,13 @@ export {
   type DeclaredDim,
   type DeclaredShape,
   type ResolveInputSizeOptions,
+  classificationNumClasses,
   declaredShapesFrom,
+  detectionNumClasses,
   resolveInputSize,
   spatialInputSize,
 } from "./core/graph.js";
+export { modelNames, readModelMetadata } from "./core/metadata.js";
 export { DEFAULT_PROVIDERS, resolveProviders } from "./core/providers.js";
 export { type Speed, SpeedTimer } from "./core/timing.js";
 
@@ -117,4 +120,4 @@ export {
   Segmenter,
 } from "./tasks/segmenter.js";
 
-export const VERSION: string = "0.4.0";
+export const VERSION: string = "0.5.0";

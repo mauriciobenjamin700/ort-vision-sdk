@@ -57,6 +57,39 @@ export function spatialInputSize(shape: DeclaredShape): readonly [number, number
   return [width, height];
 }
 
+/**
+ * Infer how many classes a YOLO detection/segmentation head emits.
+ *
+ * Such a head declares `(B, 4 + nc, N)` — four box coordinates stacked above one
+ * score per class, over `N` candidate anchors. `N` is in the thousands and the
+ * batch is 1, so the channel axis is the smallest static axis above 1.
+ *
+ * @param shape Declared shape of the model's first output.
+ * @returns The class count, or `null` when the shape leaves it undeterminable —
+ *   fully dynamic, or too small to hold boxes plus at least one class.
+ */
+export function detectionNumClasses(shape: DeclaredShape): number | null {
+  const staticDims = shape.filter((dim): dim is number => dim !== null && dim > 1);
+  if (staticDims.length === 0) return null;
+  const channels = Math.min(...staticDims);
+  if (channels < 5) return null;
+  return channels - 4;
+}
+
+/**
+ * Infer how many classes a classification head emits.
+ *
+ * A classifier declares `(B, nc)`, so the count is the last static axis.
+ *
+ * @param shape Declared shape of the model's first output.
+ * @returns The class count, or `null` when the last axis is dynamic or absent.
+ */
+export function classificationNumClasses(shape: DeclaredShape): number | null {
+  const last = shape[shape.length - 1];
+  if (last === null || last === undefined || last < 1) return null;
+  return last;
+}
+
 export interface ResolveInputSizeOptions {
   /** Declared shape of the model's image input, from {@link declaredShapesFrom}. */
   readonly graphShape?: DeclaredShape;

@@ -47,6 +47,13 @@ export interface OrtSessionOptions {
    * of letting ORT fetch it. That is the same single download either way, and
    * it is what lets a task resolve its labels off the model. Set to `false` to
    * keep the URL path untouched and leave {@link OrtSession.metadata} empty.
+   *
+   * `false` is also the escape hatch when a device cannot afford the bytes: the
+   * fetched buffer is dropped before ORT builds the graph (see
+   * {@link OrtSession.create}), but ORT's own load path still keeps the model out
+   * of reach of anything the SDK holds. A session built this way resolves its
+   * input size from the graph as usual — only the class names are lost, so a
+   * caller taking this route has to pass `labels` itself.
    */
   readonly readMetadata?: boolean;
 }
@@ -68,6 +75,16 @@ export class OrtSession {
   /**
    * Load an ONNX model into an ORT inference session.
    *
+   * The metadata map is read **before** the session is built, and that order is
+   * load-bearing on memory-constrained devices. ORT copies the model into its
+   * WASM heap and then allocates the graph and the weights on top of that copy;
+   * a `readModelMetadata` call placed after `InferenceSession.create` keeps the
+   * JavaScript-side buffer reachable across the whole build, so a 5 MB model
+   * costs 5 MB of JS heap plus 5 MB of WASM heap plus the weights at the same
+   * instant. Reading first makes the buffer collectable as soon as ORT has copied
+   * it — on a phone that was the difference between a session and
+   * `Can't create a session. failed to allocate a buffer of size N`.
+   *
    * @param model Either a URL string, or a `Uint8Array`/`ArrayBuffer` containing the model bytes.
    * @param options Provider list, pass-through `SessionOptions`, and whether to
    *   read the model's metadata map (see {@link OrtSessionOptions.readMetadata}).
@@ -85,6 +102,8 @@ export class OrtSession {
     const wantsMetadata = options.readMetadata !== false;
     const source =
       typeof model === "string" && wantsMetadata ? await fetchModel(model) : model;
+    const metadata =
+      wantsMetadata && typeof source !== "string" ? readModelMetadata(source) : {};
 
     let session: ort.InferenceSession;
     try {
@@ -105,8 +124,6 @@ export class OrtSession {
       );
     }
 
-    const metadata =
-      wantsMetadata && typeof source !== "string" ? readModelMetadata(source) : {};
     return new OrtSession(session, providers, metadata);
   }
 

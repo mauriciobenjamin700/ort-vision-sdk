@@ -1,6 +1,6 @@
 {
   "name": "@mauriciobenjamin700/ort-vision-sdk-web",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "High-level TypeScript SDK for browser computer vision inference with ONNX Runtime Web.",
   "type": "module",
   "main": "./dist/index.js",

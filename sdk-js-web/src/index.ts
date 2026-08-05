@@ -120,4 +120,4 @@ export {
   Segmenter,
 } from "./tasks/segmenter.js";
 
-export const VERSION: string = "0.5.0";
+export const VERSION: string = "0.5.1";

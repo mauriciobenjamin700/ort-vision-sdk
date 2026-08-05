@@ -86,6 +86,22 @@ console.log(det.numClasses); // 1 — inferred from the (B, 4 + nc, N) output sh
     `readMetadata: false` to keep the previous path. A truncated or unexpected
     file yields an empty map, never an error.
 
+!!! warning "Low-memory phones"
+    ORT copies the model into its WASM heap and allocates the graph and the
+    weights **on top of** that copy. While that happens, the bytes the SDK fetched
+    are alive in the JS heap too — a 5 MB `.onnx` costs 5 MB + 5 MB + weights at
+    the same instant. The SDK reads the metadata **before** building the session
+    precisely so that buffer dies as early as possible (0.5.1 — before that it
+    survived the whole build).
+
+    On a device where the numbers still do not add up, ORT gives up with
+    `Can't create a session. failed to allocate a buffer of size N`. Two ways out,
+    in order: load one model at a time (never two concurrent `create` calls) and
+    free what you are not using with `session.release()`; if that is not enough,
+    pass `readMetadata: false` **together with explicit `labels`** — then ORT
+    fetches the model itself and nothing in the SDK holds the bytes. The input
+    size still comes from the graph; only the class names are lost.
+
 Precedence matches Python: what you pass wins, then the model's `names`, then
 the preset:
 

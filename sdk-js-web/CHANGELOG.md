@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-08-05
+
+### Fixed
+
+- **A model no longer costs twice its size at the peak of session creation.**
+  Reading the metadata map (0.5.0) fetches a URL model into a `Uint8Array`, and
+  that read sat *after* `InferenceSession.create` — so the JavaScript buffer
+  stayed reachable while ORT copied the model into its WASM heap and allocated
+  the graph and the weights on top of it. A 5 MB `.onnx` therefore held 5 MB of
+  JS heap plus 5 MB of WASM heap plus the weights at the same instant. On a phone
+  loading two models that was enough for ORT's allocator to give up with
+  `Can't create a session. failed to allocate a buffer of size 5355557`.
+
+  The metadata is now read before the session is built, so the buffer is
+  collectable as soon as ORT has copied it. `test/session.test.ts` pins the order.
+
+  `readMetadata: false` remains the escape hatch for a device that cannot afford
+  the bytes at all: ORT loads from the URL and nothing in the SDK ever holds the
+  model. Only the class names are lost — the input size still comes from the
+  graph — so that route has to pass `labels` itself.
+
 ## [0.5.0] - 2026-08-03
 
 ### Added

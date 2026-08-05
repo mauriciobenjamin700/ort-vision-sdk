@@ -87,6 +87,21 @@ console.log(det.numClasses); // 1 — deduzido do shape de saída (B, 4 + nc, N)
     Para manter o caminho antigo, passe `readMetadata: false`. Um arquivo
     truncado ou inesperado resulta em mapa vazio, nunca em erro.
 
+!!! warning "Celular com pouca memória"
+    O ORT copia o modelo para o heap WASM e aloca grafo e pesos **em cima** dessa
+    cópia. Enquanto isso acontece, os bytes buscados pelo SDK também estão vivos
+    no heap JS — um `.onnx` de 5 MB custa 5 MB + 5 MB + pesos no mesmo instante. O
+    SDK lê os metadados **antes** de construir a sessão justamente para esse buffer
+    morrer o quanto antes (0.5.1 — antes disso ele sobrevivia a toda a construção).
+
+    Num aparelho que ainda assim não fecha a conta, o ORT desiste com
+    `Can't create a session. failed to allocate a buffer of size N`. Duas saídas,
+    na ordem: carregue um modelo por vez (nunca dois `create` concorrentes) e
+    libere o que não está em uso com `session.release()`; se não bastar, passe
+    `readMetadata: false` **com `labels` explícito** — aí o ORT busca o modelo
+    sozinho e nada do SDK segura os bytes. O tamanho de entrada continua vindo do
+    grafo; só os nomes das classes se perdem.
+
 A precedência é a mesma do Python: o que você passa ganha, depois os `names` do
 modelo, e por último o preset:
 

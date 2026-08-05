@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import type * as MetadataModule from "../src/core/metadata.js";
+
 /**
  * Where the model buffer is read relative to the session build.
  *
@@ -15,8 +17,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 /** Order in which the metadata read and the ORT session build were reached. */
 const calls: string[] = [];
 
-const createSession = vi.fn(() => {
+/** What each `InferenceSession.create` call was handed as its model. */
+const sources: unknown[] = [];
+
+const createSession = vi.fn((model: unknown) => {
   calls.push("create");
+  sources.push(model);
   return Promise.resolve({
     inputNames: ["images"],
     outputNames: ["output0"],
@@ -35,7 +41,7 @@ vi.mock("onnxruntime-web", () => ({
 }));
 
 vi.mock("../src/core/metadata.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../src/core/metadata.js")>();
+  const actual = await importOriginal<typeof MetadataModule>();
   return {
     ...actual,
     readModelMetadata: (model: Uint8Array | ArrayBufferLike) => {
@@ -116,6 +122,7 @@ function serveModel(model: Uint8Array): void {
 
 afterEach(() => {
   calls.length = 0;
+  sources.length = 0;
   createSession.mockClear();
   vi.unstubAllGlobals();
 });
@@ -135,7 +142,7 @@ describe("OrtSession.create", () => {
 
     await OrtSession.create("/models/detect.onnx");
 
-    expect(createSession.mock.calls[0]?.[0]).toBeInstanceOf(Uint8Array);
+    expect(sources[0]).toBeInstanceOf(Uint8Array);
   });
 
   it("skips the fetch entirely when metadata is not wanted", async () => {
@@ -146,6 +153,6 @@ describe("OrtSession.create", () => {
 
     expect(fetchSpy).not.toHaveBeenCalled();
     expect(calls).toEqual(["create"]);
-    expect(createSession.mock.calls[0]?.[0]).toBe("/models/detect.onnx");
+    expect(sources[0]).toBe("/models/detect.onnx");
   });
 });

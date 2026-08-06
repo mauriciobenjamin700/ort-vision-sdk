@@ -42,6 +42,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Downscaling by 2x or more runs in two steps, roughly halving `preprocess`.**
+  `resize` now applies an integer box reduction (`PIL.Image.reduce`) before
+  resampling onto the exact target — the optimization PIL exposes as
+  `reducing_gap`, applied explicitly so it engages at the ratios this SDK
+  actually sees. Letterboxing 1920x1080 into 640x640 went from 7.8 ms to 3.5 ms
+  (2.25x), 1280x720 from 4.8 ms to 2.3 ms (2.08x), 3840x2160 from 29.8 ms to
+  10.5 ms (2.84x).
+
+  Where the reduction applies, **the pixels fed to the model change, and so do
+  the detections**. Below a 2x downscale, and for every upscale, the output is
+  byte-identical to before — pinned by tests. `NEAREST` is exempt entirely,
+  since a caller asking for it wants unblended pixels.
+
+  This is not a quality improvement, and the distinction is worth stating
+  plainly. Against a LANCZOS reference, box reduction wins on photographic
+  content but loses badly when the content's period resonates with the
+  reduction factor: 2 px stripes every 6 rows, reduced by 3, score an MSE of
+  106 against the single pass's 13. Across six content types the two paths
+  split three-three. What changes is *which* artifacts a downscale produces,
+  not how many — `test_resonant_content_is_the_known_weak_case` pins the losing
+  case so it stays visible.
+
+  The new `reduction_factor` helper is exported, so a caller can ask whether a
+  given source/target pair takes the two-step path.
+
 - **`decode_yolo_seg` is 1.3x–6.7x faster**, depending on how many instances
   survive and how large they are. The prototype combination and the sigmoid ran
   over every prototype pixel of every instance, and the result was cropped to
@@ -69,7 +94,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Benchmark harness** (`scripts/bench.py`, `make bench-python`) with a
   committed baseline, so the remaining optimization work is measurable. The
-  baseline is a local reference, not a CI gate.
+  baseline is a local reference, not a CI gate. Cases whose median falls under
+  `NOISE_FLOOR_MS` are reported but never counted as regressions — `softmax`
+  runs in ~5 microseconds, where a context switch reads as a "+253% regression"
+  on code nobody touched.
+
+- **Direct tests for the preprocessing primitives**
+  (`tests/test_preprocess_image.py`). `resize`, `letterbox`, `to_tensor`,
+  `to_chw`, `normalize` and the cv2 interop helpers had no tests of their own —
+  they were only reachable through a task, so a change to any of them surfaced
+  as a puzzling assertion about bounding boxes.
 
 ## [0.6.0] - 2026-08-03
 

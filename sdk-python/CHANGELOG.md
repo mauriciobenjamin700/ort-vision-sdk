@@ -7,6 +7,70 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Instance masks no longer lose precision to a `uint8` round-trip.** Resizing
+  a soft mask to its bounding box went through PIL, which cannot resample a
+  float array — so the mask was quantized to `uint8` first. That put the input
+  to the `>= mask_threshold` test on a grid of `1/255` steps and flipped border
+  pixels for no reason. Resampling is now a bilinear pass in `float32`, and it
+  agrees with a `float64` reference on **100%** of pixels where the old path
+  agreed on 99.7%.
+
+  This also removes a divergence between the two published SDKs: the web
+  implementation always resampled in float, so the same model on the same image
+  produced different masks in Python and in the browser. They now produce the
+  same bitmap, and `fixtures/parity/` checks it.
+
+  Masks stored by 0.6.0 or earlier will differ from new ones by a few border
+  pixels.
+
+- **Score ties in `nms` and `batched_nms` resolve deterministically, to the
+  lowest index.** `nms` ordered candidates with `scores.argsort()[::-1]`, which
+  reverses a stable sort — so tied scores were visited in *descending* index
+  order, the opposite of `torchvision` and of the web SDK. Two boxes tied on
+  score therefore produced a different survivor in each SDK. `batched_nms` had
+  the same problem across classes, where the surviving order also depended on
+  the class-iteration order. Both now break ties by index explicitly.
+
+- **`nms` no longer emits `RuntimeWarning: invalid value encountered in
+  divide`.** The IoU was computed for every pair and then masked, so a pair of
+  zero-area boxes evaluated `0 / 0` before the result was discarded. Letterbox
+  padding clips boxes down to zero area on ordinary frames, so the warning
+  reached callers' logs during normal use. The division is now masked instead of
+  discarded.
+
+### Changed
+
+- **`decode_yolo_seg` is 1.3x–6.7x faster**, depending on how many instances
+  survive and how large they are. The prototype combination and the sigmoid ran
+  over every prototype pixel of every instance, and the result was cropped to
+  the bounding box afterwards. They now run on the cropped region only — sigmoid
+  is elementwise, so slicing first is exact, and it skips the pixels that were
+  about to be discarded. Measured on 8400 anchors with 160x160 prototypes: 6.7x
+  at 100 instances of 60px, 2.0x at 30 instances of 80px, 1.3x at 30 instances
+  of 200px.
+
+### Internal
+
+- **End-to-end tests against real ONNX Runtime sessions**
+  (`tests/test_e2e_onnx.py`). The suite previously drove every task through a
+  fake backend, so nothing checked that a task can load a file, feed ORT a
+  tensor it accepts and read the outputs back — `ort_async_run` in particular had
+  never run against real ORT. Five tiny `.onnx` fixtures with `Constant` outputs
+  make the expected predictions exact and need no download;
+  `scripts/gen_test_models.py` regenerates them (it needs `onnx`, which stays out
+  of the package's dependencies).
+
+- **Shared Python/Web parity fixtures** (`fixtures/parity/`) covering `nms`,
+  `batched_nms`, `decode_yolo`, `decode_yolo_seg`, `softmax`, `topk` and
+  `model_names`. Both suites read the same committed numbers, which is how the
+  mask and tie-break divergences above were found.
+
+- **Benchmark harness** (`scripts/bench.py`, `make bench-python`) with a
+  committed baseline, so the remaining optimization work is measurable. The
+  baseline is a local reference, not a CI gate.
+
 ## [0.6.0] - 2026-08-03
 
 ### Added

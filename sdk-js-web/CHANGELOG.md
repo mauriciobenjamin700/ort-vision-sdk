@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Score ties in `nms` and `batchedNms` break by index explicitly.** Both
+  relied on `Array.prototype.sort` being stable to order tied scores. It is, in
+  every engine that matters, but leaning on it left the tie behaviour implicit —
+  and in `batchedNms` the surviving order also depended on `Map` insertion order,
+  which the Python SDK (iterating classes in sorted order) does not share. The
+  comparators now fall back to `a - b`, so a tie resolves to the lowest index on
+  both sides, matching `torchvision`.
+
+  Only exact ties are affected. The Python SDK was the one actually producing a
+  different survivor — it visited ties in descending index order — and this is
+  the other half of that fix.
+
+### Internal
+
+- **Parity tests against shared fixtures** (`test/parity.test.ts`, reading
+  `fixtures/parity/` at the repository root). They feed the web implementation
+  the same inputs the Python SDK was given and require the same outputs, with
+  mask bitmaps compared pixel for pixel. Two published artifacts promising the
+  same numbers had nothing checking the promise; this is that check, and it
+  found a mask-resampling divergence on its first run (fixed on the Python
+  side, see that package's changelog).
+
 ## [0.5.1] - 2026-08-05
 
 ### Fixed

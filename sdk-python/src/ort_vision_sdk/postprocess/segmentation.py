@@ -12,8 +12,14 @@ exported. Two output tensors are required:
 
 Each instance's binary mask is reconstructed by linearly combining the
 prototypes with that instance's coefficients (``coefs @ prototypes``),
-applying sigmoid, then resizing to the original image and cropping to the
-instance's bounding box.
+applying sigmoid, then resizing to the instance's bounding box in
+original-image coordinates and thresholding.
+
+The prototype combination is restricted to the prototype region under each
+instance's box **before** the sigmoid runs, rather than being evaluated over
+every prototype pixel of every instance. Sigmoid is elementwise, so slicing
+first is exact — it only skips the pixels that were about to be discarded,
+which for typical box sizes is the overwhelming majority of them.
 """
 
 from __future__ import annotations
@@ -22,7 +28,6 @@ import warnings
 
 import numpy as np
 from numpy.typing import NDArray
-from PIL import Image
 
 from ort_vision_sdk.postprocess.detection import decode_yolo_anchors
 from ort_vision_sdk.types import BoundingBox
@@ -118,10 +123,6 @@ def decode_yolo_seg(
         anchor_indices,
     ].T  # (k, num_mask_coefs)
 
-    # Soft masks via a single matmul over all surviving instances.
-    proto_flat = prototypes.reshape(num_mask_coefs, mask_h * mask_w)
-    soft_masks = _sigmoid(coefs @ proto_flat).reshape(-1, mask_h, mask_w)
-
     input_w, input_h = input_size
     pad_left, pad_top = pad
     scale_x = mask_w / input_w
@@ -150,8 +151,9 @@ def decode_yolo_seg(
         if mbx2 <= mbx1 or mby2 <= mby1 or bbox_w == 0 or bbox_h == 0:
             mask_binary = np.zeros((bbox_h, bbox_w), dtype=np.uint8)
         else:
-            mask_crop = soft_masks[k, mby1:mby2, mbx1:mbx2]
-            mask_resized = _resize_soft_mask(mask_crop, (bbox_w, bbox_h))
+            region = prototypes[:, mby1:mby2, mbx1:mbx2].reshape(num_mask_coefs, -1)
+            mask_crop = _sigmoid(coefs[k] @ region).reshape(mby2 - mby1, mbx2 - mbx1)
+            mask_resized = _resize_bilinear(mask_crop, (bbox_w, bbox_h))
             mask_binary = ((mask_resized >= mask_threshold) * 255).astype(np.uint8)
 
         results.append((bbox, int(class_ids[k]), float(confidences[k]), mask_binary))
@@ -160,32 +162,90 @@ def decode_yolo_seg(
 
 
 def _sigmoid(x: np.ndarray) -> np.ndarray:
-    """Numerically stable sigmoid."""
-    out = np.empty_like(x, dtype=np.float32)
-    pos = x >= 0
-    out[pos] = 1.0 / (1.0 + np.exp(-x[pos]))
-    neg_exp = np.exp(x[~pos])
-    out[~pos] = neg_exp / (1.0 + neg_exp)
-    return out
+    """Numerically stable sigmoid, evaluated branchlessly.
+
+    ``exp(-|x|)`` never overflows, so the same expression covers both signs:
+    ``1 / (1 + t)`` for ``x >= 0`` and ``t / (1 + t)`` for ``x < 0``. Writing it
+    this way computes one exponential over the whole array instead of two
+    partial ones behind a pair of boolean masks, and it keeps the formula
+    identical to the web SDK's scalar ``sigmoid``.
+
+    Args:
+        x: Logits of any shape.
+
+    Returns:
+        A ``float32`` array of the same shape with values in ``(0, 1)``.
+    """
+    t = np.exp(-np.abs(x, dtype=np.float32))
+    return np.where(x >= 0, 1.0 / (1.0 + t), t / (1.0 + t)).astype(np.float32, copy=False)
 
 
-def _resize_soft_mask(
+def _resize_bilinear(
     mask: np.ndarray,
     target_size: tuple[int, int],
 ) -> np.ndarray:
     """Resize a soft (float) mask to ``target_size = (width, height)``.
 
-    Uses bilinear resampling via PIL after a temporary uint8 quantization,
-    which is precise enough to feed a 0.5 threshold.
+    Bilinear resampling with half-pixel centers (``(i + 0.5) * ratio - 0.5``)
+    and edge clamping, sampling the four neighbours around each target pixel.
+
+    This is deliberately hand-written rather than delegated to PIL. PIL cannot
+    resample a float array without a round-trip through ``uint8``, and that
+    quantization puts the input to a ``>= 0.5`` test on a grid of ``1/255``
+    steps, flipping mask border pixels for no reason. It also keeps the result
+    numerically aligned with the web SDK's ``resizeBilinear``, which
+    implements this same formula — the two artifacts are supposed to produce
+    the same mask for the same model output, and a shared algorithm is what
+    makes that checkable.
+
+    Args:
+        mask: Source mask, shape ``(src_h, src_w)``.
+        target_size: Target ``(width, height)`` in pixels.
+
+    Returns:
+        A ``float32`` array of shape ``(target_h, target_w)``.
     """
     target_w, target_h = target_size
     if mask.size == 0 or target_w == 0 or target_h == 0:
         return np.zeros((target_h, target_w), dtype=np.float32)
 
-    quantized = (mask.clip(0.0, 1.0) * 255).astype(np.uint8)
-    pil = Image.fromarray(quantized, mode="L")
-    resized = pil.resize((target_w, target_h), resample=Image.Resampling.BILINEAR)
-    return np.asarray(resized, dtype=np.float32) / 255.0
+    source = mask.astype(np.float32, copy=False)
+    src_h, src_w = source.shape
+    if (src_w, src_h) == (target_w, target_h):
+        return source
+
+    x0, x1, wx = _sample_axis(src_w, target_w)
+    y0, y1, wy = _sample_axis(src_h, target_h)
+
+    top: np.ndarray = source[np.ix_(y0, x0)] * (1.0 - wx) + source[np.ix_(y0, x1)] * wx
+    bottom: np.ndarray = source[np.ix_(y1, x0)] * (1.0 - wx) + source[np.ix_(y1, x1)] * wx
+    blended: np.ndarray = top * (1.0 - wy[:, None]) + bottom * wy[:, None]
+    return blended.astype(np.float32, copy=False)
+
+
+def _sample_axis(
+    src_length: int,
+    target_length: int,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Build the bilinear sampling indices and weights for one axis.
+
+    Args:
+        src_length: Number of source pixels along the axis.
+        target_length: Number of target pixels along the axis.
+
+    Returns:
+        ``(lower, upper, weight)`` — the two source indices to blend per target
+        pixel and the ``float32`` weight of the upper one, all of length
+        ``target_length``. The weight is derived from the **clamped** lower
+        index, so edge pixels blend with themselves instead of extrapolating.
+    """
+    centers = (np.arange(target_length, dtype=np.float32) + 0.5) * (
+        src_length / target_length
+    ) - 0.5
+    lower = np.maximum(0, np.floor(centers)).astype(np.int64)
+    upper = np.minimum(src_length - 1, lower + 1)
+    weight = np.clip(centers - lower, 0.0, 1.0).astype(np.float32)
+    return lower, upper, weight
 
 
 def decode_yolov8_seg(

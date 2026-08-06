@@ -32,14 +32,25 @@ def nms(
             are suppressed.
 
     Returns:
-        Indices of kept boxes, in descending score order.
+        Indices of kept boxes, in descending score order. Boxes tied on score
+        are visited lowest-index first, so the survivor of a tie is
+        deterministic and matches both ``torchvision`` and this SDK's web
+        counterpart.
+
+    Note:
+        Two boxes that are both degenerate (zero area) have zero union, and
+        their IoU is defined here as ``0`` — they do not suppress each other.
+        The division is masked rather than computed and discarded, so no
+        ``0 / 0`` is ever evaluated: letterbox padding routinely clips boxes
+        down to zero area, and the discarded form emitted a ``RuntimeWarning``
+        into the caller's logs on ordinary frames.
     """
     if boxes.size == 0:
         return np.empty((0,), dtype=np.int64)
 
     x1, y1, x2, y2 = boxes.T
     areas = (x2 - x1).clip(min=0) * (y2 - y1).clip(min=0)
-    order = scores.argsort()[::-1]
+    order = np.argsort(-scores, kind="stable")
 
     keep: list[int] = []
     while order.size > 0:
@@ -56,7 +67,7 @@ def nms(
         h = (yy2 - yy1).clip(min=0)
         inter = w * h
         union = areas[i] + areas[rest] - inter
-        iou = np.where(union > 0, inter / union, 0.0)
+        iou = np.divide(inter, union, out=np.zeros_like(inter), where=union > 0)
         order = rest[iou <= iou_threshold]
 
     return np.asarray(keep, dtype=np.int64)
@@ -81,6 +92,10 @@ def batched_nms(
 
     Returns:
         Indices of kept boxes, sorted by descending score across all classes.
+        Survivors from different classes that are tied on score are ordered
+        lowest-index first — an explicit tie-break, because the order the
+        per-class loop happens to emit them in is an implementation detail and
+        the web counterpart iterates classes in a different order.
     """
     if boxes.size == 0:
         return np.empty((0,), dtype=np.int64)
@@ -94,8 +109,7 @@ def batched_nms(
     if not keep:
         return np.empty((0,), dtype=np.int64)
     keep_arr = np.asarray(keep, dtype=np.int64)
-    keep_arr = keep_arr[np.argsort(-scores[keep_arr], kind="stable")]
-    return keep_arr
+    return keep_arr[np.lexsort((keep_arr, -scores[keep_arr]))]
 
 
 def decode_yolo_anchors(

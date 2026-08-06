@@ -109,7 +109,9 @@ def batched_nms(
     if not keep:
         return np.empty((0,), dtype=np.int64)
     keep_arr = np.asarray(keep, dtype=np.int64)
-    return keep_arr[np.lexsort((keep_arr, -scores[keep_arr]))]
+    order: np.ndarray = np.lexsort((keep_arr, -scores[keep_arr]))
+    ordered: np.ndarray = keep_arr[order]
+    return ordered
 
 
 def decode_yolo_anchors(

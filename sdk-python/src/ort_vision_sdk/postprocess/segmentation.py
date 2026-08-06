@@ -177,7 +177,8 @@ def _sigmoid(x: np.ndarray) -> np.ndarray:
         A ``float32`` array of the same shape with values in ``(0, 1)``.
     """
     t = np.exp(-np.abs(x, dtype=np.float32))
-    return np.where(x >= 0, 1.0 / (1.0 + t), t / (1.0 + t)).astype(np.float32, copy=False)
+    values: np.ndarray = np.where(x >= 0, 1.0 / (1.0 + t), t / (1.0 + t))
+    return values.astype(np.float32, copy=False)
 
 
 def _resize_bilinear(

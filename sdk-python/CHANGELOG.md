@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+
+- **`decode_yolov8`, `decode_yolov8_anchors` and `decode_yolov8_seg` are gone.**
+  Deprecated in 0.2.0 with "will be removed in 0.3.0", and still shipping at
+  0.6.0 — a deprecation nobody enforces stops being one. Use `decode_yolo`,
+  `decode_yolo_anchors` and `decode_yolo_seg`: same functions, honest names.
+  The decoder was never v8-specific; it covers every anchor-free YOLO head from
+  v8 through v12.
+
+  `tests/test_deprecations.py` now guards the removal rather than the
+  deprecation, so a re-add fails loudly.
+
+- **Python 3.10 is no longer supported.** `requires-python` is `>=3.11`.
+  `onnxruntime` stopped publishing cp310 wheels at 1.24, so a 3.10 install was
+  already pinned to `onnxruntime <= 1.23` without saying so — a floor that
+  quietly decays is worse than one that is stated. The CI matrix moves to
+  3.11 / 3.12 / 3.13.
+
 ### Fixed
 
 - **A custom model with no baked-in `names` no longer fails to construct.** The

@@ -24,8 +24,6 @@ which for typical box sizes is the overwhelming majority of them.
 
 from __future__ import annotations
 
-import warnings
-
 import numpy as np
 from numpy.typing import NDArray
 
@@ -247,62 +245,3 @@ def _sample_axis(
     upper = np.minimum(src_length - 1, lower + 1)
     weight = np.clip(centers - lower, 0.0, 1.0).astype(np.float32)
     return lower, upper, weight
-
-
-def decode_yolov8_seg(
-    output: np.ndarray,
-    prototypes: np.ndarray,
-    *,
-    num_classes: int,
-    input_size: tuple[int, int],
-    original_size: tuple[int, int],
-    pad: tuple[int, int],
-    scale: float,
-    conf_threshold: float,
-    iou_threshold: float,
-    max_detections: int,
-    mask_threshold: float = 0.5,
-) -> list[DecodedSegmentation]:
-    """Deprecated alias for :func:`decode_yolo_seg`. Will be removed in 0.3.0.
-
-    Args:
-        output: ``output0`` tensor, see :func:`decode_yolo_seg`.
-        prototypes: ``output1`` tensor, see :func:`decode_yolo_seg`.
-        num_classes: Number of classes the model predicts.
-        input_size: ``(width, height)`` of the model input (post-letterbox).
-        original_size: ``(width, height)`` of the original image.
-        pad: ``(pad_left, pad_top)`` letterbox padding in input-tensor pixels.
-        scale: Letterbox scale factor.
-        conf_threshold: Minimum class score to keep a candidate.
-        iou_threshold: IoU threshold for non-maximum suppression.
-        max_detections: Maximum number of instances to return after NMS.
-        mask_threshold: Probability cutoff applied to soft masks; defaults to ``0.5``.
-
-    Returns:
-        Identical to :func:`decode_yolo_seg` — a list of
-        ``(BoundingBox, class_id, confidence, mask)`` tuples in descending
-        confidence order.
-
-    Raises:
-        ValueError: Forwarded from :func:`decode_yolo_seg` on channel-count
-            mismatch.
-    """
-    warnings.warn(
-        "decode_yolov8_seg is deprecated since 0.2.0; use decode_yolo_seg "
-        "(same behavior, covers v8/v11 seg heads). The alias will be removed in 0.3.0.",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-    return decode_yolo_seg(
-        output,
-        prototypes,
-        num_classes=num_classes,
-        input_size=input_size,
-        original_size=original_size,
-        pad=pad,
-        scale=scale,
-        conf_threshold=conf_threshold,
-        iou_threshold=iou_threshold,
-        max_detections=max_detections,
-        mask_threshold=mask_threshold,
-    )

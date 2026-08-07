@@ -201,35 +201,6 @@ function sigmoid(x: number): number {
   return e / (1 + e);
 }
 
-let _warnedDecodeYoloV8Seg = false;
-
-/** @deprecated since 0.2.0 — use {@link decodeYoloSeg}. Will be removed in 0.4.0. */
-export function decodeYoloV8Seg(
-  perAnchorData: Float32Array,
-  perAnchorDims: readonly number[],
-  prototypeData: Float32Array,
-  prototypeDims: readonly number[],
-  options: DecodeYoloSegOptions,
-): DecodedSegmentation[] {
-  if (!_warnedDecodeYoloV8Seg) {
-    _warnedDecodeYoloV8Seg = true;
-    console.warn(
-      "[@ort-vision-sdk/web] decodeYoloV8Seg is deprecated since 0.2.0; use decodeYoloSeg. " +
-        "The alias will be removed in 0.4.0.",
-    );
-  }
-  return decodeYoloSeg(
-    perAnchorData,
-    perAnchorDims,
-    prototypeData,
-    prototypeDims,
-    options,
-  );
-}
-
-/** @deprecated since 0.2.0 — use {@link DecodeYoloSegOptions}. */
-export type DecodeYoloV8SegOptions = DecodeYoloSegOptions;
-
 function resizeBilinear(
   src: Float32Array,
   srcWidth: number,

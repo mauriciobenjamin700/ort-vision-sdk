@@ -11,69 +11,84 @@
   },
   "results": {
     "letterbox_1080p_to_640": {
-      "median_ms": 6.7995,
-      "min_ms": 6.6357,
-      "max_ms": 7.1386
+      "median_ms": 3.4906,
+      "min_ms": 3.195,
+      "max_ms": 4.4105
+    },
+    "letterbox_4k_to_640": {
+      "median_ms": 10.4459,
+      "min_ms": 9.8105,
+      "max_ms": 12.0976
+    },
+    "letterbox_720p_to_640": {
+      "median_ms": 2.3722,
+      "min_ms": 2.1734,
+      "max_ms": 2.8016
+    },
+    "letterbox_800x600_to_640_no_reduction": {
+      "median_ms": 4.0976,
+      "min_ms": 3.7843,
+      "max_ms": 5.7966
     },
     "to_tensor_640": {
-      "median_ms": 0.4961,
-      "min_ms": 0.464,
-      "max_ms": 0.8884
+      "median_ms": 0.5367,
+      "min_ms": 0.5121,
+      "max_ms": 0.7587
     },
     "preprocess_detector_1080p": {
-      "median_ms": 7.429,
-      "min_ms": 6.8011,
-      "max_ms": 7.8385
+      "median_ms": 4.2772,
+      "min_ms": 3.7997,
+      "max_ms": 5.1583
     },
     "preprocess_detector_640": {
-      "median_ms": 2.0631,
-      "min_ms": 2.0375,
-      "max_ms": 2.5659
+      "median_ms": 2.3603,
+      "min_ms": 2.1997,
+      "max_ms": 2.7043
     },
     "decode_yolo_50_candidates": {
-      "median_ms": 0.8334,
-      "min_ms": 0.801,
-      "max_ms": 1.0741
+      "median_ms": 0.8532,
+      "min_ms": 0.8004,
+      "max_ms": 1.1569
     },
     "decode_yolo_2000_candidates": {
-      "median_ms": 16.9293,
-      "min_ms": 16.0997,
-      "max_ms": 20.2764
+      "median_ms": 19.6137,
+      "min_ms": 18.3745,
+      "max_ms": 22.3913
     },
     "nms_300_boxes": {
-      "median_ms": 2.2042,
-      "min_ms": 2.161,
-      "max_ms": 2.4472
+      "median_ms": 2.4517,
+      "min_ms": 2.2224,
+      "max_ms": 3.3618
     },
     "nms_2000_boxes": {
-      "median_ms": 12.2601,
-      "min_ms": 11.8249,
-      "max_ms": 16.6065
+      "median_ms": 14.0419,
+      "min_ms": 13.0525,
+      "max_ms": 15.6693
     },
     "batched_nms_300_boxes_20_classes": {
-      "median_ms": 2.3806,
-      "min_ms": 2.2881,
-      "max_ms": 2.9236
+      "median_ms": 2.6717,
+      "min_ms": 2.4655,
+      "max_ms": 4.3713
     },
     "batched_nms_2000_boxes_20_classes": {
-      "median_ms": 15.5925,
-      "min_ms": 15.0271,
-      "max_ms": 17.2473
+      "median_ms": 17.427,
+      "min_ms": 16.6163,
+      "max_ms": 22.5651
     },
     "decode_yolo_seg_30_instances": {
-      "median_ms": 23.6627,
-      "min_ms": 22.0191,
-      "max_ms": 26.1949
+      "median_ms": 25.8598,
+      "min_ms": 24.5369,
+      "max_ms": 27.4207
     },
     "softmax_1000_classes": {
-      "median_ms": 0.0051,
-      "min_ms": 0.005,
-      "max_ms": 0.0055
+      "median_ms": 0.0077,
+      "min_ms": 0.0074,
+      "max_ms": 0.0083
     },
     "topk_1000_classes": {
-      "median_ms": 0.0116,
-      "min_ms": 0.0111,
-      "max_ms": 0.0163
+      "median_ms": 0.0253,
+      "min_ms": 0.0197,
+      "max_ms": 0.0456
     }
   }
 }

@@ -51,6 +51,15 @@ Loose on purpose: a microbenchmark on a desktop under normal load swings by
 more than 10% between runs, so a tighter bound would report noise as a finding.
 """
 
+NOISE_FLOOR_MS = 0.1
+"""Median below which a case is reported but never counted as a regression.
+
+``softmax_1000_classes`` runs in roughly 5 microseconds. At that scale a single
+context switch doubles the number, and this harness's first comparison duly
+reported a "+253% REGRESSION" on a function nobody had touched. A case has to be
+slow enough to measure before a percentage about it means anything.
+"""
+
 
 def rng() -> np.random.Generator:
     """A seeded generator, so every case sees byte-identical inputs across runs."""
@@ -134,6 +143,9 @@ def build_cases() -> dict[str, Callable[[], object]]:
         Case name → callable to time.
     """
     hd_image = make_image(1920, 1080)
+    uhd_image = make_image(3840, 2160)
+    hd_ready_image = make_image(1280, 720)
+    small_image = make_image(800, 600)
     square_image = make_image(640, 640)
     letterboxed, _, _ = letterbox(hd_image, INPUT_SIZE)
 
@@ -158,6 +170,9 @@ def build_cases() -> dict[str, Callable[[], object]]:
 
     return {
         "letterbox_1080p_to_640": lambda: letterbox(hd_image, INPUT_SIZE),
+        "letterbox_4k_to_640": lambda: letterbox(uhd_image, INPUT_SIZE),
+        "letterbox_720p_to_640": lambda: letterbox(hd_ready_image, INPUT_SIZE),
+        "letterbox_800x600_to_640_no_reduction": lambda: letterbox(small_image, INPUT_SIZE),
         "to_tensor_640": lambda: to_tensor(letterboxed),
         "preprocess_detector_1080p": lambda: np.ascontiguousarray(
             add_batch_dim(to_tensor(letterbox(hd_image, INPUT_SIZE)[0]))
@@ -276,9 +291,11 @@ def compare(document: dict[str, Any], baseline_path: Path, tolerance: float) -> 
         before = old[name]["median_ms"]
         after = new[name]["median_ms"]
         delta = (after - before) / before if before > 0 else 0.0
-        flag = "  REGRESSION" if delta > tolerance else ""
+        too_fast_to_judge = max(before, after) < NOISE_FLOOR_MS
+        regressed = delta > tolerance and not too_fast_to_judge
+        flag = "  REGRESSION" if regressed else ("  below noise floor" if too_fast_to_judge else "")
         print(f"{name:<{width}}  {before:>9.3f}ms  {after:>9.3f}ms  {delta * 100:>+8.1f}%{flag}")
-        if delta > tolerance:
+        if regressed:
             regressions.append(name)
 
     for name in missing:

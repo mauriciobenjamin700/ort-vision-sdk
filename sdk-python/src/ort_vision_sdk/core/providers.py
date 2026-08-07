@@ -15,14 +15,30 @@ from __future__ import annotations
 from ort_vision_sdk.core.exceptions import ProviderNotAvailableError
 
 _PRIORITY: tuple[str, ...] = (
-    "TensorrtExecutionProvider",
     "CUDAExecutionProvider",
     "CoreMLExecutionProvider",
     "DmlExecutionProvider",
     "OpenVINOExecutionProvider",
     "CPUExecutionProvider",
 )
-"""Default preference order, from most to least accelerated."""
+"""Default preference order, from most to least accelerated.
+
+TensorRT is deliberately absent and has to be asked for by name. Two reasons,
+either of which would be enough on its own:
+
+- ``onnxruntime-gpu`` lists ``TensorrtExecutionProvider`` as available whenever
+  it was *compiled in*, not when it can actually load. On a machine without the
+  TensorRT shared libraries — the common case for that wheel — auto-selecting it
+  made every session print a failed provider registration and a fallback notice
+  to stderr before recovering. Alarming output for a session that was always
+  going to run on CUDA.
+- Where it does load, TensorRT builds an engine on the first run, which can take
+  minutes for a large model. That is not a cost to opt somebody into silently.
+
+``providers=["tensorrt"]`` still selects it, and still raises
+:class:`~ort_vision_sdk.core.exceptions.ProviderNotAvailableError` when the
+installed build does not carry it.
+"""
 
 _ALIASES: dict[str, str] = {
     "cpu": "CPUExecutionProvider",

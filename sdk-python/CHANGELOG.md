@@ -9,6 +9,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A custom model with no baked-in `names` no longer fails to construct.** The
+  fallback for a model that declares no class names was the COCO preset, which
+  names exactly 80 classes — so a 3-class detector raised `Resolved 80 labels
+  but the model has 3 classes` and could not be built at all without passing
+  `labels`. An export without `names` is an ordinary thing to have; the labels
+  now come up as `class_0`, `class_1`, ... and the COCO preset is used only when
+  the model really does have 80 classes. `default_labels` is exported for
+  callers who want the same decision.
+
+- **Automatic provider selection no longer tries TensorRT.** `onnxruntime-gpu`
+  reports `TensorrtExecutionProvider` as available whenever it was compiled in,
+  not when it can load — so on a machine without the TensorRT shared libraries,
+  which is the common case for that wheel, every session printed four lines of
+  failed provider registration and fallback notices to stderr before recovering
+  on CUDA:
+
+  ```text
+  *************** EP Error ***************
+  EP Error ... Please install TensorRT libraries as mentioned in the GPU
+  requirements page ... when using ['TensorrtExecutionProvider', ...]
+  Falling back to ['CUDAExecutionProvider', 'CPUExecutionProvider'] and retrying.
+  ****************************************
+  ```
+
+  TensorRT also builds an engine on first run that can take minutes, which is
+  not a cost to opt somebody into by default. `providers=["tensorrt"]` still
+  selects it, and still raises `ProviderNotAvailableError` when the installed
+  build does not carry it.
+
+### Fixed
+
 - **Instance masks no longer lose precision to a `uint8` round-trip.** Resizing
   a soft mask to its bounding box went through PIL, which cannot resample a
   float array — so the mask was quantized to `uint8` first. That put the input

@@ -26,6 +26,7 @@ export {
   COCO_CLASSES,
   type LabelSpec,
   type ResolveLabelsOptions,
+  defaultLabels,
   resolveLabels,
 } from "./labels.js";
 

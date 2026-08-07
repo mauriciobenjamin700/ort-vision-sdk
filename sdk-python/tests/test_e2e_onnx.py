@@ -181,20 +181,35 @@ class TestDetectorEndToEnd:
         np.testing.assert_array_equal(actual.boxes.cls, expected.boxes.cls)
         np.testing.assert_allclose(actual.boxes.conf, expected.boxes.conf)
 
-    def test_without_baked_names_requires_explicit_labels(self) -> None:
-        """A 3-class model carrying no ``names`` cannot fall back to COCO.
+    def test_without_baked_names_generates_placeholder_labels(self) -> None:
+        """A 3-class model carrying no ``names`` is constructible.
 
-        Pins today's behaviour: the documented fallback is the 80-class COCO
-        preset, which cannot describe a 3-class head, so construction fails
-        instead of mislabelling. Passing ``labels`` is the way through.
+        The COCO preset names exactly 80 classes, so falling back to it for a
+        3-class head used to raise ``Resolved 80 labels but the model has 3
+        classes`` and the detector could not be built at all. A custom export
+        without baked-in names is an ordinary thing to have; it comes up as
+        ``class_N`` now.
         """
         model = MODELS / "tiny_detector_no_metadata.onnx"
 
-        with pytest.raises(LabelMapError, match="Resolved 80 labels"):
-            Detector(model, providers=CPU)
+        detector = Detector(model, providers=CPU)
 
-        explicit = Detector(model, providers=CPU, labels=["a", "b", "c"])
-        assert explicit.labels == ("a", "b", "c")
+        assert detector.labels == ("class_0", "class_1", "class_2")
+        assert detector.predict(np.zeros((64, 64, 3), dtype=np.uint8))[0][0].class_name == "class_0"
+
+    def test_explicit_labels_still_win_over_the_placeholder(self) -> None:
+        model = MODELS / "tiny_detector_no_metadata.onnx"
+
+        detector = Detector(model, providers=CPU, labels=["a", "b", "c"])
+
+        assert detector.labels == ("a", "b", "c")
+
+    def test_wrong_label_count_is_still_rejected(self) -> None:
+        """The fallback is permissive; an explicit mismatch stays an error."""
+        model = MODELS / "tiny_detector_no_metadata.onnx"
+
+        with pytest.raises(LabelMapError, match="Resolved 2 labels"):
+            Detector(model, providers=CPU, labels=["a", "b"])
 
     def test_session_metadata_exposes_export_fields(self, detector: Detector) -> None:
         metadata = detector.session.metadata

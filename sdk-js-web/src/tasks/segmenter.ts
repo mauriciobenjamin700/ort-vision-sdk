@@ -16,12 +16,8 @@ import { detectionNumClasses, resolveInputSize } from "../core/graph.js";
 import { modelNames } from "../core/metadata.js";
 import { type LabelSpec, resolveLabels } from "../labels.js";
 import { decodeYoloSeg } from "../postprocess/segmentation.js";
-import {
-  letterbox,
-  toCHW,
-  toFloat32,
-  toFloat32Tensor,
-} from "../preprocess/image.js";
+import { toFloat32Tensor } from "../preprocess/image.js";
+import { LetterboxPipeline, zeroTensorData } from "../preprocess/pipeline.js";
 import { Boxes, Masks, SegmentationResults } from "../results.js";
 import { VisionTask } from "./base.js";
 import {
@@ -121,6 +117,42 @@ export class Segmenter extends VisionTask {
     super(session);
   }
 
+  private _pipelineCache: LetterboxPipeline | null = null;
+
+  /**
+   * Run the model once on a zero-filled tensor, paying one-time costs up front.
+   *
+   * The first inference of a session is not representative: WebGPU compiles its
+   * shaders on it and the WASM backend faults in its arenas, which on a phone
+   * can turn the first frame into seconds while every later frame is tens of
+   * milliseconds. Calling this while a loading spinner is still up moves that
+   * cost somewhere the user is already waiting.
+   *
+   * @param runs How many warm-up inferences to run. One is enough for WASM;
+   *   WebGPU sometimes settles on the second.
+   */
+  async warmup(runs: number = 1): Promise<void> {
+    const [tw, th] = this._inputSize;
+    for (let i = 0; i < runs; i++) {
+      const tensor = toFloat32Tensor(zeroTensorData(tw, th), [1, 3, th, tw]);
+      await this._session.run({ [this._session.inputName]: tensor });
+    }
+  }
+
+  /**
+   * The fused preprocessing pipeline, built on first use.
+   *
+   * Lazily, because constructing it allocates canvases: a task built in an
+   * environment without a canvas implementation stays constructible, and only
+   * fails if it is actually asked to preprocess something.
+   */
+  private get _pipeline(): LetterboxPipeline {
+    if (this._pipelineCache === null) {
+      this._pipelineCache = new LetterboxPipeline(this._inputSize[0], this._inputSize[1]);
+    }
+    return this._pipelineCache;
+  }
+
   /** Load the model and resolve labels. */
   static async create(
     model: ModelSource,
@@ -206,6 +238,7 @@ export class Segmenter extends VisionTask {
     const { tensor, scale, padLeft, padTop } = this._preprocess(original);
     timer.stage("preprocess");
     const outputs = await this._session.run({ [this._session.inputName]: tensor });
+    this._pipeline.release();
     timer.stage("inference");
 
     const { perAnchor, prototypes } = this._splitOutputs(outputs);
@@ -268,14 +301,12 @@ export class Segmenter extends VisionTask {
     padTop: number;
   } {
     const [tw, th] = this._inputSize;
-    const lb = letterbox(image, tw, th);
-    const f32 = toFloat32(lb.image);
-    const chw = toCHW(f32, lb.image.width, lb.image.height, 3);
+    const fused = this._pipeline.run(image);
     return {
-      tensor: toFloat32Tensor(chw, [1, 3, lb.image.height, lb.image.width]),
-      scale: lb.scale,
-      padLeft: lb.padLeft,
-      padTop: lb.padTop,
+      tensor: toFloat32Tensor(fused.data, [1, 3, th, tw]),
+      scale: fused.scale,
+      padLeft: fused.padLeft,
+      padTop: fused.padTop,
     };
   }
 

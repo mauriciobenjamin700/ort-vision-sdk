@@ -73,6 +73,13 @@ export {
 } from "./preprocess/image.js";
 
 export {
+  type FusedLetterboxResult,
+  LetterboxPipeline,
+  letterboxToTensorData,
+  zeroTensorData,
+} from "./preprocess/pipeline.js";
+
+export {
   type TopKResult,
   softmax,
   topK,

@@ -65,7 +65,10 @@ clf = Classifier("model.onnx", labels=None)
 ## Execution providers
 
 Por padrão o SDK escolhe o primeiro provider disponível na ordem de preferência
-do ORT. Para fixar um backend específico, passe `providers=` com aliases curtos
+do ORT — CUDA, CoreML, DirectML, OpenVINO, CPU. **TensorRT fica de fora do
+automático** e precisa ser pedido pelo nome: o wheel `onnxruntime-gpu` o lista
+como disponível mesmo sem as bibliotecas do TensorRT instaladas, e ele constrói
+um engine no primeiro run que pode levar minutos. Para fixar um backend específico, passe `providers=` com aliases curtos
 ou nomes canônicos do ORT:
 
 ```python

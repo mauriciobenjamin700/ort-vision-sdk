@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **A custom model with no baked-in `names` no longer fails to create.** Same
+  defect as the Python SDK: the fallback was the 80-name COCO preset, so a
+  3-class detector threw `Resolved 80 labels but the model has 3 classes`.
+  Labels now come up as `class_0`, `class_1`, ..., and the COCO preset applies
+  only when the model really does have 80 classes. `defaultLabels` is exported.
+
+- **A model URL that cannot be fetched for its metadata now says so.** The
+  fallback — hand the URL to ORT and let it load the model itself — is right,
+  but it was silent, and the symptom it produces is remote from the cause:
+  class names come back as `class_0`, `class_1`, ... with nothing explaining
+  why. It warns now, and names `labels` as the way out.
+
 ### Added
 
 - **`warmup()` on `Detector` and `Segmenter`.** The first inference of a session

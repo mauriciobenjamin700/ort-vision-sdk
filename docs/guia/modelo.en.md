@@ -115,8 +115,8 @@ det = Detector("detect.onnx", labels=["mucosa"])
 # 2) No labels: the model's `names`
 det = Detector("detect.onnx")
 
-# 3) Model without `names`: the COCO preset (detection/segmentation)
-#    or "class_0", "class_1", ... (classification)
+# 3) Model without `names`: "class_0", "class_1", ...
+#    (the COCO preset only applies when the model really has 80 classes)
 ```
 
 !!! note "Safe parsing"
@@ -171,8 +171,8 @@ model_names({"names": "{0: 'deworm', 1: 'not_deworm'}"})
   ignored — ORT would reject it anyway.
 - `task.input_size` tells you what inference actually used.
 - With no `labels`, names come from the model metadata (Ultralytics' `names`),
-  falling back to COCO (detection/segmentation) or `class_<id>`
-  (classification).
+  falling back to `class_<id>` when the model carries none — or to the COCO
+  preset when the model really does have 80 classes.
 - `session.metadata`, `session.input_shape` and the `spatial_input_size` /
   `resolve_input_size` / `model_names` helpers are public.
 

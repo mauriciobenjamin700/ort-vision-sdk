@@ -14,7 +14,7 @@ import { SpeedTimer } from "../core/timing.js";
 import { type ImageInput, loadImage } from "../io/image.js";
 import { detectionNumClasses, resolveInputSize } from "../core/graph.js";
 import { modelNames } from "../core/metadata.js";
-import { type LabelSpec, resolveLabels } from "../labels.js";
+import { type LabelSpec, defaultLabels, resolveLabels } from "../labels.js";
 import { decodeYoloSeg } from "../postprocess/segmentation.js";
 import { toFloat32Tensor } from "../preprocess/image.js";
 import { LetterboxPipeline, zeroTensorData } from "../preprocess/pipeline.js";
@@ -163,9 +163,12 @@ export class Segmenter extends VisionTask {
       throw new Error(`Unsupported segmenter head '${head}'. Supported: 'yolo-seg'.`);
     }
     const session = await OrtSession.create(model, options);
-    const labels = resolveLabels(options.labels ?? modelNames(session.metadata) ?? "coco", {
-      numClasses: options.numClasses ?? detectionNumClasses(session.outputShape) ?? undefined,
-    });
+    const numClasses =
+      options.numClasses ?? detectionNumClasses(session.outputShape) ?? undefined;
+    const labels = resolveLabels(
+      options.labels ?? modelNames(session.metadata) ?? defaultLabels(numClasses),
+      { numClasses },
+    );
     const names: Record<number, string> = {};
     for (let i = 0; i < labels.length; i++) {
       names[i] = labels[i] as string;

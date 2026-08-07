@@ -62,6 +62,28 @@ export interface ResolveLabelsOptions {
  * @throws {@link LabelMapError} if the spec is invalid, the preset is unknown,
  *   or the resolved length disagrees with `numClasses`.
  */
+/**
+ * Pick the fallback label spec for a model that declares no class names.
+ *
+ * The COCO preset is the right default for a stock YOLO export and an
+ * impossible one for anything else: it names exactly 80 classes, so handing it
+ * to a 3-class head makes {@link resolveLabels} throw `Resolved 80 labels but
+ * the model has 3 classes` and the task cannot be created at all. A custom
+ * model without baked-in `names` is an ordinary thing to have — it should come
+ * up as `class_0`, `class_1`, ..., not as a failure.
+ *
+ * @param numClasses Classes the model predicts, or `undefined` when the output
+ *   shape does not say.
+ * @returns `"coco"` when the preset can describe the model, otherwise `null`,
+ *   which makes {@link resolveLabels} generate `class_N` names.
+ */
+export function defaultLabels(numClasses: number | undefined): LabelSpec {
+  if (numClasses === undefined || numClasses === COCO_CLASSES.length) {
+    return "coco";
+  }
+  return null;
+}
+
 export function resolveLabels(
   spec: LabelSpec,
   options: ResolveLabelsOptions = {},

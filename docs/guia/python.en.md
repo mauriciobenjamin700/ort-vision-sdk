@@ -63,7 +63,11 @@ Ultralytics' `model.names`).
 
 ## Execution providers
 
-By default the SDK picks the first available provider in ORT's preference order.
+By default the SDK picks the first available provider in ORT's preference order
+— CUDA, CoreML, DirectML, OpenVINO, CPU. **TensorRT is left out of the automatic
+order** and has to be asked for by name: the `onnxruntime-gpu` wheel reports it
+as available even without the TensorRT libraries installed, and it builds an
+engine on first run that can take minutes.
 To pin a specific backend, pass `providers=` with short aliases or canonical ORT
 names:
 

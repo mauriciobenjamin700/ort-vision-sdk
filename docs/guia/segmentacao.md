@@ -76,6 +76,21 @@ Por instância, a máscara é recortada na bounding box:
 - **Web:** `inst.mask` é um objeto `Mask` (`data`/`width`/`height`,
   layout row-major), e `inst.segmentedImage` é um `RGBImage`.
 
+!!! check "Python e Web produzem a mesma máscara"
+    Os dois SDKs seguem o mesmo algoritmo: combinam os protótipos, aplicam
+    sigmoid, reamostram para a bounding box com bilinear de meio-pixel e
+    binarizam no mesmo corte. Fixtures compartilhadas em `fixtures/parity/`
+    verificam isso nos dois lados, comparando os bitmaps pixel a pixel — então
+    se você roda o mesmo modelo no backend e no browser, as máscaras batem.
+
+!!! warning "Máscaras geradas até a 0.6.0 diferem na borda"
+    Até a 0.6.0 o lado Python reamostrava a máscara passando por `uint8`, o que
+    colocava a entrada do teste `>= 0.5` numa grade de passos de `1/255` e
+    deslocava pixels de borda sem motivo. Se você tem máscaras salvas de uma
+    versão anterior, espere diferenças de alguns pixels na borda — as novas são
+    as corretas (conferem 100% com uma referência em `float64`; as antigas,
+    99,7%).
+
 ## Veja também
 
 - [Guia de detecção](deteccao.md) — a mesma visão `Boxes` e o mesmo fluxo.

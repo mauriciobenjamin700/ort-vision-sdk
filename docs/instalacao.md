@@ -6,7 +6,7 @@ backend Python e o frontend no navegador.
 
 ## Python (PyPI)
 
-Requer **Python 3.10+**.
+Requer **Python 3.11+**.
 
 ```bash
 pip install ort-vision-sdk            # somente CPU (padrão)

@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+
+- **`decodeYoloV8`, `decodeYoloV8Anchors`, `decodeYoloV8Seg` and the
+  `DecodeYoloV8*Options` type aliases are gone.** Deprecated in 0.2.0 with
+  "will be removed in 0.4.0", and still shipping at 0.5.1. Use `decodeYolo`,
+  `decodeYoloAnchors`, `decodeYoloSeg` and their `DecodeYolo*Options` types:
+  same functions, honest names, since the decoder covers every anchor-free YOLO
+  head from v8 through v12.
+
+  `test/deprecations.test.ts` now guards the removal rather than the
+  deprecation, so a re-add fails loudly.
+
 ### Fixed
 
 - **A custom model with no baked-in `names` no longer fails to create.** Same

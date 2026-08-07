@@ -89,24 +89,18 @@ export {
 export {
   type DecodeYoloAnchorsOptions,
   type DecodeYoloOptions,
-  type DecodeYoloV8AnchorsOptions,
-  type DecodeYoloV8Options,
   type DecodedAnchors,
   type DecodedDetection,
   batchedNms,
   decodeYolo,
   decodeYoloAnchors,
-  decodeYoloV8,
-  decodeYoloV8Anchors,
   nms,
 } from "./postprocess/detection.js";
 
 export {
   type DecodeYoloSegOptions,
-  type DecodeYoloV8SegOptions,
   type DecodedSegmentation,
   decodeYoloSeg,
-  decodeYoloV8Seg,
 } from "./postprocess/segmentation.js";
 
 export { VisionTask } from "./tasks/base.js";

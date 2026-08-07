@@ -58,7 +58,7 @@ pip install "ort-vision-sdk[opencv]"   # adds OpenCV image backend
 pip install "ort-vision-sdk[dev]"      # ruff, mypy, pytest, build, twine
 ```
 
-Requires Python **3.10+**.
+Requires Python **3.11+**.
 
 ---
 

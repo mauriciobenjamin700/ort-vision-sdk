@@ -11,84 +11,89 @@
   },
   "results": {
     "letterbox_1080p_to_640": {
-      "median_ms": 3.4906,
-      "min_ms": 3.195,
-      "max_ms": 4.4105
+      "median_ms": 3.6866,
+      "min_ms": 3.4235,
+      "max_ms": 4.8695
     },
     "letterbox_4k_to_640": {
-      "median_ms": 10.4459,
-      "min_ms": 9.8105,
-      "max_ms": 12.0976
+      "median_ms": 10.7173,
+      "min_ms": 10.2506,
+      "max_ms": 14.3477
     },
     "letterbox_720p_to_640": {
-      "median_ms": 2.3722,
-      "min_ms": 2.1734,
-      "max_ms": 2.8016
+      "median_ms": 2.5205,
+      "min_ms": 2.3324,
+      "max_ms": 2.9247
     },
     "letterbox_800x600_to_640_no_reduction": {
-      "median_ms": 4.0976,
-      "min_ms": 3.7843,
-      "max_ms": 5.7966
+      "median_ms": 4.0711,
+      "min_ms": 3.9062,
+      "max_ms": 4.9449
     },
     "to_tensor_640": {
-      "median_ms": 0.5367,
-      "min_ms": 0.5121,
-      "max_ms": 0.7587
+      "median_ms": 0.5501,
+      "min_ms": 0.5222,
+      "max_ms": 0.816
     },
     "preprocess_detector_1080p": {
-      "median_ms": 4.2772,
-      "min_ms": 3.7997,
-      "max_ms": 5.1583
+      "median_ms": 4.3805,
+      "min_ms": 4.0824,
+      "max_ms": 5.3057
     },
     "preprocess_detector_640": {
-      "median_ms": 2.3603,
-      "min_ms": 2.1997,
-      "max_ms": 2.7043
+      "median_ms": 2.6085,
+      "min_ms": 2.3833,
+      "max_ms": 3.0049
+    },
+    "decode_yolo_no_candidates": {
+      "median_ms": 0.0646,
+      "min_ms": 0.0596,
+      "max_ms": 0.1203
     },
     "decode_yolo_50_candidates": {
-      "median_ms": 0.8532,
-      "min_ms": 0.8004,
-      "max_ms": 1.1569
+      "median_ms": 0.4874,
+      "min_ms": 0.4497,
+      "max_ms": 0.8053
     },
     "decode_yolo_2000_candidates": {
-      "median_ms": 19.6137,
-      "min_ms": 18.3745,
-      "max_ms": 22.3913
+      "median_ms": 20.5536,
+      "min_ms": 18.51,
+      "max_ms": 23.1046
     },
     "nms_300_boxes": {
-      "median_ms": 2.4517,
-      "min_ms": 2.2224,
-      "max_ms": 3.3618
+      "median_ms": 2.6335,
+      "min_ms": 2.2371,
+      "max_ms": 3.9686
     },
     "nms_2000_boxes": {
-      "median_ms": 14.0419,
-      "min_ms": 13.0525,
-      "max_ms": 15.6693
+      "median_ms": 14.2411,
+      "min_ms": 13.2697,
+      "max_ms": 16.085
     },
     "batched_nms_300_boxes_20_classes": {
-      "median_ms": 2.6717,
-      "min_ms": 2.4655,
-      "max_ms": 4.3713
+      "median_ms": 2.7545,
+      "min_ms": 2.4652,
+      "max_ms": 3.9795
     },
     "batched_nms_2000_boxes_20_classes": {
-      "median_ms": 17.427,
-      "min_ms": 16.6163,
-      "max_ms": 22.5651
+      "median_ms": 17.9855,
+      "min_ms": 17.0528,
+      "max_ms": 22.6645
     },
     "decode_yolo_seg_30_instances": {
-      "median_ms": 25.8598,
-      "min_ms": 24.5369,
-      "max_ms": 27.4207
+      "median_ms": 25.6179,
+      "min_ms": 24.829,
+      "max_ms": 26.7051
     },
     "softmax_1000_classes": {
-      "median_ms": 0.0077,
-      "min_ms": 0.0074,
-      "max_ms": 0.0083
+      "median_ms": 0.0054,
+      "min_ms": 0.0052,
+      "max_ms": 0.1232
     },
     "topk_1000_classes": {
-      "median_ms": 0.0253,
-      "min_ms": 0.0197,
-      "max_ms": 0.0456
+      "median_ms": 0.0145,
+      "min_ms": 0.0122,
+      "max_ms": 0.0625
     }
   }
 }

@@ -149,6 +149,7 @@ def build_cases() -> dict[str, Callable[[], object]]:
     square_image = make_image(640, 640)
     letterboxed, _, _ = letterbox(hd_image, INPUT_SIZE)
 
+    empty_output = make_detection_output(1)
     sparse_output = make_detection_output(50)
     dense_output = make_detection_output(2000)
     seg_output, seg_prototypes = make_segmentation_outputs(30)
@@ -179,6 +180,9 @@ def build_cases() -> dict[str, Callable[[], object]]:
         ),
         "preprocess_detector_640": lambda: np.ascontiguousarray(
             add_batch_dim(to_tensor(letterbox(square_image, INPUT_SIZE)[0]))
+        ),
+        "decode_yolo_no_candidates": lambda: decode_yolo(
+            empty_output, **{**decode_kwargs, "conf_threshold": 0.95}
         ),
         "decode_yolo_50_candidates": lambda: decode_yolo(sparse_output, **decode_kwargs),
         "decode_yolo_2000_candidates": lambda: decode_yolo(dense_output, **decode_kwargs),

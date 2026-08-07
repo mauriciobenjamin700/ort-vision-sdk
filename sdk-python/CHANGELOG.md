@@ -42,6 +42,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **`decode_yolo` is up to 8x faster on frames with few or no detections.** The
+  decoder transposed the model's `(channels, anchors)` output to
+  `(anchors, channels)` before reducing, which made every reduction walk a
+  column with a stride of `num_anchors` — a cache line fetched per element. It
+  now reduces over the channel axis in the model's own layout, reading
+  contiguous rows, and asks `argmax` which class won only for the anchors that
+  passed the confidence threshold instead of for all 8400.
+
+  | Candidates above threshold | Before | After | Speedup |
+  | --- | --- | --- | --- |
+  | none | 0.52 ms | 0.06 ms | 8.10x |
+  | 50 | 0.87 ms | 0.47 ms | 1.84x |
+  | 500 | 5.63 ms | 5.15 ms | 1.09x |
+  | 2000 | 19.52 ms | 19.22 ms | 1.02x |
+
+  The gain lands where the decode itself is the cost, which is the ordinary
+  case: a frame with nothing in it, or with a handful of objects. Once hundreds
+  of candidates survive, NMS dominates and this changes little.
+
+  Output is unchanged — the parity fixtures are what says so, rather than an
+  argument about equivalence.
+
 - **Downscaling by 2x or more runs in two steps, roughly halving `preprocess`.**
   `resize` now applies an integer box reduction (`PIL.Image.reduce`) before
   resampling onto the exact target — the optimization PIL exposes as

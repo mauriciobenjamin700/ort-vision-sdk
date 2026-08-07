@@ -7,6 +7,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`warmup()` on `Detector` and `Segmenter`.** The first inference of a session
+  is not representative: WebGPU compiles its shaders on it and the WASM backend
+  faults in its arenas, so on a phone the first frame can take seconds while
+  every later frame takes tens of milliseconds. `await det.warmup()` runs the
+  model once on a zero tensor, moving that cost to wherever the user is already
+  watching a spinner.
+
+- **`LetterboxPipeline`, exported.** The fused preprocessing path the tasks now
+  take, available to a custom pipeline that wants the same allocation-free
+  behaviour. `letterboxToTensorData` is the one-shot form.
+
+### Changed
+
+- **Preprocessing is ~2x faster and allocates nothing per frame.** Chaining the
+  composable primitives cost eleven full-buffer passes and six large allocations
+  per frame: `getImageData` → RGBA→RGB → RGB→RGBA → `putImageData` →
+  `drawImage` → `getImageData` → RGBA→RGB → fill → row copies → `toFloat32` →
+  `toCHW`. The tasks now go through `LetterboxPipeline`, which collapses the
+  second half into one `drawImage` — resizing *and* positioning the content
+  inside the padded target in a single accelerated operation — plus one loop
+  that reads the resulting RGBA and writes planar float32 straight into a buffer
+  reused across frames.
+
+  Measured in Chromium, median of 31 runs, letterboxing into 640x640:
+
+  | Source | Before | After | Speedup |
+  | --- | --- | --- | --- |
+  | 1920x1080 | 19.8 ms | 10.7 ms | 1.85x |
+  | 1280x720 | 13.8 ms | 7.8 ms | 1.77x |
+  | 640x480 | 6.8 ms | 3.1 ms | 2.19x |
+
+  **The output is bit-identical**, verified in a real browser against the
+  primitive-chained path across four source sizes — maximum difference 0.
+
+  The primitives are unchanged and still exported: they are what makes a custom
+  pipeline writable. Only the path the built-in tasks take has changed.
+
+- **The preprocessing canvas is created with `willReadFrequently`.** It is read
+  back with `getImageData` on every frame, which is what the hint exists for.
+  Measured effect on speed in Chromium: none beyond noise. What it removes is
+  the `Canvas2D: Multiple readback operations using getImageData are faster with
+  the willReadFrequently attribute set to true` warning the browser was printing
+  into every consumer's console, once per frame.
+
 ### Fixed
 
 - **Score ties in `nms` and `batchedNms` break by index explicitly.** Both

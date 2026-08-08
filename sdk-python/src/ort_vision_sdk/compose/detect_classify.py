@@ -41,7 +41,7 @@ from ort_vision_sdk.fusion import (
     FusionSpec,
 )
 from ort_vision_sdk.graph import model_names
-from ort_vision_sdk.labels import LabelSpec, resolve_labels
+from ort_vision_sdk.labels import LabelSpec, default_labels, resolve_labels
 from ort_vision_sdk.preprocess.image import IMAGENET_MEAN, IMAGENET_STD
 
 __all__ = ["fuse_detect_classify"]
@@ -440,13 +440,25 @@ def _stage_names(
             or file-loaded map.
 
     Returns:
-        dict[int, str] | None: Class id → name, or ``None`` when the caller
-        passed nothing and the model carries no usable ``names``. ``None`` is
-        not a failure: the runtime falls back to the same defaults a standalone
-        task would (COCO for detection, generated ``class_N`` otherwise).
+        dict[int, str] | None: Class id → name, or ``None`` only when neither the
+        caller, the model, nor the graph's own class count can produce one.
+
+        A fused pipeline is read back by a runtime that cannot see either stage's
+        head — both are buried inside the merged graph — so it cannot count the
+        classes for itself the way a standalone task does. Whatever is knowable
+        has to be resolved here, at fusion time, and written down. That is why an
+        unnamed model still gets a recorded map rather than a ``None``: with the
+        count in hand, :func:`~ort_vision_sdk.labels.default_labels` picks COCO
+        for a genuine 80-class head and generated ``class_N`` names for anything
+        else — the same decision a standalone task makes, made once, up front.
     """
     if spec is None:
-        return model_names({entry.key: entry.value for entry in model.metadata_props})
+        recorded = model_names({entry.key: entry.value for entry in model.metadata_props})
+        if recorded is not None:
+            return recorded
+        if num_classes is None:
+            return None
+        spec = default_labels(num_classes)
     labels = resolve_labels(spec, num_classes=num_classes)
     return dict(enumerate(labels))
 

@@ -24,7 +24,9 @@ import { BoundingBox } from "../types.js";
  * @param boxes Flat array of length `4 * N` in xyxy order: `[x1,y1,x2,y2, ...]`.
  * @param scores Detection score per box, length `N`.
  * @param iouThreshold Boxes with IoU above this threshold relative to a kept box are suppressed.
- * @returns Indices of kept boxes, in descending score order.
+ * @returns Indices of kept boxes, in descending score order. Boxes tied on
+ *   score are visited lowest-index first, so the survivor of a tie is
+ *   deterministic and matches both `torchvision` and the Python SDK.
  */
 export function nms(
   boxes: Float32Array,
@@ -45,7 +47,7 @@ export function nms(
 
   const order = new Array<number>(n);
   for (let i = 0; i < n; i++) order[i] = i;
-  order.sort((a, b) => (scores[b] as number) - (scores[a] as number));
+  order.sort((a, b) => (scores[b] as number) - (scores[a] as number) || a - b);
 
   const suppressed = new Uint8Array(n);
   const keep: number[] = [];
@@ -96,6 +98,11 @@ export function nms(
  * @param idxs Class index per box, length `N`. Boxes with different `idxs`
  *   never suppress each other.
  * @param iouThreshold IoU threshold for suppression within a class.
+ * @returns Indices of kept boxes, sorted by descending score across all
+ *   classes. Survivors from different classes that are tied on score are
+ *   ordered lowest-index first — an explicit tie-break, because the order the
+ *   per-class loop emits them in is an implementation detail (here, `Map`
+ *   insertion order; in Python, sorted class order).
  */
 export function batchedNms(
   boxes: Float32Array,
@@ -132,7 +139,7 @@ export function batchedNms(
     }
   }
 
-  keep.sort((a, b) => (scores[b] as number) - (scores[a] as number));
+  keep.sort((a, b) => (scores[b] as number) - (scores[a] as number) || a - b);
   return Int32Array.from(keep);
 }
 
@@ -366,49 +373,3 @@ export function decodeYolo(
   }
   return results;
 }
-
-let _warnedDecodeYoloV8 = false;
-let _warnedDecodeYoloV8Anchors = false;
-
-/**
- * @deprecated since 0.2.0 — use {@link decodeYolo}. Same behavior; the
- * decoder covers v8/v9/v10/v11/v12 detect heads. Will be removed in 0.4.0.
- */
-export function decodeYoloV8(
-  output: Float32Array,
-  outputDims: readonly number[],
-  options: DecodeYoloOptions,
-): DecodedDetection[] {
-  if (!_warnedDecodeYoloV8) {
-    _warnedDecodeYoloV8 = true;
-    console.warn(
-      "[@ort-vision-sdk/web] decodeYoloV8 is deprecated since 0.2.0; use decodeYolo. " +
-        "The alias will be removed in 0.4.0.",
-    );
-  }
-  return decodeYolo(output, outputDims, options);
-}
-
-/**
- * @deprecated since 0.2.0 — use {@link decodeYoloAnchors}. Will be removed in 0.4.0.
- */
-export function decodeYoloV8Anchors(
-  data: Float32Array,
-  dims: readonly number[],
-  options: DecodeYoloAnchorsOptions,
-): DecodedAnchors {
-  if (!_warnedDecodeYoloV8Anchors) {
-    _warnedDecodeYoloV8Anchors = true;
-    console.warn(
-      "[@ort-vision-sdk/web] decodeYoloV8Anchors is deprecated since 0.2.0; use decodeYoloAnchors. " +
-        "The alias will be removed in 0.4.0.",
-    );
-  }
-  return decodeYoloAnchors(data, dims, options);
-}
-
-/** @deprecated since 0.2.0 — use {@link DecodeYoloAnchorsOptions}. */
-export type DecodeYoloV8AnchorsOptions = DecodeYoloAnchorsOptions;
-
-/** @deprecated since 0.2.0 — use {@link DecodeYoloOptions}. */
-export type DecodeYoloV8Options = DecodeYoloOptions;

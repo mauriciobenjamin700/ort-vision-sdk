@@ -12,7 +12,7 @@ from ort_vision_sdk.core.backend import read_metadata
 from ort_vision_sdk.core.timing import SpeedTimer
 from ort_vision_sdk.graph import model_names, resolve_input_size
 from ort_vision_sdk.io.image import ImageInput, load_image
-from ort_vision_sdk.labels import LabelSpec, resolve_labels
+from ort_vision_sdk.labels import LabelSpec, default_labels, resolve_labels
 from ort_vision_sdk.postprocess.detection import decode_yolo
 from ort_vision_sdk.preprocess.image import add_batch_dim, letterbox, to_tensor
 from ort_vision_sdk.results import Boxes, DetectionResults
@@ -133,7 +133,9 @@ class Detector(VisionTask):
 
         num_classes = self._infer_num_classes()
         spec: LabelSpec = (
-            labels if labels is not None else model_names(read_metadata(self._session)) or "coco"
+            labels
+            if labels is not None
+            else model_names(read_metadata(self._session)) or default_labels(num_classes)
         )
         self._labels: tuple[str, ...] = resolve_labels(spec, num_classes=num_classes)
         self._names: dict[int, str] = {i: name for i, name in enumerate(self._labels)}

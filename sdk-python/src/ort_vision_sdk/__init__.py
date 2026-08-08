@@ -9,7 +9,7 @@ from ort_vision_sdk.core import (
 from ort_vision_sdk.fusion import CropSource, FusionSpec
 from ort_vision_sdk.graph import model_names, parse_names, resolve_input_size, spatial_input_size
 from ort_vision_sdk.io import ImageInput, load_image
-from ort_vision_sdk.labels import COCO_CLASSES, LabelSpec, resolve_labels
+from ort_vision_sdk.labels import COCO_CLASSES, LabelSpec, default_labels, resolve_labels
 from ort_vision_sdk.results import (
     Boxes,
     ClassificationResults,
@@ -69,6 +69,7 @@ __all__: list[str] = [
     "SegmenterHead",
     "VisionTask",
     "__version__",
+    "default_labels",
     "load_image",
     "model_names",
     "parse_names",

@@ -58,6 +58,14 @@ models/
 assets/
 data/
 
+# ...except the tiny synthetic models the end-to-end tests load. A few KB in
+# total, they are what lets the suite exercise a real onnxruntime session with
+# no download, and scripts/gen_test_models.py regenerates them. The directory
+# has to be un-ignored before the files inside it can be: git does not descend
+# into an excluded directory.
+!tests/fixtures/models/
+!tests/fixtures/models/*.onnx
+
 # Local env
 .env
 .env.local

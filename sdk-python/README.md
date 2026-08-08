@@ -60,7 +60,7 @@ pip install "ort-vision-sdk[compose]"  # adds onnx, to fuse models into one pipe
 pip install "ort-vision-sdk[dev]"      # ruff, mypy, pytest, build, twine
 ```
 
-Requires Python **3.10+**.
+Requires Python **3.11+**.
 
 ---
 

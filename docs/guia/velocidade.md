@@ -59,6 +59,19 @@ primeira chamada com cache frio, `load` costuma ser a maior fatia de todas.
     modelo e subir a sessão ORT acontece antes, uma única vez, e não aparece
     no `speed`.
 
+!!! tip "No Python, `preprocess` encolhe quando a imagem é bem maior que a entrada"
+    Uma redução de 2x ou mais roda em dois passos: primeiro uma redução inteira
+    por média de bloco, e só então a reamostragem para o tamanho exato.
+    Letterbox de 1920x1080 para 640x640 caiu de 7,8 ms para 3,5 ms; de 4K, de
+    29,8 ms para 10,5 ms. Abaixo de 2x nada muda — nem o custo, nem os pixels.
+
+    Onde a redução se aplica, os pixels entregues ao modelo **mudam**, e
+    portanto as detecções também. Não é qualidade trocada por velocidade, mas
+    também não é qualidade ganha: contra uma referência LANCZOS, a média de
+    bloco vence em conteúdo fotográfico e perde quando o período do conteúdo
+    ressoa com o fator de redução — listras de 2 px a cada 6 linhas, reduzidas
+    por 3, são o pior caso. Em seis tipos de conteúdo o placar ficou 3 a 3.
+
 ## Lendo o resultado
 
 ```python

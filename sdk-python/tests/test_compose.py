@@ -378,6 +378,27 @@ class TestMetadata:
         assert spec is not None
         assert spec.apply_softmax is True
 
+    def test_names_an_unnamed_stage_from_its_own_class_count(self, tmp_path: Path) -> None:
+        """A fused file must carry names even when neither model declares any.
+
+        The runtime cannot count either stage's classes — both heads are buried
+        inside the merged graph — so a `None` recorded here becomes a fallback
+        with no count behind it, which is the COCO preset. For a 2-class
+        detector that silently mislabels every prediction.
+        """
+        detector = tmp_path / "det.onnx"
+        _write_detector(detector)
+        stripped = onnx.load(str(detector))
+        del stripped.metadata_props[:]
+        onnx.save(stripped, str(detector))
+        classifier = _write_classifier(tmp_path / "clf.onnx")
+
+        model = fuse_detect_classify(detector, classifier, tmp_path / "fused.onnx")
+        spec = FusionSpec.from_metadata({e.key: e.value for e in model.metadata_props})
+
+        assert spec is not None
+        assert spec.detector_names == {0: "class_0", 1: "class_1"}
+
     def test_records_explicit_labels_over_the_model_metadata(
         self, models: tuple[Path, Path], tmp_path: Path
     ) -> None:

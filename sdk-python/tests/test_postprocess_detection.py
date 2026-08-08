@@ -6,6 +6,8 @@ and the high-level ``decode_yolo`` wrapper.
 
 from __future__ import annotations
 
+import warnings
+
 import numpy as np
 import pytest
 
@@ -37,6 +39,30 @@ class TestNms:
         keep = nms(boxes, scores, iou_threshold=0.5)
         # Both kept, ordered by descending score.
         assert keep.tolist() == [0, 1]
+
+    def test_tied_scores_keep_the_lowest_index(self) -> None:
+        """Ties resolve to the lowest index, matching torchvision and the web SDK."""
+        boxes = np.array([[0, 0, 10, 10], [1, 1, 11, 11], [2, 2, 12, 12]], dtype=np.float32)
+        scores = np.array([0.5, 0.5, 0.5], dtype=np.float32)
+
+        keep = nms(boxes, scores, iou_threshold=0.45)
+
+        assert keep.tolist() == [0]
+
+    def test_degenerate_boxes_do_not_warn(self) -> None:
+        """Zero-area boxes have zero union, and that must not be a ``0 / 0``.
+
+        Letterbox padding clips boxes down to zero area on ordinary frames, so a
+        warning here would reach every caller's logs.
+        """
+        boxes = np.array([[5, 5, 5, 5], [5, 5, 5, 5], [0, 0, 10, 10]], dtype=np.float32)
+        scores = np.array([0.9, 0.8, 0.7], dtype=np.float32)
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", RuntimeWarning)
+            keep = nms(boxes, scores, iou_threshold=0.45)
+
+        assert keep.tolist() == [0, 1, 2]
 
     def test_returns_descending_score_order(self) -> None:
         boxes = np.array([[0, 0, 5, 5], [10, 0, 15, 5], [20, 0, 25, 5]], dtype=np.float32)

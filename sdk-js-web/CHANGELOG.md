@@ -42,6 +42,88 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`FusionError`** and `parseNames()`, split out of `modelNames()` so both class
   maps of a pipeline can be parsed with the same reader.
 
+- **`warmup()` on `Detector` and `Segmenter`.** The first inference of a session
+  is not representative: WebGPU compiles its shaders on it and the WASM backend
+  faults in its arenas, so on a phone the first frame can take seconds while
+  every later frame takes tens of milliseconds. `await det.warmup()` runs the
+  model once on a zero tensor, moving that cost to wherever the user is already
+  watching a spinner.
+
+- **`LetterboxPipeline`, exported.** The fused preprocessing path the tasks now
+  take, available to a custom pipeline that wants the same allocation-free
+  behaviour. `letterboxToTensorData` is the one-shot form.
+
+### Changed
+
+- **Preprocessing is ~2x faster and allocates nothing per frame.** Chaining the
+  composable primitives cost eleven full-buffer passes and six large allocations
+  per frame: `getImageData` → RGBA→RGB → RGB→RGBA → `putImageData` →
+  `drawImage` → `getImageData` → RGBA→RGB → fill → row copies → `toFloat32` →
+  `toCHW`. The tasks now go through `LetterboxPipeline`, which collapses the
+  second half into one `drawImage` — resizing *and* positioning the content
+  inside the padded target in a single accelerated operation — plus one loop
+  that reads the resulting RGBA and writes planar float32 straight into a buffer
+  reused across frames.
+
+  Measured in Chromium, median of 31 runs, letterboxing into 640x640:
+
+  | Source | Before | After | Speedup |
+  | --- | --- | --- | --- |
+  | 1920x1080 | 19.8 ms | 10.7 ms | 1.85x |
+  | 1280x720 | 13.8 ms | 7.8 ms | 1.77x |
+  | 640x480 | 6.8 ms | 3.1 ms | 2.19x |
+
+  **The output is bit-identical**, verified in a real browser against the
+  primitive-chained path across four source sizes — maximum difference 0.
+
+  The primitives are unchanged and still exported: they are what makes a custom
+  pipeline writable. Only the path the built-in tasks take has changed.
+
+- **The preprocessing canvas is created with `willReadFrequently`.** It is read
+  back with `getImageData` on every frame, which is what the hint exists for.
+  Measured effect on speed in Chromium: none beyond noise. What it removes is
+  the `Canvas2D: Multiple readback operations using getImageData are faster with
+  the willReadFrequently attribute set to true` warning the browser was printing
+  into every consumer's console, once per frame.
+
+### Removed
+
+- **`decodeYoloV8`, `decodeYoloV8Anchors`, `decodeYoloV8Seg` and the
+  `DecodeYoloV8*Options` type aliases are gone.** Deprecated in 0.2.0 with
+  "will be removed in 0.4.0", and still shipping at 0.5.1. Use `decodeYolo`,
+  `decodeYoloAnchors`, `decodeYoloSeg` and their `DecodeYolo*Options` types:
+  same functions, honest names, since the decoder covers every anchor-free YOLO
+  head from v8 through v12.
+
+  `test/deprecations.test.ts` now guards the removal rather than the
+  deprecation, so a re-add fails loudly.
+
+### Fixed
+
+- **A custom model with no baked-in `names` no longer fails to create.** Same
+  defect as the Python SDK: the fallback was the 80-name COCO preset, so a
+  3-class detector threw `Resolved 80 labels but the model has 3 classes`.
+  Labels now come up as `class_0`, `class_1`, ..., and the COCO preset applies
+  only when the model really does have 80 classes. `defaultLabels` is exported.
+
+- **A model URL that cannot be fetched for its metadata now says so.** The
+  fallback — hand the URL to ORT and let it load the model itself — is right,
+  but it was silent, and the symptom it produces is remote from the cause:
+  class names come back as `class_0`, `class_1`, ... with nothing explaining
+  why. It warns now, and names `labels` as the way out.
+
+- **Score ties in `nms` and `batchedNms` break by index explicitly.** Both
+  relied on `Array.prototype.sort` being stable to order tied scores. It is, in
+  every engine that matters, but leaning on it left the tie behaviour implicit —
+  and in `batchedNms` the surviving order also depended on `Map` insertion order,
+  which the Python SDK (iterating classes in sorted order) does not share. The
+  comparators now fall back to `a - b`, so a tie resolves to the lowest index on
+  both sides, matching `torchvision`.
+
+  Only exact ties are affected. The Python SDK was the one actually producing a
+  different survivor — it visited ties in descending index order — and this is
+  the other half of that fix.
+
 ### Notes
 
 - Fusing models stays a Python-side build step; there is no ONNX protobuf writer
@@ -49,6 +131,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ORT Web returns `int64` outputs as `BigInt64Array`. The pipeline's class ids and
   detection count are widened to `number` internally, so no caller has to handle
   `BigInt`.
+
+### Internal
+
+- **Parity tests against shared fixtures** (`test/parity.test.ts`, reading
+  `fixtures/parity/` at the repository root). They feed the web implementation
+  the same inputs the Python SDK was given and require the same outputs, with
+  mask bitmaps compared pixel for pixel. Two published artifacts promising the
+  same numbers had nothing checking the promise; this is that check, and it
+  found a mask-resampling divergence on its first run (fixed on the Python
+  side, see that package's changelog).
 
 ## [0.5.1] - 2026-08-05
 

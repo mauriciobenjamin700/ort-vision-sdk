@@ -35,7 +35,13 @@ dependencies = [
 [project.optional-dependencies]
 gpu = ["onnxruntime-gpu>=1.17.0"]
 opencv = ["opencv-python>=4.8.0"]
+# Build-time only: `ort_vision_sdk.compose` rewrites ONNX protobufs to fuse two
+# models into one graph. Running the fused model needs nothing beyond the
+# onnxruntime already in the base dependencies, so `onnx` stays out of the
+# runtime install.
+compose = ["onnx>=1.16.0"]
 dev = [
+    "onnx>=1.16.0",
     "pytest>=8.0.0",
     "pytest-asyncio>=0.23.0",
     "pytest-cov>=5.0.0",

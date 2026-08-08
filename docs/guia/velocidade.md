@@ -152,3 +152,24 @@ sem pares de start/stop para esquecer. Chamar o mesmo nome duas vezes
   porque o `predict()` decodifica a entrada por dentro.
 - Carregar o modelo **não** está no `speed` — é custo de inicialização.
 - `SpeedTimer` mede as etapas do seu próprio pipeline com as mesmas regras.
+
+## Aquecimento (`warmup`) — só no Web
+
+A primeira inferência de uma sessão não é representativa: o WebGPU compila os
+shaders nela e o backend WASM materializa suas arenas, o que num celular
+transforma o primeiro frame em segundos enquanto os seguintes ficam em dezenas
+de milissegundos.
+
+`Detector`, `Segmenter`, `Classifier` e `DetectClassify` expõem `warmup()`, que
+roda o modelo com um tensor zerado. Chame enquanto o spinner de carregamento
+ainda está na tela — o custo vai para onde o usuário já está esperando:
+
+```typescript
+const det = await Detector.create("/models/yolov8n.onnx");
+await det.warmup();        // uma passada basta no WASM
+await det.warmup(2);       // WebGPU às vezes só assenta na segunda
+```
+
+!!! tip "Num pipeline fundido vale mais"
+    `DetectClassify` carrega dois modelos e a ponte no mesmo grafo, então a
+    primeira inferência compila tudo de uma vez. É onde o aquecimento paga mais.

@@ -15,7 +15,7 @@ import { decodeYolo } from "../postprocess/detection.js";
 import { toFloat32Tensor } from "../preprocess/image.js";
 import { LetterboxPipeline, zeroTensorData } from "../preprocess/pipeline.js";
 import { Boxes, DetectionResults } from "../results.js";
-import { VisionTask } from "./base.js";
+import { VisionTask, requireDetections } from "./base.js";
 import {
   type BoundingBox,
   type DetectionResult,
@@ -58,6 +58,14 @@ export interface DetectorOptions extends OrtSessionOptions {
   readonly iouThreshold?: number;
   /** Maximum number of detections per image. */
   readonly maxDetections?: number;
+  /**
+   * If `true`, a run that finds nothing throws {@link NoDetectionsError}
+   * instead of returning an empty envelope. Default `false`, because looking
+   * and finding nothing is a successful inference. Turn it on when an empty
+   * result means the surrounding pipeline should stop rather than carry on with
+   * zero rows. Can be overridden per `predict` call.
+   */
+  readonly raiseOnEmpty?: boolean;
 }
 
 export interface DetectorPredictOptions {
@@ -70,6 +78,8 @@ export interface DetectorPredictOptions {
    * Mirrors Ultralytics' `model.predict(img, classes=[0, 16])`.
    */
   readonly classes?: readonly number[];
+  /** Override the constructor's `raiseOnEmpty` setting for this call. */
+  readonly raiseOnEmpty?: boolean;
 }
 
 /**
@@ -101,6 +111,7 @@ export class Detector extends VisionTask {
     private readonly _confThreshold: number,
     private readonly _iouThreshold: number,
     private readonly _maxDetections: number,
+    private readonly _raiseOnEmpty: boolean,
   ) {
     super(session);
   }
@@ -174,6 +185,7 @@ export class Detector extends VisionTask {
       options.confThreshold ?? 0.25,
       options.iouThreshold ?? 0.45,
       options.maxDetections ?? 300,
+      options.raiseOnEmpty ?? false,
     );
   }
 
@@ -251,13 +263,14 @@ export class Detector extends VisionTask {
       throw new Error(`Detector model output ${firstOutputName} missing from run() result.`);
     }
 
+    const threshold = options.confThreshold ?? this._confThreshold;
     const decodedAll = decodeYolo(raw.data as Float32Array, raw.dims, {
       originalWidth: original.width,
       originalHeight: original.height,
       padLeft,
       padTop,
       scale,
-      confThreshold: options.confThreshold ?? this._confThreshold,
+      confThreshold: threshold,
       iouThreshold: options.iouThreshold ?? this._iouThreshold,
       maxDetections: this._maxDetections,
     });
@@ -269,6 +282,13 @@ export class Detector extends VisionTask {
             return decodedAll.filter((d) => allowed.has(d.classId));
           })()
         : decodedAll;
+
+    requireDetections(decoded.length, {
+      raiseOnEmpty: options.raiseOnEmpty ?? this._raiseOnEmpty,
+      confThreshold: threshold,
+      classes: options.classes,
+      path,
+    });
 
     const detections = decoded.map((d) =>
       this._buildResult(original, d.bbox, d.classId, d.confidence),

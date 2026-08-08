@@ -17,7 +17,7 @@ from ort_vision_sdk.labels import LabelSpec, default_labels, resolve_labels
 from ort_vision_sdk.postprocess.segmentation import decode_yolo_seg
 from ort_vision_sdk.preprocess.image import add_batch_dim, letterbox, to_tensor
 from ort_vision_sdk.results import Boxes, Masks, SegmentationResults
-from ort_vision_sdk.tasks.base import VisionTask
+from ort_vision_sdk.tasks.base import VisionTask, require_detections
 from ort_vision_sdk.types import (
     BoundingBox,
     ImageArray,
@@ -89,6 +89,7 @@ class Segmenter(VisionTask):
         iou_threshold: float = 0.45,
         max_detections: int = 300,
         mask_threshold: float = 0.5,
+        raise_on_empty: bool = False,
     ) -> None:
         """Initialize the segmenter.
 
@@ -122,6 +123,13 @@ class Segmenter(VisionTask):
             max_detections: Maximum number of instances to return per image.
             mask_threshold: Probability cutoff applied to soft masks to obtain
                 the binary mask. Defaults to ``0.5``.
+            raise_on_empty: If ``True``, a run that finds nothing raises
+                :class:`~ort_vision_sdk.core.exceptions.NoDetectionsError`
+                instead of returning an empty envelope. Default ``False``,
+                because looking and finding nothing is a successful inference.
+                Turn it on when an empty result means the surrounding pipeline
+                should stop rather than carry on with zero rows. Can be
+                overridden per :meth:`predict` call.
 
         Raises:
             ValueError: If ``head`` is not a recognised value.
@@ -144,6 +152,7 @@ class Segmenter(VisionTask):
         self._iou_threshold: float = iou_threshold
         self._max_detections: int = max_detections
         self._mask_threshold: float = mask_threshold
+        self._raise_on_empty: bool = raise_on_empty
 
         num_classes = self._infer_num_classes()
         spec: LabelSpec = (
@@ -191,6 +200,7 @@ class Segmenter(VisionTask):
         conf_threshold: float | None = None,
         iou_threshold: float | None = None,
         classes: list[int] | None = None,
+        raise_on_empty: bool | None = None,
     ) -> list[SegmentationResults]:
         """Alias for :meth:`predict` — call the segmenter like a torch ``nn.Module``."""
         return self.predict(
@@ -198,6 +208,7 @@ class Segmenter(VisionTask):
             conf_threshold=conf_threshold,
             iou_threshold=iou_threshold,
             classes=classes,
+            raise_on_empty=raise_on_empty,
         )
 
     def predict(
@@ -207,6 +218,7 @@ class Segmenter(VisionTask):
         conf_threshold: float | None = None,
         iou_threshold: float | None = None,
         classes: list[int] | None = None,
+        raise_on_empty: bool | None = None,
     ) -> list[SegmentationResults]:
         """Run instance segmentation on a single image (synchronous).
 
@@ -217,10 +229,15 @@ class Segmenter(VisionTask):
             classes: If set, keep only instances whose ``class_id`` is in this
                 list (mirrors Ultralytics' ``model.predict(img, classes=[0, 16])``).
                 ``None`` (default) keeps all classes.
+            raise_on_empty: Override the constructor's setting for this call.
 
         Returns:
             A 1-element list containing a :class:`SegmentationResults`
             envelope.
+
+        Raises:
+            NoDetectionsError: If nothing survives the thresholds and
+                ``raise_on_empty`` is in effect for this call.
         """
         timer = SpeedTimer()
         path = str(image) if isinstance(image, (str, Path)) else None
@@ -240,6 +257,7 @@ class Segmenter(VisionTask):
             conf_threshold=conf_threshold,
             iou_threshold=iou_threshold,
             classes=classes,
+            raise_on_empty=raise_on_empty,
         )
 
     async def async_predict(
@@ -249,6 +267,7 @@ class Segmenter(VisionTask):
         conf_threshold: float | None = None,
         iou_threshold: float | None = None,
         classes: list[int] | None = None,
+        raise_on_empty: bool | None = None,
     ) -> list[SegmentationResults]:
         """Async segmentation via ``asyncio.to_thread``.
 
@@ -264,6 +283,7 @@ class Segmenter(VisionTask):
             conf_threshold=conf_threshold,
             iou_threshold=iou_threshold,
             classes=classes,
+            raise_on_empty=raise_on_empty,
         )
 
     async def ort_async_predict(
@@ -273,6 +293,7 @@ class Segmenter(VisionTask):
         conf_threshold: float | None = None,
         iou_threshold: float | None = None,
         classes: list[int] | None = None,
+        raise_on_empty: bool | None = None,
     ) -> list[SegmentationResults]:
         """Async segmentation using ORT's native ``run_async`` for the model step.
 
@@ -301,6 +322,7 @@ class Segmenter(VisionTask):
             conf_threshold=conf_threshold,
             iou_threshold=iou_threshold,
             classes=classes,
+            raise_on_empty=raise_on_empty,
         )
 
     def _build_results(
@@ -315,6 +337,7 @@ class Segmenter(VisionTask):
         conf_threshold: float | None,
         iou_threshold: float | None,
         classes: list[int] | None,
+        raise_on_empty: bool | None,
     ) -> list[SegmentationResults]:
         """Decode raw outputs + NMS + masks into a :class:`SegmentationResults`.
 
@@ -323,6 +346,7 @@ class Segmenter(VisionTask):
         """
         per_anchor, prototypes = self._split_outputs(outputs)
 
+        threshold = conf_threshold if conf_threshold is not None else self._conf_threshold
         decoded = decode_yolo_seg(
             per_anchor,
             prototypes,
@@ -331,7 +355,7 @@ class Segmenter(VisionTask):
             original_size=(original.shape[1], original.shape[0]),
             pad=pad,
             scale=scale,
-            conf_threshold=(conf_threshold if conf_threshold is not None else self._conf_threshold),
+            conf_threshold=threshold,
             iou_threshold=(iou_threshold if iou_threshold is not None else self._iou_threshold),
             max_detections=self._max_detections,
             mask_threshold=self._mask_threshold,
@@ -340,6 +364,14 @@ class Segmenter(VisionTask):
         if classes is not None:
             allowed = set(classes)
             decoded = [d for d in decoded if d[1] in allowed]
+
+        require_detections(
+            len(decoded),
+            raise_on_empty=(raise_on_empty if raise_on_empty is not None else self._raise_on_empty),
+            conf_threshold=threshold,
+            classes=classes,
+            path=path,
+        )
 
         detections = tuple(
             self._build_instance(original, bbox, class_id, confidence, mask)

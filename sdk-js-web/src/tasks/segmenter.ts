@@ -19,7 +19,7 @@ import { decodeYoloSeg } from "../postprocess/segmentation.js";
 import { toFloat32Tensor } from "../preprocess/image.js";
 import { LetterboxPipeline, zeroTensorData } from "../preprocess/pipeline.js";
 import { Boxes, Masks, SegmentationResults } from "../results.js";
-import { VisionTask } from "./base.js";
+import { VisionTask, requireDetections } from "./base.js";
 import {
   type BoundingBox,
   type SegmentationResult,
@@ -63,6 +63,14 @@ export interface SegmenterOptions extends OrtSessionOptions {
   readonly iouThreshold?: number;
   /** Maximum number of instances per image. */
   readonly maxDetections?: number;
+  /**
+   * If `true`, a run that finds nothing throws {@link NoDetectionsError}
+   * instead of returning an empty envelope. Default `false`, because looking
+   * and finding nothing is a successful inference. Turn it on when an empty
+   * result means the surrounding pipeline should stop rather than carry on with
+   * zero rows. Can be overridden per `predict` call.
+   */
+  readonly raiseOnEmpty?: boolean;
   /** Probability cutoff applied to soft masks. Defaults to `0.5`. */
   readonly maskThreshold?: number;
 }
@@ -75,6 +83,8 @@ export interface SegmenterPredictOptions {
    * Mirrors Ultralytics' `model.predict(img, classes=[0, 16])`.
    */
   readonly classes?: readonly number[];
+  /** Override the constructor's `raiseOnEmpty` setting for this call. */
+  readonly raiseOnEmpty?: boolean;
 }
 
 /**
@@ -113,6 +123,7 @@ export class Segmenter extends VisionTask {
     private readonly _iouThreshold: number,
     private readonly _maxDetections: number,
     private readonly _maskThreshold: number,
+    private readonly _raiseOnEmpty: boolean,
   ) {
     super(session);
   }
@@ -187,6 +198,7 @@ export class Segmenter extends VisionTask {
       options.iouThreshold ?? 0.45,
       options.maxDetections ?? 300,
       options.maskThreshold ?? 0.5,
+      options.raiseOnEmpty ?? false,
     );
   }
 
@@ -246,6 +258,7 @@ export class Segmenter extends VisionTask {
 
     const { perAnchor, prototypes } = this._splitOutputs(outputs);
 
+    const threshold = options.confThreshold ?? this._confThreshold;
     const decodedAll = decodeYoloSeg(
       perAnchor.data as Float32Array,
       perAnchor.dims,
@@ -260,7 +273,7 @@ export class Segmenter extends VisionTask {
         padLeft,
         padTop,
         scale,
-        confThreshold: options.confThreshold ?? this._confThreshold,
+        confThreshold: threshold,
         iouThreshold: options.iouThreshold ?? this._iouThreshold,
         maxDetections: this._maxDetections,
         maskThreshold: this._maskThreshold,
@@ -274,6 +287,13 @@ export class Segmenter extends VisionTask {
             return decodedAll.filter((d) => allowed.has(d.classId));
           })()
         : decodedAll;
+
+    requireDetections(decoded.length, {
+      raiseOnEmpty: options.raiseOnEmpty ?? this._raiseOnEmpty,
+      confThreshold: threshold,
+      classes: options.classes,
+      path,
+    });
 
     const detections = decoded.map((d) =>
       this._buildResult(original, d.bbox, d.classId, d.confidence, d.mask),

@@ -152,3 +152,24 @@ given — no start/stop pairs to forget. Calling the same name twice
   because `predict()` decodes the input internally.
 - Loading the model is **not** in `speed` — that is startup cost.
 - `SpeedTimer` measures your own pipeline stages under the same rules.
+
+## Warm-up (`warmup`) — web only
+
+The first inference of a session is not representative: WebGPU compiles its
+shaders on it and the WASM backend faults in its arenas, which on a phone turns
+the first frame into seconds while every later frame is tens of milliseconds.
+
+`Detector`, `Segmenter`, `Classifier` and `DetectClassify` expose `warmup()`,
+which runs the model on a zero-filled tensor. Call it while a loading spinner is
+still up — the cost moves somewhere the user is already waiting:
+
+```typescript
+const det = await Detector.create("/models/yolov8n.onnx");
+await det.warmup();        // one pass is enough for WASM
+await det.warmup(2);       // WebGPU sometimes settles on the second
+```
+
+!!! tip "Worth more on a fused pipeline"
+    `DetectClassify` carries two models plus the bridge in one graph, so the
+    first inference compiles all of it at once. That is where warming up pays
+    the most.

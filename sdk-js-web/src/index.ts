@@ -37,6 +37,7 @@ export {
   InferenceError,
   LabelMapError,
   ModelLoadError,
+  NoDetectionsError,
   OrtVisionError,
   ProviderNotAvailableError,
 } from "./core/exceptions.js";
@@ -122,7 +123,7 @@ export {
   decodeYoloSeg,
 } from "./postprocess/segmentation.js";
 
-export { VisionTask } from "./tasks/base.js";
+export { VisionTask, requireDetections } from "./tasks/base.js";
 export {
   type ClassifierOptions,
   type ClassifierPredictOptions,

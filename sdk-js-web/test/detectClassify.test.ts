@@ -67,19 +67,37 @@ vi.mock("onnxruntime-web", () => ({
   },
 }));
 
-vi.mock("../src/preprocess/image.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../src/preprocess/image.js")>();
-  const { RGBImage: Image } = await import("../src/types.js");
+vi.mock("../src/preprocess/pipeline.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../src/preprocess/pipeline.js")>();
   return {
     ...actual,
-    letterbox: (_image: unknown, targetWidth: number, targetHeight: number) => ({
-      image: new Image(new Uint8Array(targetWidth * targetHeight * 3), targetWidth, targetHeight),
-      ...cannedLetterbox,
-    }),
+    // The real one resamples through a canvas, which Node has none of, and its
+    // arithmetic has its own tests. Stubbing it keeps these tests on the
+    // question they exist to answer.
+    LetterboxPipeline: class {
+      constructor(
+        private readonly w: number,
+        private readonly h: number,
+      ) {}
+      run(): {
+        data: Float32Array;
+        scale: number;
+        padLeft: number;
+        padTop: number;
+        reused: boolean;
+      } {
+        return {
+          data: new Float32Array(3 * this.w * this.h),
+          ...cannedLetterbox,
+          reused: false,
+        };
+      }
+      release(): void {}
+    },
   };
 });
 
-const { FusionError } = await import("../src/core/exceptions.js");
+const { FusionError, NoDetectionsError } = await import("../src/core/exceptions.js");
 const { METADATA_PREFIX } = await import("../src/fusion.js");
 const { DetectClassify } = await import("../src/tasks/detectClassify.js");
 const { RGBImage } = await import("../src/types.js");
@@ -450,6 +468,111 @@ describe("DetectClassify filtering", () => {
     const result = (await pipeline.call(image(), { classes: [1] }))[0];
 
     expect([...(result ?? [])].map((d) => d.name)).toEqual(["dog"]);
+  });
+});
+
+describe("DetectClassify warmup", () => {
+  it("runs the graph without needing a real image", async () => {
+    serveOutputs();
+    const pipeline = await DetectClassify.create(pipelineModel());
+    await pipeline.warmup();
+
+    expect(Object.keys(capturedFeeds)).toEqual(["images"]);
+    expect(capturedFeeds.images?.dims).toEqual([1, 3, 64, 64]);
+  });
+
+  it("feeds every input a pipeline with the original crop source declares", async () => {
+    serveOutputs();
+    const pipeline = await DetectClassify.create(pipelineModel({ crop_source: "original" }));
+    await pipeline.warmup();
+
+    expect(Object.keys(capturedFeeds).sort()).toEqual([
+      "images",
+      "letterbox_pad",
+      "letterbox_scale",
+      "source_image",
+    ]);
+  });
+
+  it("honours the requested number of runs", async () => {
+    serveOutputs();
+    let runs = 0;
+    const pipeline = await DetectClassify.create(pipelineModel());
+    const session = pipeline.session as unknown as { run: (f: unknown) => Promise<unknown> };
+    const original = session.run.bind(session);
+    session.run = (feeds) => {
+      runs += 1;
+      return original(feeds);
+    };
+    await pipeline.warmup(3);
+
+    expect(runs).toBe(3);
+  });
+});
+
+describe("DetectClassify raiseOnEmpty", () => {
+  it("returns an empty envelope by default", async () => {
+    serveOutputs({ count: 0 });
+    const pipeline = await DetectClassify.create(pipelineModel());
+
+    expect((await pipeline.predict(image()))[0]?.length).toBe(0);
+  });
+
+  it("throws when the constructor asked for it", async () => {
+    serveOutputs({ count: 0 });
+    const pipeline = await DetectClassify.create(pipelineModel(), { raiseOnEmpty: true });
+
+    await expect(pipeline.predict(image())).rejects.toThrow(NoDetectionsError);
+  });
+
+  it("stays quiet when something was detected", async () => {
+    serveOutputs();
+    const pipeline = await DetectClassify.create(pipelineModel(), { raiseOnEmpty: true });
+
+    expect((await pipeline.predict(image()))[0]?.length).toBe(2);
+  });
+
+  it("per-call override turns it on", async () => {
+    serveOutputs({ count: 0 });
+    const pipeline = await DetectClassify.create(pipelineModel());
+
+    await expect(pipeline.predict(image(), { raiseOnEmpty: true })).rejects.toThrow(
+      NoDetectionsError,
+    );
+  });
+
+  it("per-call override turns it off", async () => {
+    serveOutputs({ count: 0 });
+    const pipeline = await DetectClassify.create(pipelineModel(), { raiseOnEmpty: true });
+
+    expect((await pipeline.predict(image(), { raiseOnEmpty: false }))[0]?.length).toBe(0);
+  });
+
+  it("throws when a stricter per-call threshold empties the result", async () => {
+    serveOutputs();
+    const pipeline = await DetectClassify.create(pipelineModel(), { raiseOnEmpty: true });
+
+    await expect(pipeline.predict(image(), { confThreshold: 0.99 })).rejects.toThrow(
+      /confThreshold=0.99/,
+    );
+  });
+
+  it("reports the graph's own threshold when no override was given", async () => {
+    serveOutputs({ count: 0 });
+    const pipeline = await DetectClassify.create(pipelineModel({ conf_threshold: "0.4" }), {
+      raiseOnEmpty: true,
+    });
+
+    await expect(pipeline.predict(image())).rejects.toThrow(/confThreshold=0.4/);
+  });
+
+  it("throws when a class filter empties the result", async () => {
+    serveOutputs();
+    const pipeline = await DetectClassify.create(pipelineModel(), { raiseOnEmpty: true });
+
+    await expect(pipeline.predict(image(), { classes: [7] })).rejects.toThrow(
+      /among classes \[7\]/,
+    );
   });
 });
 

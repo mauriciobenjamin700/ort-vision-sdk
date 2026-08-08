@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from ort_vision_sdk.core.backend import InferenceBackend
+from ort_vision_sdk.core.exceptions import NoDetectionsError
 from ort_vision_sdk.core.session import OrtSession
 
 if TYPE_CHECKING:
@@ -85,3 +86,43 @@ class VisionTask:
         or the default :class:`OrtSession` when none was provided.
         """
         return self._session
+
+
+def require_detections(
+    count: int,
+    *,
+    raise_on_empty: bool,
+    conf_threshold: float,
+    classes: list[int] | None,
+    path: str | None,
+) -> None:
+    """Turn an empty result into an error, when the caller asked for that.
+
+    Shared by every task that can come back with nothing —
+    :class:`~ort_vision_sdk.tasks.detector.Detector`,
+    :class:`~ort_vision_sdk.tasks.segmenter.Segmenter` and
+    :class:`~ort_vision_sdk.tasks.pipeline.DetectClassify` — so the three agree
+    on when they raise and on what the message says. The message names the two
+    settings that decide the outcome, because "no detections" on its own leaves
+    the reader unable to tell a blank image from a threshold set too high.
+
+    Args:
+        count (int): How many detections survived every filter.
+        raise_on_empty (bool): Whether an empty result is an error for this
+            call. ``False`` makes this a no-op.
+        conf_threshold (float): The threshold actually applied, after any
+            per-call override — reported so the message reflects the run rather
+            than the constructor.
+        classes (list[int] | None): The class allowlist applied, if any.
+        path (str | None): Source path of the image, when the input was one.
+
+    Raises:
+        NoDetectionsError: If ``raise_on_empty`` is set and ``count`` is zero.
+    """
+    if not raise_on_empty or count:
+        return
+    where = f" in {path}" if path else ""
+    narrowed = f" among classes {sorted(classes)}" if classes is not None else ""
+    raise NoDetectionsError(
+        f"No detections{where}{narrowed}: nothing cleared conf_threshold={conf_threshold}."
+    )

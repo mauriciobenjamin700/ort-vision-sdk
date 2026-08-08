@@ -26,6 +26,9 @@ por imagem. Cada tarefa expõe um alias `run()`.
 | `DetectorHead` (`"yolo"`) / `SegmenterHead` (`"yolo-seg"`) | famílias de decoder |
 | `DetectClassifyOptions` / `DetectClassifyPredictOptions` | `DetectClassify` (`labels`, `classifierLabels`; `confThreshold`, `classes`, `topK` no predict) |
 
+Os três tipos de detecção aceitam ainda `raiseOnEmpty` (construção e predict) —
+ver [Resultado vazio](#resultado-vazio).
+
 ## Resultados
 
 | Envelope | Visão em massa | Iterar produz |
@@ -62,6 +65,7 @@ Tipos/classes por instância: `DetectionResult`, `SegmentationResult`,
 | `OrtSession.inputShape` / `.inputShapes` | Shapes declarados pelo grafo, eixos dinâmicos como `null`. |
 | `OrtSession.release()` | Libera a sessão nativa (necessário ao descartar uma sessão com a página viva). |
 | `task.inputSize` | Resolução em que a tarefa realmente pré-processa. |
+| `task.warmup(runs?)` | Roda o modelo com tensor zerado para pagar a compilação de shaders adiantado. |
 | `spatialInputSize` / `resolveInputSize` / `declaredShapesFrom` | Helpers puros da precedência grafo → chamador → fallback. |
 | `DeclaredShape` / `DeclaredDim` | Shape declarado e uma dimensão (`number`, ou `null` quando simbólica). |
 
@@ -69,7 +73,20 @@ Tipos/classes por instância: `DetectionResult`, `SegmentationResult`,
 
 Hierarquia de exceções exportada: `OrtVisionError` (base), `ImageLoadError`,
 `InferenceError`, `LabelMapError`, `ModelLoadError`,
-`ProviderNotAvailableError`, `FusionError`.
+`ProviderNotAvailableError`, `FusionError`, `NoDetectionsError`.
+
+## Resultado vazio
+
+`Detector`, `Segmenter` e `DetectClassify` aceitam `raiseOnEmpty` nas opções de
+construção e nas de `predict()`. Default `false`: não achar nada devolve um
+envelope vazio. Com `true`, lança `NoDetectionsError` — ver
+[Quando não detectar nada é um erro](../guia/deteccao.md#quando-nao-detectar-nada-e-um-erro).
+
+| Símbolo | Descrição |
+| --- | --- |
+| `raiseOnEmpty` | Opção de construção e de `predict()`; o valor por chamada vence. |
+| `NoDetectionsError` | Lançado quando nada sobra e o flag está ativo. |
+| `requireDetections(count, options)` | O helper compartilhado pelas três tarefas, exportado para quem constrói a própria tarefa. |
 
 ## Pipelines fundidos
 

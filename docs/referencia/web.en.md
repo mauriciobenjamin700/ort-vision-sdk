@@ -26,6 +26,9 @@ per image. Each task exposes a `run()` alias.
 | `DetectorHead` (`"yolo"`) / `SegmenterHead` (`"yolo-seg"`) | decoder families |
 | `DetectClassifyOptions` / `DetectClassifyPredictOptions` | `DetectClassify` (`labels`, `classifierLabels`; `confThreshold`, `classes`, `topK` on predict) |
 
+All three detection types additionally take `raiseOnEmpty` (construction and
+predict) — see [Empty results](#empty-results).
+
 ## Results
 
 | Envelope | Bulk view | Iterating yields |
@@ -62,6 +65,7 @@ Per-instance types/classes: `DetectionResult`, `SegmentationResult`,
 | `OrtSession.inputShape` / `.inputShapes` | Shapes the graph declares, dynamic axes as `null`. |
 | `OrtSession.release()` | Frees the native session (needed when discarding a session while the page lives on). |
 | `task.inputSize` | The resolution the task actually preprocesses to. |
+| `task.warmup(runs?)` | Runs the model on a zero-filled tensor to pay shader compilation up front. |
 | `spatialInputSize` / `resolveInputSize` / `declaredShapesFrom` | Pure helpers behind the graph → caller → fallback precedence. |
 | `DeclaredShape` / `DeclaredDim` | A declared shape and one dimension (`number`, or `null` when symbolic). |
 
@@ -69,7 +73,20 @@ Per-instance types/classes: `DetectionResult`, `SegmentationResult`,
 
 Exported exception hierarchy: `OrtVisionError` (base), `ImageLoadError`,
 `InferenceError`, `LabelMapError`, `ModelLoadError`,
-`ProviderNotAvailableError`, `FusionError`.
+`ProviderNotAvailableError`, `FusionError`, `NoDetectionsError`.
+
+## Empty results
+
+`Detector`, `Segmenter` and `DetectClassify` take `raiseOnEmpty` in both their
+construction and `predict()` options. Default `false`: finding nothing returns an
+empty envelope. With `true`, it throws `NoDetectionsError` — see
+[When finding nothing is an error](../guia/deteccao.md#when-finding-nothing-is-an-error).
+
+| Symbol | Description |
+| --- | --- |
+| `raiseOnEmpty` | Construction and `predict()` option; the per-call value wins. |
+| `NoDetectionsError` | Thrown when nothing survives and the flag is in effect. |
+| `requireDetections(count, options)` | The helper the three tasks share, exported for anyone building their own task. |
 
 ## Fused pipelines
 

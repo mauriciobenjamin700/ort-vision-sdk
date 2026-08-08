@@ -90,6 +90,18 @@ Per instance, the mask is cropped to the bounding box:
     expect a few border pixels to differ — the new ones are the correct ones
     (they agree 100% with a `float64` reference; the old ones, 99.7%).
 
+## When finding nothing is an error
+
+`Segmenter` takes the same `raise_on_empty` as `Detector`, with the same default
+(`False`) and the same message — see
+[When finding nothing is an error](deteccao.md#when-finding-nothing-is-an-error).
+
+```python
+seg = Segmenter("yolov8n-seg.onnx", conf_threshold=0.6, raise_on_empty=True)
+seg.predict("img.jpg")   # nothing >= 0.6 -> NoDetectionsError
+```
+
+
 ## See also
 
 - [Detection guide](deteccao.md) — the same `Boxes` view and the same flow.

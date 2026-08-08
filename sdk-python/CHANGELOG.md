@@ -11,6 +11,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`raise_on_empty` — opt in to treating an empty result as an error.**
+  `Detector`, `Segmenter` and `DetectClassify` return an empty envelope when
+  nothing is detected, and that stays the default: the model looked and found
+  nothing is a successful inference, not a failure. But a step whose
+  *precondition* is that something is there needs the opposite, and previously
+  had to re-check the length at every call site. The flag is available on the
+  constructor and as a per-call override, and raises the new
+  `NoDetectionsError`:
+
+  ```python
+  det = Detector("yolov8n.onnx", conf_threshold=0.7, raise_on_empty=True)
+  det.predict("img.jpg")
+  # NoDetectionsError: No detections in img.jpg: nothing cleared conf_threshold=0.7.
+  ```
+
+  There is no separate threshold for the error, because `conf_threshold` is
+  already what decides whether something counts as a detection — "nothing
+  detected" and "nothing confident enough" are one condition. The message names
+  the threshold that applied to the call, plus the image and the class filter
+  when either narrowed the search, since a bare "no detections" cannot
+  distinguish a blank image from a threshold set too high.
+
 - **`ort_vision_sdk.compose` — fuse a detector and a classifier into one
   `.onnx`.** Chaining the two tasks meant two sessions, two model loads, and a
   round trip through Python for every crop: slice the image, resize each region,

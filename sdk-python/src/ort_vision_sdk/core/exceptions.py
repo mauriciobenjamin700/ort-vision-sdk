@@ -31,6 +31,23 @@ class LabelMapError(OrtVisionError):
     """Raised when class labels cannot be resolved from the supplied spec."""
 
 
+class NoDetectionsError(OrtVisionError):
+    """Raised when a detection task finds nothing and was asked to treat that as an error.
+
+    Only raised when the caller opts in with ``raise_on_empty=True``. The
+    default stays an empty result, because "the model looked and found nothing"
+    is a successful inference, not a failure — a photo of an empty field is a
+    valid photo. What the flag is for is the opposite situation: a pipeline step
+    whose *precondition* is that something is there, where an empty result means
+    the caller should stop rather than quietly carry on with zero rows.
+
+    "Nothing was detected" and "nothing was confident enough" are the same
+    condition here, since the confidence threshold is what decides what counts
+    as a detection in the first place. Raise the threshold and the error covers
+    the stricter bar.
+    """
+
+
 class FusionError(OrtVisionError):
     """Raised when two models cannot be fused into a single pipeline graph.
 

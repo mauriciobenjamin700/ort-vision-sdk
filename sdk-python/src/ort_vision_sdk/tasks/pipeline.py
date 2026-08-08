@@ -28,7 +28,7 @@ from ort_vision_sdk.labels import LabelSpec, resolve_labels
 from ort_vision_sdk.postprocess.classification import softmax, topk
 from ort_vision_sdk.preprocess.image import add_batch_dim, letterbox, to_tensor
 from ort_vision_sdk.results import Boxes, DetectClassifyResults
-from ort_vision_sdk.tasks.base import VisionTask
+from ort_vision_sdk.tasks.base import VisionTask, require_detections
 from ort_vision_sdk.types import (
     BoundingBox,
     ClassificationResult,
@@ -82,6 +82,7 @@ class DetectClassify(VisionTask):
         *,
         labels: LabelSpec = None,
         classifier_labels: LabelSpec = None,
+        raise_on_empty: bool = False,
         providers: list[str] | None = None,
         session_options: ort.SessionOptions | None = None,
         backend: InferenceBackend | None = None,
@@ -98,6 +99,13 @@ class DetectClassify(VisionTask):
             classifier_labels: Class label spec for the **classification**
                 stage. ``None`` uses the recorded names, falling back to
                 generated ``class_<id>`` names.
+            raise_on_empty: If ``True``, a run that finds nothing raises
+                :class:`~ort_vision_sdk.core.exceptions.NoDetectionsError`
+                instead of returning an empty envelope. Default ``False``,
+                because looking and finding nothing is a successful inference.
+                Turn it on when an empty result means the surrounding pipeline
+                should stop rather than carry on with zero rows. Can be
+                overridden per :meth:`predict` call.
             providers: Execution providers in preference order. Auto if
                 ``None``. Ignored when ``backend`` is provided.
             session_options: Optional ORT session options. Ignored when
@@ -135,6 +143,7 @@ class DetectClassify(VisionTask):
                 f"version of ort_vision_sdk.compose; re-fuse it with this one."
             )
         self._spec: FusionSpec = spec
+        self._raise_on_empty: bool = raise_on_empty
         self._labels: tuple[str, ...] = resolve_labels(
             labels if labels is not None else spec.detector_names or "coco"
         )
@@ -182,9 +191,16 @@ class DetectClassify(VisionTask):
         conf_threshold: float | None = None,
         classes: list[int] | None = None,
         top_k: int | None = None,
+        raise_on_empty: bool | None = None,
     ) -> list[DetectClassifyResults]:
         """Alias for :meth:`predict` — call the pipeline like a torch ``nn.Module``."""
-        return self.predict(image, conf_threshold=conf_threshold, classes=classes, top_k=top_k)
+        return self.predict(
+            image,
+            conf_threshold=conf_threshold,
+            classes=classes,
+            top_k=top_k,
+            raise_on_empty=raise_on_empty,
+        )
 
     def predict(
         self,
@@ -193,6 +209,7 @@ class DetectClassify(VisionTask):
         conf_threshold: float | None = None,
         classes: list[int] | None = None,
         top_k: int | None = None,
+        raise_on_empty: bool | None = None,
     ) -> list[DetectClassifyResults]:
         """Run the pipeline on a single image (synchronous).
 
@@ -206,10 +223,15 @@ class DetectClassify(VisionTask):
                 in this list. ``None`` (default) keeps all classes.
             top_k: Truncate each detection's ``classification.probabilities``
                 tuple to its top-k entries. ``None`` keeps every class.
+            raise_on_empty: Override the constructor's setting for this call.
 
         Returns:
             A 1-element list containing a :class:`DetectClassifyResults`
             envelope.
+
+        Raises:
+            NoDetectionsError: If nothing survives the thresholds and
+                ``raise_on_empty`` is in effect for this call.
         """
         timer = SpeedTimer()
         path = str(image) if isinstance(image, (str, Path)) else None
@@ -229,6 +251,7 @@ class DetectClassify(VisionTask):
             conf_threshold=conf_threshold,
             classes=classes,
             top_k=top_k,
+            raise_on_empty=raise_on_empty,
         )
 
     async def async_predict(
@@ -238,6 +261,7 @@ class DetectClassify(VisionTask):
         conf_threshold: float | None = None,
         classes: list[int] | None = None,
         top_k: int | None = None,
+        raise_on_empty: bool | None = None,
     ) -> list[DetectClassifyResults]:
         """Async pipeline run via ``asyncio.to_thread``.
 
@@ -253,6 +277,7 @@ class DetectClassify(VisionTask):
             conf_threshold=conf_threshold,
             classes=classes,
             top_k=top_k,
+            raise_on_empty=raise_on_empty,
         )
 
     async def ort_async_predict(
@@ -262,6 +287,7 @@ class DetectClassify(VisionTask):
         conf_threshold: float | None = None,
         classes: list[int] | None = None,
         top_k: int | None = None,
+        raise_on_empty: bool | None = None,
     ) -> list[DetectClassifyResults]:
         """Async pipeline run using ORT's native ``run_async`` for the model step.
 
@@ -290,6 +316,7 @@ class DetectClassify(VisionTask):
             conf_threshold=conf_threshold,
             classes=classes,
             top_k=top_k,
+            raise_on_empty=raise_on_empty,
         )
 
     def _preprocess(
@@ -331,6 +358,7 @@ class DetectClassify(VisionTask):
         conf_threshold: float | None,
         classes: list[int] | None,
         top_k: int | None,
+        raise_on_empty: bool | None,
     ) -> list[DetectClassifyResults]:
         """Assemble the envelope from the graph's five outputs.
 
@@ -349,9 +377,14 @@ class DetectClassify(VisionTask):
             conf_threshold: Optional extra confidence filter.
             classes: Optional detector-class allowlist.
             top_k: Optional truncation of each classification's probability tuple.
+            raise_on_empty: Whether an empty result is an error for this call.
 
         Returns:
             A 1-element list containing the envelope.
+
+        Raises:
+            NoDetectionsError: If nothing survives and ``raise_on_empty`` is in
+                effect for this call.
         """
         boxes_raw, scores_raw, classes_raw, count_raw, probs_raw = outputs
         valid = min(int(count_raw.reshape(-1)[0]), boxes_raw.shape[0])
@@ -379,6 +412,13 @@ class DetectClassify(VisionTask):
             )
 
         frozen = tuple(detections)
+        require_detections(
+            len(frozen),
+            raise_on_empty=(raise_on_empty if raise_on_empty is not None else self._raise_on_empty),
+            conf_threshold=max(minimum, self._spec.conf_threshold),
+            classes=classes,
+            path=path,
+        )
         timer.stage("postprocess")
         return [
             DetectClassifyResults(

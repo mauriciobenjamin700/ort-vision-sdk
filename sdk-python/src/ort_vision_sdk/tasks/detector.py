@@ -16,7 +16,7 @@ from ort_vision_sdk.labels import LabelSpec, resolve_labels
 from ort_vision_sdk.postprocess.detection import decode_yolo
 from ort_vision_sdk.preprocess.image import add_batch_dim, letterbox, to_tensor
 from ort_vision_sdk.results import Boxes, DetectionResults
-from ort_vision_sdk.tasks.base import VisionTask
+from ort_vision_sdk.tasks.base import VisionTask, require_detections
 from ort_vision_sdk.types import BoundingBox, DetectionResult, ImageArray
 
 if TYPE_CHECKING:
@@ -76,6 +76,7 @@ class Detector(VisionTask):
         conf_threshold: float = 0.25,
         iou_threshold: float = 0.45,
         max_detections: int = 300,
+        raise_on_empty: bool = False,
     ) -> None:
         """Initialize the detector.
 
@@ -109,6 +110,13 @@ class Detector(VisionTask):
             iou_threshold: Default IoU threshold for non-maximum suppression.
                 Can be overridden per :meth:`predict` call.
             max_detections: Maximum number of detections to return per image.
+            raise_on_empty: If ``True``, a run that finds nothing raises
+                :class:`~ort_vision_sdk.core.exceptions.NoDetectionsError`
+                instead of returning an empty envelope. Default ``False``,
+                because looking and finding nothing is a successful inference.
+                Turn it on when an empty result means the surrounding pipeline
+                should stop rather than carry on with zero rows. Can be
+                overridden per :meth:`predict` call.
 
         Raises:
             ValueError: If ``head`` is not a recognised value.
@@ -130,6 +138,7 @@ class Detector(VisionTask):
         self._conf_threshold: float = conf_threshold
         self._iou_threshold: float = iou_threshold
         self._max_detections: int = max_detections
+        self._raise_on_empty: bool = raise_on_empty
 
         num_classes = self._infer_num_classes()
         spec: LabelSpec = (
@@ -175,6 +184,7 @@ class Detector(VisionTask):
         conf_threshold: float | None = None,
         iou_threshold: float | None = None,
         classes: list[int] | None = None,
+        raise_on_empty: bool | None = None,
     ) -> list[DetectionResults]:
         """Alias for :meth:`predict` — call the detector like a torch ``nn.Module``."""
         return self.predict(
@@ -182,6 +192,7 @@ class Detector(VisionTask):
             conf_threshold=conf_threshold,
             iou_threshold=iou_threshold,
             classes=classes,
+            raise_on_empty=raise_on_empty,
         )
 
     def predict(
@@ -191,6 +202,7 @@ class Detector(VisionTask):
         conf_threshold: float | None = None,
         iou_threshold: float | None = None,
         classes: list[int] | None = None,
+        raise_on_empty: bool | None = None,
     ) -> list[DetectionResults]:
         """Run detection on a single image (synchronous).
 
@@ -201,12 +213,17 @@ class Detector(VisionTask):
             classes: If set, keep only detections whose ``class_id`` is in this
                 list (mirrors Ultralytics' ``model.predict(img, classes=[0, 16])``).
                 ``None`` (default) keeps all classes.
+            raise_on_empty: Override the constructor's setting for this call.
 
         Returns:
             A 1-element list containing a :class:`DetectionResults` envelope.
             Iterate the envelope to access per-instance
             :class:`DetectionResult` dataclasses, or use the bulk-array
             ``boxes`` view.
+
+        Raises:
+            NoDetectionsError: If nothing survives the thresholds and
+                ``raise_on_empty`` is in effect for this call.
         """
         timer = SpeedTimer()
         path = str(image) if isinstance(image, (str, Path)) else None
@@ -226,6 +243,7 @@ class Detector(VisionTask):
             conf_threshold=conf_threshold,
             iou_threshold=iou_threshold,
             classes=classes,
+            raise_on_empty=raise_on_empty,
         )
 
     async def async_predict(
@@ -235,6 +253,7 @@ class Detector(VisionTask):
         conf_threshold: float | None = None,
         iou_threshold: float | None = None,
         classes: list[int] | None = None,
+        raise_on_empty: bool | None = None,
     ) -> list[DetectionResults]:
         """Async detection via ``asyncio.to_thread``.
 
@@ -251,6 +270,7 @@ class Detector(VisionTask):
             conf_threshold=conf_threshold,
             iou_threshold=iou_threshold,
             classes=classes,
+            raise_on_empty=raise_on_empty,
         )
 
     async def ort_async_predict(
@@ -260,6 +280,7 @@ class Detector(VisionTask):
         conf_threshold: float | None = None,
         iou_threshold: float | None = None,
         classes: list[int] | None = None,
+        raise_on_empty: bool | None = None,
     ) -> list[DetectionResults]:
         """Async detection using ORT's native ``run_async`` for the model step.
 
@@ -289,6 +310,7 @@ class Detector(VisionTask):
             conf_threshold=conf_threshold,
             iou_threshold=iou_threshold,
             classes=classes,
+            raise_on_empty=raise_on_empty,
         )
 
     def _build_results(
@@ -303,18 +325,20 @@ class Detector(VisionTask):
         conf_threshold: float | None,
         iou_threshold: float | None,
         classes: list[int] | None,
+        raise_on_empty: bool | None,
     ) -> list[DetectionResults]:
         """Decode raw outputs + NMS into a :class:`DetectionResults` envelope.
 
         Shared between :meth:`predict`, :meth:`async_predict` and
         :meth:`ort_async_predict`.
         """
+        threshold = conf_threshold if conf_threshold is not None else self._conf_threshold
         decoded = decode_yolo(
             outputs[0],
             original_size=(original.shape[1], original.shape[0]),
             pad=pad,
             scale=scale,
-            conf_threshold=(conf_threshold if conf_threshold is not None else self._conf_threshold),
+            conf_threshold=threshold,
             iou_threshold=(iou_threshold if iou_threshold is not None else self._iou_threshold),
             max_detections=self._max_detections,
         )
@@ -322,6 +346,14 @@ class Detector(VisionTask):
         if classes is not None:
             allowed = set(classes)
             decoded = [d for d in decoded if d[1] in allowed]
+
+        require_detections(
+            len(decoded),
+            raise_on_empty=(raise_on_empty if raise_on_empty is not None else self._raise_on_empty),
+            conf_threshold=threshold,
+            classes=classes,
+            path=path,
+        )
 
         detections = tuple(
             self._build_detection(original, bbox, class_id, confidence)

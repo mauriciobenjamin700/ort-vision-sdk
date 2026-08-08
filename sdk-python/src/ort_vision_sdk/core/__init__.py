@@ -11,6 +11,7 @@ from ort_vision_sdk.core.exceptions import (
     InferenceError,
     LabelMapError,
     ModelLoadError,
+    NoDetectionsError,
     OrtVisionError,
     ProviderNotAvailableError,
 )
@@ -27,6 +28,7 @@ __all__: list[str] = [
     "LabelMapError",
     "MetadataBackend",
     "ModelLoadError",
+    "NoDetectionsError",
     "OrtSession",
     "OrtVisionError",
     "ProviderNotAvailableError",

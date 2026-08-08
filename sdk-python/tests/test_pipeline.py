@@ -15,7 +15,7 @@ import numpy as np
 import pytest
 
 from ort_vision_sdk import DetectClassify
-from ort_vision_sdk.core.exceptions import FusionError
+from ort_vision_sdk.core.exceptions import FusionError, NoDetectionsError
 from ort_vision_sdk.fusion import (
     INPUT_IMAGE,
     INPUT_PAD,
@@ -408,6 +408,71 @@ class TestFiltering:
     def test_an_empty_allowlist_keeps_nothing(self) -> None:
         backend = StubBackend(outputs=_outputs(), metadata=_spec().to_metadata())
         assert len(_pipeline(backend).predict(_image(), classes=[])[0]) == 0
+
+
+class TestRaiseOnEmpty:
+    """Treating an empty result as an error, when the caller opts in."""
+
+    def test_returns_an_empty_envelope_by_default(self) -> None:
+        """A pipeline that detects nothing is not, by itself, a failure."""
+        backend = StubBackend(outputs=_outputs(count=0), metadata=_spec().to_metadata())
+
+        assert len(_pipeline(backend).predict(_image())[0]) == 0
+
+    def test_raises_when_the_constructor_asked_for_it(self) -> None:
+        backend = StubBackend(outputs=_outputs(count=0), metadata=_spec().to_metadata())
+
+        with pytest.raises(NoDetectionsError):
+            _pipeline(backend, raise_on_empty=True).predict(_image())
+
+    def test_stays_quiet_when_something_was_detected(self) -> None:
+        backend = StubBackend(outputs=_outputs(), metadata=_spec().to_metadata())
+
+        assert len(_pipeline(backend, raise_on_empty=True).predict(_image())[0]) == 2
+
+    def test_per_call_override_turns_it_on(self) -> None:
+        backend = StubBackend(outputs=_outputs(count=0), metadata=_spec().to_metadata())
+
+        with pytest.raises(NoDetectionsError):
+            _pipeline(backend).predict(_image(), raise_on_empty=True)
+
+    def test_per_call_override_turns_it_off(self) -> None:
+        backend = StubBackend(outputs=_outputs(count=0), metadata=_spec().to_metadata())
+        pipeline = _pipeline(backend, raise_on_empty=True)
+
+        assert len(pipeline.predict(_image(), raise_on_empty=False)[0]) == 0
+
+    def test_a_stricter_per_call_threshold_can_empty_the_result(self) -> None:
+        """Filtering everything away after the graph ran counts as empty too."""
+        backend = StubBackend(outputs=_outputs(), metadata=_spec().to_metadata())
+        pipeline = _pipeline(backend, raise_on_empty=True)
+
+        with pytest.raises(NoDetectionsError, match="conf_threshold=0.99"):
+            pipeline.predict(_image(), conf_threshold=0.99)
+
+    def test_reports_the_graph_threshold_when_no_override_was_given(self) -> None:
+        """The bar that emptied the result is the one baked into the graph's NMS."""
+        backend = StubBackend(
+            outputs=_outputs(count=0), metadata=_spec(conf_threshold=0.4).to_metadata()
+        )
+
+        with pytest.raises(NoDetectionsError, match="conf_threshold=0.4"):
+            _pipeline(backend, raise_on_empty=True).predict(_image())
+
+    def test_a_class_filter_that_empties_the_result_raises(self) -> None:
+        backend = StubBackend(outputs=_outputs(), metadata=_spec().to_metadata())
+        pipeline = _pipeline(backend, raise_on_empty=True)
+
+        with pytest.raises(NoDetectionsError, match=r"among classes \[7\]"):
+            pipeline.predict(_image(), classes=[7])
+
+    @pytest.mark.parametrize("method", ["async_predict", "ort_async_predict"])
+    async def test_async_variants_forward_the_flag(self, method: str) -> None:
+        backend = StubBackend(outputs=_outputs(count=0), metadata=_spec().to_metadata())
+        pipeline = _pipeline(backend)
+
+        with pytest.raises(NoDetectionsError):
+            await getattr(pipeline, method)(_image(), raise_on_empty=True)
 
 
 class TestAsync:

@@ -108,8 +108,34 @@ navegador só carrega o `.onnx` resultante. Ver
 O pacote também exporta helpers de baixo nível para quem constrói o próprio
 pipeline: `letterbox`, `resize`, `normalize`, `toCHW`, `toTensor`,
 `toFloat32`/`toFloat32Tensor`, `fromCv2`/`toCv2`, `softmax`, `topK`, `nms`,
-`batchedNms`, `decodeYolo`/`decodeYoloV8`, `decodeYoloAnchors`/
-`decodeYoloV8Anchors`, `decodeYoloSeg`/`decodeYoloV8Seg`.
+`batchedNms`, `decodeYolo`, `decodeYoloAnchors` e `decodeYoloSeg`.
+
+### O caminho rápido que as tarefas tomam
+
+Os primitivos acima alocam e varrem o buffer inteiro a cada chamada — a forma
+certa para uma biblioteca, a errada para um laço de vídeo. As tarefas internas
+usam duas pipelines que fundem esse trabalho num `drawImage` mais um laço, com
+o buffer de saída reusado entre frames:
+
+| Símbolo | O que faz |
+| --- | --- |
+| `LetterboxPipeline(w, h, fill?)` | Redimensiona **preservando proporção** e preenche o resto, devolvendo `{ data, scale, padLeft, padTop, reused }`. É o que `Detector`, `Segmenter` e `DetectClassify` usam. |
+| `ResizePipeline(w, h, mean?, std?)` | Estica até o alvo (sem padding) e já normaliza, devolvendo `{ data, reused }`. É o que o `Classifier` usa — ele não mapeia nada de volta para a imagem original, então não há escala nem padding a inverter. |
+| `letterboxToTensorData(...)` / `resizeToTensorData(...)` | As formas de uma chamada só, para quem não quer manter a pipeline viva. |
+| `writePlanarFloat32(rgba, w, h, mean, std, out, stride?)` | O laço em si: RGBA (ou RGB empacotado, com `stride: 3`) → float32 planar normalizado. |
+| `zeroTensorData(w, h)` | O tensor zerado que o `warmup()` alimenta. |
+
+!!! warning "`release()` não é opcional"
+    O buffer de saída é reusado, então `run()` marca-o como em uso e a chamada
+    seguinte aloca outro em vez de corromper o primeiro. Chame `release()`
+    depois que a inferência resolveu — a partir daí os valores já estão dentro
+    do heap do WASM.
+
+!!! info "A saída é bit-idêntica à dos primitivos"
+    Fundir mudou quantas passadas e quantas alocações acontecem, não a
+    aritmética: `(valor / 255 - mean) / std` é avaliado nessa ordem justamente
+    porque colapsar numa multiplicação-e-soma daria outro arredondamento. Os
+    testes comparam as duas saídas valor a valor.
 
 !!! note "Fonte da verdade"
     As assinaturas completas vivem no código-fonte em

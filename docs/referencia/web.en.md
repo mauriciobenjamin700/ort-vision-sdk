@@ -108,8 +108,34 @@ browser only loads the resulting `.onnx`. See
 The package also exports low-level helpers for callers building their own
 pipeline: `letterbox`, `resize`, `normalize`, `toCHW`, `toTensor`,
 `toFloat32`/`toFloat32Tensor`, `fromCv2`/`toCv2`, `softmax`, `topK`, `nms`,
-`batchedNms`, `decodeYolo`/`decodeYoloV8`, `decodeYoloAnchors`/
-`decodeYoloV8Anchors`, `decodeYoloSeg`/`decodeYoloV8Seg`.
+`batchedNms`, `decodeYolo`, `decodeYoloAnchors` and `decodeYoloSeg`.
+
+### The fast path the tasks take
+
+The primitives above allocate and walk the whole buffer on every call — the
+right shape for a library, the wrong shape for a video loop. The built-in tasks
+go through two pipelines that fuse that work into one `drawImage` plus one loop,
+with the output buffer reused across frames:
+
+| Symbol | What it does |
+| --- | --- |
+| `LetterboxPipeline(w, h, fill?)` | Resizes **preserving aspect ratio** and pads the rest, returning `{ data, scale, padLeft, padTop, reused }`. This is what `Detector`, `Segmenter` and `DetectClassify` use. |
+| `ResizePipeline(w, h, mean?, std?)` | Stretches to the target (no padding) and normalizes in the same pass, returning `{ data, reused }`. This is what `Classifier` uses — it maps nothing back onto the original image, so there is no scale or padding to invert. |
+| `letterboxToTensorData(...)` / `resizeToTensorData(...)` | The one-shot forms, for a caller who does not want to keep a pipeline alive. |
+| `writePlanarFloat32(rgba, w, h, mean, std, out, stride?)` | The loop itself: RGBA (or packed RGB, with `stride: 3`) → normalized planar float32. |
+| `zeroTensorData(w, h)` | The zeroed tensor `warmup()` feeds. |
+
+!!! warning "`release()` is not optional"
+    The output buffer is reused, so `run()` marks it in use and the next call
+    allocates a fresh one rather than corrupting the first. Call `release()`
+    once the inference has resolved — from then on the values already live
+    inside the WASM heap.
+
+!!! info "The output is bit-identical to the primitives'"
+    Fusing changed how many passes and how many allocations happen, not the
+    arithmetic: `(value / 255 - mean) / std` is evaluated in that order
+    precisely because collapsing it into a multiply-add would round differently.
+    The tests compare both outputs value by value.
 
 !!! note "Source of truth"
     The full signatures live in the source at

@@ -95,8 +95,12 @@ export {
 
 export {
   type FusedLetterboxResult,
+  type FusedResizeResult,
   LetterboxPipeline,
+  ResizePipeline,
   letterboxToTensorData,
+  resizeToTensorData,
+  writePlanarFloat32,
   zeroTensorData,
 } from "./preprocess/pipeline.js";
 
@@ -147,4 +151,4 @@ export {
   Segmenter,
 } from "./tasks/segmenter.js";
 
-export const VERSION: string = "0.6.1";
+export const VERSION: string = "0.7.0";

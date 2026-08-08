@@ -7,6 +7,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-08-08
+
+### Added
+
+- **`Classifier.warmup(runs = 1)`.** The classifier was the one task left
+  without it — the documentation already claimed all four had it. The cost it
+  moves is the same one the other three move (WebGPU compiling shaders, the WASM
+  backend faulting in its arenas), and it lands worse here: an app running a
+  detector and then a classifier could warm the first and not the second, so an
+  unavoidable first-run cost sat right before the answer appears on screen.
+
+- **`ResizePipeline`, the classification counterpart of `LetterboxPipeline`**
+  (plus `resizeToTensorData`, its one-shot form, and `writePlanarFloat32`, the
+  loop both pipelines share). A classifier stretches to the model's input rather
+  than letterboxing into it — no padding, no scale to invert afterwards — so it
+  could not reuse the letterbox path as it stands.
+
+### Changed
+
+- **`Classifier` preprocessing allocates nothing per frame and walks the image
+  once.** It was still on the composable route (`resize` → `normalize` →
+  `toCHW`), which allocates an `RGBImage` and two `Float32Array`s and scans each
+  end to end: roughly 1.4 MB of fresh garbage per 224×224 `predict()`, produced
+  exactly when a phone near its ONNX memory ceiling can least afford it. It now
+  goes through `ResizePipeline`, which resizes with one `drawImage` and writes
+  normalized planar float32 into a buffer held across calls.
+
+  **The output is bit-identical** to the composable path — asserted value by
+  value against `normalize` → `toCHW`, including the `mean=[0,0,0]`,
+  `std=[1,1,1]` configuration an Ultralytics `-cls` export uses, where the old
+  route walked the whole buffer and allocated another one to change no value at
+  all.
+
+### Fixed
+
+- **The web reference stopped listing `decodeYoloV8`, `decodeYoloV8Anchors` and
+  `decodeYoloV8Seg`.** They were removed in 0.6.0; the page kept advertising
+  them as current API. It documents both preprocessing pipelines now.
+
 ## [0.6.1] - 2026-08-08
 
 ### Fixed
@@ -463,7 +502,8 @@ console.log(r.boxes.xyxy, r.boxes.cls, r.boxes.conf, r.names);
 - Execution-provider resolution defaulting to `["webgpu", "wasm"]`.
 - Public types mirroring the Python SDK: `BoundingBox`, `ClassProbability`, `ClassificationResult`, `DetectionResult`, `RGBImage`.
 
-[Unreleased]: https://github.com/mauriciobenjamin700/ort-vision-sdk/compare/web-v0.6.1...HEAD
+[Unreleased]: https://github.com/mauriciobenjamin700/ort-vision-sdk/compare/web-v0.7.0...HEAD
+[0.7.0]: https://github.com/mauriciobenjamin700/ort-vision-sdk/compare/web-v0.6.1...web-v0.7.0
 [0.6.1]: https://github.com/mauriciobenjamin700/ort-vision-sdk/compare/web-v0.6.0...web-v0.6.1
 [0.6.0]: https://github.com/mauriciobenjamin700/ort-vision-sdk/compare/web-v0.5.1...web-v0.6.0
 [0.5.1]: https://github.com/mauriciobenjamin700/ort-vision-sdk/compare/web-v0.5.0...web-v0.5.1

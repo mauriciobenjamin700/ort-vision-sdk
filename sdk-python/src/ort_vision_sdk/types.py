@@ -204,6 +204,14 @@ class DetectionResult:
         bbox: Bounding box in original-image pixel coordinates.
         cropped_image: The original image cropped to ``bbox``, as a HWC uint8
             RGB array. Empty boxes (zero area) yield a zero-sized array.
+        classification: What a second, classification stage predicted **for
+            this crop** — populated only by
+            :class:`~ort_vision_sdk.tasks.pipeline.DetectClassify`, and ``None``
+            for a plain detector. Kept as its own field rather than folded into
+            ``class_id``/``class_name`` because the two answers are different
+            questions: the detector says *what kind of object this is*, the
+            classifier says *which sub-category the object belongs to*, and
+            collapsing them would lose one of the two.
     """
 
     class_id: int
@@ -211,6 +219,7 @@ class DetectionResult:
     confidence: float
     bbox: BoundingBox
     cropped_image: ImageArray
+    classification: ClassificationResult | None = None
 
     @property
     def cls(self) -> int:

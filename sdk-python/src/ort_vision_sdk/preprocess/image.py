@@ -12,6 +12,12 @@ from PIL import Image
 
 from ort_vision_sdk.types import ImageArray
 
+IMAGENET_MEAN: tuple[float, float, float] = (0.485, 0.456, 0.406)
+"""Per-channel RGB mean of ImageNet, the normalization torchvision classifiers assume."""
+
+IMAGENET_STD: tuple[float, float, float] = (0.229, 0.224, 0.225)
+"""Per-channel RGB standard deviation of ImageNet."""
+
 
 def reduction_factor(source_size: tuple[int, int], target_size: tuple[int, int]) -> int:
     """Largest integer factor an image can be box-reduced by before resampling.

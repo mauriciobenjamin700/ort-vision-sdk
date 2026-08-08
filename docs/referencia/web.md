@@ -10,6 +10,7 @@ exportado de `@mauriciobenjamin700/ort-vision-sdk-web`).
 | `Classifier` | `await Classifier.create(model, options)` | Classificação de imagem. |
 | `Detector` | `await Detector.create(model, options)` | Detecção de objetos (YOLO). |
 | `Segmenter` | `await Segmenter.create(model, options)` | Segmentação de instância (YOLO-seg). |
+| `DetectClassify` | `await DetectClassify.create(model, options)` | Pipeline fundido detector → classificador, num único `.onnx`. |
 | `VisionTask` | — | Classe base comum. |
 
 `predict()` é sempre `async` e retorna `Promise<...Results[]>` de comprimento 1
@@ -23,6 +24,7 @@ por imagem. Cada tarefa expõe um alias `run()`.
 | `DetectorOptions` / `DetectorPredictOptions` | `Detector` (`head`, `labels`, `inputSize`, `confThreshold`, `iouThreshold`; overrides + `classes` no predict) |
 | `SegmenterOptions` / `SegmenterPredictOptions` | `Segmenter` (+ `maskThreshold`) |
 | `DetectorHead` (`"yolo"`) / `SegmenterHead` (`"yolo-seg"`) | famílias de decoder |
+| `DetectClassifyOptions` / `DetectClassifyPredictOptions` | `DetectClassify` (`labels`, `classifierLabels`; `confThreshold`, `classes`, `topK` no predict) |
 
 ## Resultados
 
@@ -30,6 +32,7 @@ por imagem. Cada tarefa expõe um alias `run()`.
 | --- | --- | --- |
 | `ClassificationResults` | `probs` | n/a (resultado único) |
 | `DetectionResults` | `boxes` | `DetectionResult` |
+| `DetectClassifyResults` | `boxes` | `DetectionResult` com `classification` preenchido (+ `classifierNames` no envelope) |
 | `SegmentationResults` | `boxes`, `masks` | `SegmentationResult` |
 
 Todo envelope expõe `names`, `origImg`, `origShape`, `path` e `speed` — um
@@ -66,7 +69,22 @@ Tipos/classes por instância: `DetectionResult`, `SegmentationResult`,
 
 Hierarquia de exceções exportada: `OrtVisionError` (base), `ImageLoadError`,
 `InferenceError`, `LabelMapError`, `ModelLoadError`,
-`ProviderNotAvailableError`.
+`ProviderNotAvailableError`, `FusionError`.
+
+## Pipelines fundidos
+
+| Símbolo | Descrição |
+| --- | --- |
+| `readFusionSpec(metadata)` | Lê o que um pipeline fundido declara sobre si mesmo; `null` quando o modelo não é um pipeline. |
+| `FusionSpec` / `CropSource` | O contrato decodificado e de onde vêm os recortes. |
+| `INPUT_IMAGE` / `INPUT_SOURCE` / `INPUT_SCALE` / `INPUT_PAD` | Nomes das entradas do grafo fundido. |
+| `OUTPUT_BOXES` / `OUTPUT_SCORES` / `OUTPUT_CLASSES` / `OUTPUT_NUM_DETECTIONS` / `OUTPUT_PROBS` | Nomes das saídas. |
+| `METADATA_PREFIX` / `FUSION_KIND_DETECT_CLASSIFY` | Namespace `ovs.` e a família de pipeline. |
+| `parseNames(raw)` | Interpreta um mapa de classes `repr`-encoded. |
+
+Fundir modelos é um passo de build **do lado Python** (extra `[compose]`); o
+navegador só carrega o `.onnx` resultante. Ver
+[Pipelines fundidos](../guia/pipeline.md).
 
 ## Utilitários de pré/pós-processamento
 

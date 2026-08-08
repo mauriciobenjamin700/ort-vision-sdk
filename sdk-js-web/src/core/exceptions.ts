@@ -26,3 +26,13 @@ export class ImageLoadError extends OrtVisionError {}
 
 /** Raised when class labels cannot be resolved from the supplied spec. */
 export class LabelMapError extends OrtVisionError {}
+
+/**
+ * Raised when a model cannot be driven as a fused detect→classify pipeline.
+ *
+ * In the browser this means the file carries no `ovs.*` metadata — it is a
+ * plain detector or classifier rather than something `ort_vision_sdk.compose`
+ * produced — or the graph is missing an output the pipeline contract requires.
+ * Building a pipeline is a Python-side build step; the browser only runs one.
+ */
+export class FusionError extends OrtVisionError {}

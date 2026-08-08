@@ -12,6 +12,7 @@ Requer **Python 3.11+**.
 pip install ort-vision-sdk            # somente CPU (padrão)
 pip install "ort-vision-sdk[gpu]"     # adiciona onnxruntime-gpu (CUDA / TensorRT)
 pip install "ort-vision-sdk[opencv]"  # adiciona o backend de imagem OpenCV
+pip install "ort-vision-sdk[compose]" # adiciona onnx, para fundir modelos num pipeline
 pip install "ort-vision-sdk[dev]"     # ruff, mypy, pytest, build, twine
 ```
 
@@ -23,7 +24,14 @@ Dependências base: `onnxruntime>=1.17.0`, `numpy>=1.24.0`, `pillow>=10.0.0`.
 | --- | --- | --- |
 | `gpu` | `onnxruntime-gpu` | Inferência em GPU NVIDIA via CUDA / TensorRT. |
 | `opencv` | `opencv-python` | Backend de imagem OpenCV (alternativa ao Pillow). |
+| `compose` | `onnx` | Fundir detector + classificador num único `.onnx` — ver [Pipelines fundidos](guia/pipeline.md). |
 | `dev` | ruff, mypy, pytest, build, twine | Contribuir com o pacote. |
+
+!!! info "`compose` é só para o build"
+    O `onnx` (a biblioteca que reescreve o protobuf) é necessário apenas para
+    **fundir** modelos, um passo que você roda uma vez junto do seu pipeline de
+    export. **Rodar** o `.onnx` fundido não precisa de nada além do
+    `onnxruntime` que já vem na instalação base.
 
 !!! warning "CPU vs. GPU"
     `onnxruntime` (CPU) e `onnxruntime-gpu` não devem coexistir no mesmo ambiente.
@@ -63,3 +71,4 @@ node -e "import('@mauriciobenjamin700/ort-vision-sdk-web').then(m => console.log
 - [Início rápido](inicio-rapido.md) — primeiros exemplos lado a lado.
 - [Guia de classificação](guia/classificacao.md),
   [detecção](guia/deteccao.md) e [segmentação](guia/segmentacao.md).
+- [Pipelines fundidos](guia/pipeline.md) — dois modelos, um arquivo, uma sessão.

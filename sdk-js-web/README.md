@@ -66,6 +66,30 @@ for (const d of detections) {
 }
 ```
 
+### Fused detect → classify pipeline
+
+A pipeline fused by the Python SDK's `ort_vision_sdk.compose` puts a detector,
+the crop-and-resize bridge and a classifier into **one** `.onnx`. In a browser
+that is one download and one session instead of two, and no per-crop round trip
+through JavaScript.
+
+```typescript
+import { DetectClassify } from "@mauriciobenjamin700/ort-vision-sdk-web";
+
+const pipeline = await DetectClassify.create("/models/pipeline.onnx");
+const result = (await pipeline.predict("/images/flock.jpg"))[0];
+
+for (const d of result) {
+  console.log(d.name, d.conf, d.box.asXyxy());          // what the detector found
+  console.log(d.classification?.name, d.classification?.conf);  // what the classifier said
+}
+```
+
+The resolution, crop size, thresholds and both class maps come out of the file's
+own metadata, so nothing is restated here. Building the pipeline is a Python-side
+step; the browser only loads the result. Full guide:
+[Fused pipelines](https://mauriciobenjamin700.github.io/ort-vision-sdk/en/guia/pipeline/).
+
 ## Inference speed
 
 Every result envelope carries a per-stage timing breakdown:

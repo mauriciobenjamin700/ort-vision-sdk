@@ -15,6 +15,8 @@ from ort_vision_sdk.io.image import ImageInput, load_image
 from ort_vision_sdk.labels import LabelSpec, resolve_labels
 from ort_vision_sdk.postprocess.classification import softmax, topk
 from ort_vision_sdk.preprocess.image import (
+    IMAGENET_MEAN,
+    IMAGENET_STD,
     add_batch_dim,
     normalize,
     resize,
@@ -29,9 +31,6 @@ if TYPE_CHECKING:
     import onnxruntime as ort
 
     from ort_vision_sdk.core.backend import InferenceBackend
-
-_IMAGENET_MEAN: tuple[float, float, float] = (0.485, 0.456, 0.406)
-_IMAGENET_STD: tuple[float, float, float] = (0.229, 0.224, 0.225)
 
 
 class Classifier(VisionTask):
@@ -69,8 +68,8 @@ class Classifier(VisionTask):
         session_options: ort.SessionOptions | None = None,
         backend: InferenceBackend | None = None,
         input_size: tuple[int, int] | None = None,
-        mean: tuple[float, float, float] = _IMAGENET_MEAN,
-        std: tuple[float, float, float] = _IMAGENET_STD,
+        mean: tuple[float, float, float] = IMAGENET_MEAN,
+        std: tuple[float, float, float] = IMAGENET_STD,
         apply_softmax: bool = True,
     ) -> None:
         """Initialize the classifier.

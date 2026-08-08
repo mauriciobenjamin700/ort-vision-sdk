@@ -50,6 +50,7 @@ plugins:
             Classificação: Classification
             Detecção: Detection
             Segmentação: Segmentation
+            Pipelines fundidos: Fused pipelines
             O modelo manda: The model decides
             Python: Python
             Backends de inferência: Inference backends
@@ -67,7 +68,14 @@ markdown_extensions:
   - def_list
   - tables
   - pymdownx.details
-  - pymdownx.superfences
+  # Material renders a ```mermaid fence natively once superfences is told to
+  # hand it over instead of highlighting it as source. Used by the fused
+  # pipeline guide to show where the bridge sits between the two models.
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
   - pymdownx.highlight
   - pymdownx.inlinehilite
   - pymdownx.tabbed:
@@ -85,6 +93,7 @@ nav:
       - Classificação: guia/classificacao.md
       - Detecção: guia/deteccao.md
       - Segmentação: guia/segmentacao.md
+      - Pipelines fundidos: guia/pipeline.md
       - O modelo manda: guia/modelo.md
       - Python: guia/python.md
       - Backends de inferência: guia/backends.md

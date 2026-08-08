@@ -198,7 +198,22 @@ export function readModelMetadata(
 export function modelNames(
   metadata: Readonly<Record<string, string>> | undefined,
 ): readonly string[] | null {
-  const raw = metadata?.names?.trim();
+  return parseNames(metadata?.names);
+}
+
+/**
+ * Parse a `repr`-encoded `dict[int, str]` class map.
+ *
+ * Split out of {@link modelNames} because the same encoding is reused by a
+ * fused pipeline, which carries one class map per stage and therefore cannot
+ * store both under the single `names` key Ultralytics uses.
+ *
+ * @param encoded The encoded map — e.g. `"{0: 'deworm', 1: 'not_deworm'}"`.
+ * @returns Class names in class-id order, or `null` when the value is missing,
+ *   unparseable, not a `dict`, or not keyed by contiguous integers from zero.
+ */
+export function parseNames(encoded: string | undefined): readonly string[] | null {
+  const raw = encoded?.trim();
   if (!raw || !raw.startsWith("{") || !raw.endsWith("}")) return null;
 
   const body = raw.slice(1, -1).trim();

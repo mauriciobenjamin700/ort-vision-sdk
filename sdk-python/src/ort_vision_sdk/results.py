@@ -266,6 +266,67 @@ class DetectionResults:
 
 
 @dataclass(frozen=True, slots=True)
+class DetectClassifyResults:
+    """Per-image envelope for a fused detect→classify pipeline.
+
+    Structurally a :class:`DetectionResults` with a second class map: every
+    detection it yields carries a populated
+    :pyattr:`~ort_vision_sdk.types.DetectionResult.classification`, and the two
+    stages have their own, unrelated label spaces — a detector that finds
+    ``sheep`` feeding a classifier that answers ``famacha_3`` shares no class
+    ids with it. Merging them into one ``names`` dict would make ``cls`` and
+    ``classification.cls`` look comparable when they are not.
+
+    ```python
+    result = pipeline.predict("flock.jpg")[0]
+    for detection in result:
+        print(detection.name, detection.conf, detection.classification.name)
+    ```
+
+    Attributes:
+        boxes: Bulk-array view of the detections (``Boxes``), covering the
+            detection stage only.
+        detections: Tuple of per-instance
+            :class:`~ort_vision_sdk.types.DetectionResult` dataclasses, each
+            with its ``classification`` filled in.
+        names: Detector class id → class name.
+        classifier_names: Classifier class id → class name.
+        orig_img: The original input image as HWC uint8 RGB.
+        orig_shape: ``(height, width)`` of ``orig_img``.
+        path: Source path of the input image, or ``None`` if it wasn't a path.
+        speed: Per-stage durations in milliseconds — ``load``, ``preprocess``,
+            ``inference`` and ``postprocess``. The ``inference`` figure covers
+            detection *and* classification, since the pipeline runs them as one
+            graph and no boundary between them is observable from outside.
+    """
+
+    boxes: Boxes
+    detections: tuple[DetectionResult, ...]
+    names: dict[int, str]
+    classifier_names: dict[int, str]
+    orig_img: ImageArray
+    orig_shape: tuple[int, int]
+    path: str | None = None
+    speed: dict[str, float] = field(default_factory=dict)
+
+    def __len__(self) -> int:
+        """Number of surviving detections."""
+        return len(self.detections)
+
+    def __iter__(self) -> Iterator[DetectionResult]:
+        """Iterate over per-instance detections, each carrying its classification."""
+        return iter(self.detections)
+
+    @overload
+    def __getitem__(self, index: int) -> DetectionResult: ...
+    @overload
+    def __getitem__(self, index: slice) -> tuple[DetectionResult, ...]: ...
+    def __getitem__(self, index: int | slice) -> DetectionResult | tuple[DetectionResult, ...]:
+        """Index into the per-instance detections."""
+        return self.detections[index]
+
+
+@dataclass(frozen=True, slots=True)
 class ClassificationResults:
     """Per-image classification envelope (Ultralytics-style ``Results``).
 

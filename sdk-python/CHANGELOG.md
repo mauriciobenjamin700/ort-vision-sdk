@@ -7,87 +7,75 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Removed
+## [0.7.0] - 2026-08-07
 
-- **`decode_yolov8`, `decode_yolov8_anchors` and `decode_yolov8_seg` are gone.**
-  Deprecated in 0.2.0 with "will be removed in 0.3.0", and still shipping at
-  0.6.0 — a deprecation nobody enforces stops being one. Use `decode_yolo`,
-  `decode_yolo_anchors` and `decode_yolo_seg`: same functions, honest names.
-  The decoder was never v8-specific; it covers every anchor-free YOLO head from
-  v8 through v12.
+### Added
 
-  `tests/test_deprecations.py` now guards the removal rather than the
-  deprecation, so a re-add fails loudly.
+- **`ort_vision_sdk.compose` — fuse a detector and a classifier into one
+  `.onnx`.** Chaining the two tasks meant two sessions, two model loads, and a
+  round trip through Python for every crop: slice the image, resize each region,
+  restack a batch, call the second runtime. On a phone or in a browser tab that
+  round trip is frequently the dominant cost, and the second load is what makes a
+  page slow to become interactive.
 
-- **Python 3.10 is no longer supported.** `requires-python` is `>=3.11`.
-  `onnxruntime` stopped publishing cp310 wheels at 1.24, so a 3.10 install was
-  already pinned to `onnxruntime <= 1.23` without saying so — a floor that
-  quietly decays is worse than one that is stated. The CI matrix moves to
-  3.11 / 3.12 / 3.13.
+  `fuse_detect_classify()` rewrites both protobufs into a single graph — the
+  detector's nodes, a bridge, then the classifier's nodes — so it is one file,
+  one session, one load, and the crops never leave the runtime:
 
-### Fixed
+  ```python
+  from ort_vision_sdk.compose import fuse_detect_classify
 
-- **A custom model with no baked-in `names` no longer fails to construct.** The
-  fallback for a model that declares no class names was the COCO preset, which
-  names exactly 80 classes — so a 3-class detector raised `Resolved 80 labels
-  but the model has 3 classes` and could not be built at all without passing
-  `labels`. An export without `names` is an ordinary thing to have; the labels
-  now come up as `class_0`, `class_1`, ... and the COCO preset is used only when
-  the model really does have 80 classes. `default_labels` is exported for
-  callers who want the same decision.
-
-- **Automatic provider selection no longer tries TensorRT.** `onnxruntime-gpu`
-  reports `TensorrtExecutionProvider` as available whenever it was compiled in,
-  not when it can load — so on a machine without the TensorRT shared libraries,
-  which is the common case for that wheel, every session printed four lines of
-  failed provider registration and fallback notices to stderr before recovering
-  on CUDA:
-
-  ```text
-  *************** EP Error ***************
-  EP Error ... Please install TensorRT libraries as mentioned in the GPU
-  requirements page ... when using ['TensorrtExecutionProvider', ...]
-  Falling back to ['CUDAExecutionProvider', 'CPUExecutionProvider'] and retrying.
-  ****************************************
+  fuse_detect_classify("yolov8n.onnx", "resnet18.onnx", "pipeline.onnx", max_detections=20)
   ```
 
-  TensorRT also builds an engine on first run that can take minutes, which is
-  not a cost to opt somebody into by default. `providers=["tensorrt"]` still
-  selects it, and still raises `ProviderNotAvailableError` when the installed
-  build does not carry it.
+  The bridge is authored in plain ONNX operators: `NonMaxSuppression` with
+  `center_point_box=1` (which eats the YOLO head's `(cx, cy, w, h)` directly),
+  `TopK` + `Pad` to a fixed row count, and `RoiAlign` at `spatial_scale=1.0` to
+  crop and resample every box in one batched call.
 
-### Fixed
+- **`DetectClassify` — the runtime for a fused pipeline.** Loads the file and
+  configures itself from it; every detection it yields carries a populated
+  `classification`. Same `predict()` / `async_predict()` / `ort_async_predict()`
+  triad as the other tasks:
 
-- **Instance masks no longer lose precision to a `uint8` round-trip.** Resizing
-  a soft mask to its bounding box went through PIL, which cannot resample a
-  float array — so the mask was quantized to `uint8` first. That put the input
-  to the `>= mask_threshold` test on a grid of `1/255` steps and flipped border
-  pixels for no reason. Resampling is now a bilinear pass in `float32`, and it
-  agrees with a `float64` reference on **100%** of pixels where the old path
-  agreed on 99.7%.
+  ```python
+  from ort_vision_sdk import DetectClassify
 
-  This also removes a divergence between the two published SDKs: the web
-  implementation always resampled in float, so the same model on the same image
-  produced different masks in Python and in the browser. They now produce the
-  same bitmap, and `fixtures/parity/` checks it.
+  pipeline = DetectClassify("pipeline.onnx")
+  for d in pipeline.predict("flock.jpg")[0]:
+      print(d.name, d.conf, d.classification.name)
+  ```
 
-  Masks stored by 0.6.0 or earlier will differ from new ones by a few border
-  pixels.
+- **`crop_source="original"` — classify at native resolution.** Cropping from the
+  letterboxed tensor classifies a small object from its downscaled copy: a 40x40
+  px box inside a 640 letterbox reaches the classifier upsampled from 40x40
+  pixels of real detail. This mode adds a full-resolution input plus the
+  letterbox parameters, and the bridge inverts the letterbox transform in-graph
+  so the crop comes out of the original photo. Still one session, still one load.
 
-- **Score ties in `nms` and `batched_nms` resolve deterministically, to the
-  lowest index.** `nms` ordered candidates with `scores.argsort()[::-1]`, which
-  reverses a stable sort — so tied scores were visited in *descending* index
-  order, the opposite of `torchvision` and of the web SDK. Two boxes tied on
-  score therefore produced a different survivor in each SDK. `batched_nms` had
-  the same problem across classes, where the surviving order also depended on
-  the class-iteration order. Both now break ties by index explicitly.
+- **`FusionSpec` — the pipeline's configuration lives in the pipeline.** The
+  letterbox resolution, the crop size, the crop source, the thresholds, whether
+  the classifier output still needs a softmax, and the class names of *both*
+  stages are written into the model's metadata under an `ovs.` namespace and read
+  back at load time. Nothing is restated by the caller, so nothing can drift —
+  the same principle already applied to single models in 0.6.0.
 
-- **`nms` no longer emits `RuntimeWarning: invalid value encountered in
-  divide`.** The IoU was computed for every pair and then masked, so a pair of
-  zero-area boxes evaluated `0 / 0` before the result was discarded. Letterbox
-  padding clips boxes down to zero area on ordinary frames, so the warning
-  reached callers' logs during normal use. The division is now masked instead of
-  discarded.
+- **`DetectionResult.classification`** (optional, `None` for a plain detector) and
+  the `DetectClassifyResults` envelope, which carries `names` and
+  `classifier_names` separately. The two stages have unrelated label spaces — a
+  detector finding `sheep` feeding a classifier answering `famacha_3` shares no
+  class ids with it — and merging them would make `cls` and `classification.cls`
+  look comparable when they are not.
+
+- **`FusionError`**, `graph.parse_names()`, and `preprocess.IMAGENET_MEAN` /
+  `IMAGENET_STD` (previously private to `Classifier`, now shared with the fusion's
+  defaults).
+
+- **The `[compose]` extra** (`pip install "ort-vision-sdk[compose]"`), which adds
+  `onnx`. It is needed only to *build* a pipeline — a step you run once next to
+  your export pipeline. Running the fused `.onnx` needs nothing beyond the
+  `onnxruntime` already in the base install, which is what lets the same file run
+  in a browser through `@mauriciobenjamin700/ort-vision-sdk-web`.
 
 ### Changed
 
@@ -146,6 +134,101 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   about to be discarded. Measured on 8400 anchors with 160x160 prototypes: 6.7x
   at 100 instances of 60px, 2.0x at 30 instances of 80px, 1.3x at 30 instances
   of 200px.
+
+### Removed
+
+- **`decode_yolov8`, `decode_yolov8_anchors` and `decode_yolov8_seg` are gone.**
+  Deprecated in 0.2.0 with "will be removed in 0.3.0", and still shipping at
+  0.6.0 — a deprecation nobody enforces stops being one. Use `decode_yolo`,
+  `decode_yolo_anchors` and `decode_yolo_seg`: same functions, honest names.
+  The decoder was never v8-specific; it covers every anchor-free YOLO head from
+  v8 through v12.
+
+  `tests/test_deprecations.py` now guards the removal rather than the
+  deprecation, so a re-add fails loudly.
+
+- **Python 3.10 is no longer supported.** `requires-python` is `>=3.11`.
+  `onnxruntime` stopped publishing cp310 wheels at 1.24, so a 3.10 install was
+  already pinned to `onnxruntime <= 1.23` without saying so — a floor that
+  quietly decays is worse than one that is stated. The CI matrix moves to
+  3.11 / 3.12 / 3.13.
+
+### Fixed
+
+- **A custom model with no baked-in `names` no longer fails to construct.** The
+  fallback for a model that declares no class names was the COCO preset, which
+  names exactly 80 classes — so a 3-class detector raised `Resolved 80 labels
+  but the model has 3 classes` and could not be built at all without passing
+  `labels`. An export without `names` is an ordinary thing to have; the labels
+  now come up as `class_0`, `class_1`, ... and the COCO preset is used only when
+  the model really does have 80 classes. `default_labels` is exported for
+  callers who want the same decision.
+
+- **Automatic provider selection no longer tries TensorRT.** `onnxruntime-gpu`
+  reports `TensorrtExecutionProvider` as available whenever it was compiled in,
+  not when it can load — so on a machine without the TensorRT shared libraries,
+  which is the common case for that wheel, every session printed four lines of
+  failed provider registration and fallback notices to stderr before recovering
+  on CUDA:
+
+  ```text
+  *************** EP Error ***************
+  EP Error ... Please install TensorRT libraries as mentioned in the GPU
+  requirements page ... when using ['TensorrtExecutionProvider', ...]
+  Falling back to ['CUDAExecutionProvider', 'CPUExecutionProvider'] and retrying.
+  ****************************************
+  ```
+
+  TensorRT also builds an engine on first run that can take minutes, which is
+  not a cost to opt somebody into by default. `providers=["tensorrt"]` still
+  selects it, and still raises `ProviderNotAvailableError` when the installed
+  build does not carry it.
+
+- **Instance masks no longer lose precision to a `uint8` round-trip.** Resizing
+  a soft mask to its bounding box went through PIL, which cannot resample a
+  float array — so the mask was quantized to `uint8` first. That put the input
+  to the `>= mask_threshold` test on a grid of `1/255` steps and flipped border
+  pixels for no reason. Resampling is now a bilinear pass in `float32`, and it
+  agrees with a `float64` reference on **100%** of pixels where the old path
+  agreed on 99.7%.
+
+  This also removes a divergence between the two published SDKs: the web
+  implementation always resampled in float, so the same model on the same image
+  produced different masks in Python and in the browser. They now produce the
+  same bitmap, and `fixtures/parity/` checks it.
+
+  Masks stored by 0.6.0 or earlier will differ from new ones by a few border
+  pixels.
+
+- **Score ties in `nms` and `batched_nms` resolve deterministically, to the
+  lowest index.** `nms` ordered candidates with `scores.argsort()[::-1]`, which
+  reverses a stable sort — so tied scores were visited in *descending* index
+  order, the opposite of `torchvision` and of the web SDK. Two boxes tied on
+  score therefore produced a different survivor in each SDK. `batched_nms` had
+  the same problem across classes, where the surviving order also depended on
+  the class-iteration order. Both now break ties by index explicitly.
+
+- **`nms` no longer emits `RuntimeWarning: invalid value encountered in
+  divide`.** The IoU was computed for every pair and then masked, so a pair of
+  zero-area boxes evaluated `0 / 0` before the result was discarded. Letterbox
+  padding clips boxes down to zero area on ordinary frames, so the warning
+  reached callers' logs during normal use. The division is now masked instead of
+  discarded.
+
+### Notes
+
+- A fixed `max_detections` keeps every shape in the fused graph static, which is
+  what TensorRT/NNAPI/WebGPU need in order to compile it, and removes the
+  zero-detection edge case (the classifier is never handed an empty batch).
+  `max_detections=None` trades that for exact-sized outputs.
+- `fuse_detect_classify` runs the fused graph once before returning. This catches
+  a classifier whose own graph only accepts the batch size it was exported with —
+  a hardcoded `Reshape`, typically — which rewriting the declared input shape does
+  not fix. Pass `validate=False` to skip.
+- The fused NMS scores every class independently, while
+  `postprocess.decode_yolo` collapses each anchor to its `argmax` first. An anchor
+  clearing the threshold for two classes yields two rows in a pipeline and one in
+  a standalone `Detector`.
 
 ### Internal
 

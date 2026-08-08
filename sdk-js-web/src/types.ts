@@ -200,6 +200,16 @@ export interface DetectionResult {
    * (zero area) yield a zero-sized `RGBImage`.
    */
   readonly croppedImage: RGBImage;
+  /**
+   * What a second, classification stage predicted **for this crop** —
+   * populated only by {@link DetectClassify}, and `null` for a plain detector.
+   *
+   * Kept as its own field rather than folded into `classId`/`className`
+   * because the two answers are different questions: the detector says *what
+   * kind of object this is*, the classifier says *which sub-category the object
+   * belongs to*, and collapsing them would lose one of the two.
+   */
+  readonly classification?: ClassificationResult | null;
 }
 
 /**

@@ -7,33 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Removed
-
-- **`decodeYoloV8`, `decodeYoloV8Anchors`, `decodeYoloV8Seg` and the
-  `DecodeYoloV8*Options` type aliases are gone.** Deprecated in 0.2.0 with
-  "will be removed in 0.4.0", and still shipping at 0.5.1. Use `decodeYolo`,
-  `decodeYoloAnchors`, `decodeYoloSeg` and their `DecodeYolo*Options` types:
-  same functions, honest names, since the decoder covers every anchor-free YOLO
-  head from v8 through v12.
-
-  `test/deprecations.test.ts` now guards the removal rather than the
-  deprecation, so a re-add fails loudly.
-
-### Fixed
-
-- **A custom model with no baked-in `names` no longer fails to create.** Same
-  defect as the Python SDK: the fallback was the 80-name COCO preset, so a
-  3-class detector threw `Resolved 80 labels but the model has 3 classes`.
-  Labels now come up as `class_0`, `class_1`, ..., and the COCO preset applies
-  only when the model really does have 80 classes. `defaultLabels` is exported.
-
-- **A model URL that cannot be fetched for its metadata now says so.** The
-  fallback — hand the URL to ORT and let it load the model itself — is right,
-  but it was silent, and the symptom it produces is remote from the cause:
-  class names come back as `class_0`, `class_1`, ... with nothing explaining
-  why. It warns now, and names `labels` as the way out.
+## [0.6.0] - 2026-08-07
 
 ### Added
+
+- **`DetectClassify` — run a fused detect→classify pipeline in the browser.**
+  A pipeline built by the Python SDK's `ort_vision_sdk.compose` (0.7.0) already
+  contains both models plus the crop-and-resize bridge between them. That matters
+  more in a tab than anywhere else: two models mean two `.onnx` downloads, two
+  WASM/WebGPU session initializations, and a per-crop round trip through
+  JavaScript to slice, resize and restack the regions before the second model can
+  see them. A fused pipeline has one download, one session, and no round trip.
+
+  ```typescript
+  import { DetectClassify } from "@mauriciobenjamin700/ort-vision-sdk-web";
+
+  const pipeline = await DetectClassify.create("/models/pipeline.onnx");
+  for (const d of (await pipeline.predict("/images/flock.jpg"))[0]) {
+    console.log(d.name, d.conf, d.classification?.name);
+  }
+  ```
+
+- **`readFusionSpec()` and the pipeline contract** (`FusionSpec`, `CropSource`,
+  the `INPUT_*` / `OUTPUT_*` names, `METADATA_PREFIX`). The letterbox resolution,
+  the crop size, whether the classifier output still needs a softmax and the class
+  names of both stages are read out of the model's own `ovs.` metadata — the same
+  keys, encodings and fallbacks the Python side writes. A pipeline fused once
+  therefore behaves identically in both runtimes, off the same file.
+
+- **`DetectionResult.classification`** (optional, absent for a plain detector) and
+  the `DetectClassifyResults` envelope, which carries `names` and
+  `classifierNames` separately because the two stages have unrelated label spaces.
+
+- **`FusionError`** and `parseNames()`, split out of `modelNames()` so both class
+  maps of a pipeline can be parsed with the same reader.
 
 - **`warmup()` on `Detector` and `Segmenter`.** The first inference of a session
   is not representative: WebGPU compiles its shaders on it and the WASM backend
@@ -79,7 +86,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the willReadFrequently attribute set to true` warning the browser was printing
   into every consumer's console, once per frame.
 
+### Removed
+
+- **`decodeYoloV8`, `decodeYoloV8Anchors`, `decodeYoloV8Seg` and the
+  `DecodeYoloV8*Options` type aliases are gone.** Deprecated in 0.2.0 with
+  "will be removed in 0.4.0", and still shipping at 0.5.1. Use `decodeYolo`,
+  `decodeYoloAnchors`, `decodeYoloSeg` and their `DecodeYolo*Options` types:
+  same functions, honest names, since the decoder covers every anchor-free YOLO
+  head from v8 through v12.
+
+  `test/deprecations.test.ts` now guards the removal rather than the
+  deprecation, so a re-add fails loudly.
+
 ### Fixed
+
+- **A custom model with no baked-in `names` no longer fails to create.** Same
+  defect as the Python SDK: the fallback was the 80-name COCO preset, so a
+  3-class detector threw `Resolved 80 labels but the model has 3 classes`.
+  Labels now come up as `class_0`, `class_1`, ..., and the COCO preset applies
+  only when the model really does have 80 classes. `defaultLabels` is exported.
+
+- **A model URL that cannot be fetched for its metadata now says so.** The
+  fallback — hand the URL to ORT and let it load the model itself — is right,
+  but it was silent, and the symptom it produces is remote from the cause:
+  class names come back as `class_0`, `class_1`, ... with nothing explaining
+  why. It warns now, and names `labels` as the way out.
 
 - **Score ties in `nms` and `batchedNms` break by index explicitly.** Both
   relied on `Array.prototype.sort` being stable to order tied scores. It is, in
@@ -92,6 +123,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Only exact ties are affected. The Python SDK was the one actually producing a
   different survivor — it visited ties in descending index order — and this is
   the other half of that fix.
+
+### Notes
+
+- Fusing models stays a Python-side build step; there is no ONNX protobuf writer
+  here and no reason for one. The browser only loads the result.
+- ORT Web returns `int64` outputs as `BigInt64Array`. The pipeline's class ids and
+  detection count are widened to `number` internally, so no caller has to handle
+  `BigInt`.
 
 ### Internal
 

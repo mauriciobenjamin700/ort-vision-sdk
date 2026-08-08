@@ -29,3 +29,13 @@ class ImageLoadError(OrtVisionError):
 
 class LabelMapError(OrtVisionError):
     """Raised when class labels cannot be resolved from the supplied spec."""
+
+
+class FusionError(OrtVisionError):
+    """Raised when two models cannot be fused into a single pipeline graph.
+
+    Covers every way :mod:`ort_vision_sdk.compose` can refuse a pair of models:
+    an unreadable file, a head layout the bridge cannot decode, opsets that
+    cannot be reconciled, a classifier whose graph will not accept a batch of
+    crops, or a fused graph that fails its post-build validation run.
+    """

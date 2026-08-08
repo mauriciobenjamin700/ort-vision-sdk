@@ -30,9 +30,21 @@ export function createCanvas(width: number, height: number): Canvas2D {
   throw new ImageLoadError("No canvas implementation available in this environment.");
 }
 
-/** Get a 2D context from a canvas, throwing a typed error if the browser refuses. */
-export function get2DContext(canvas: Canvas2D): Context2D {
-  const ctx = canvas.getContext("2d") as Context2D | null;
+/**
+ * Get a 2D context from a canvas, throwing a typed error if the browser refuses.
+ *
+ * @param canvas The canvas to obtain a context for.
+ * @param options Context attributes, forwarded verbatim. `willReadFrequently`
+ *   tells the browser the canvas is read back with `getImageData` repeatedly,
+ *   which moves the backing store to software: faster readback, slower
+ *   compositing. Whether it pays depends on the surface, so it is the caller's
+ *   call rather than a default here.
+ */
+export function get2DContext(
+  canvas: Canvas2D,
+  options: CanvasRenderingContext2DSettings = {},
+): Context2D {
+  const ctx = canvas.getContext("2d", options) as Context2D | null;
   if (ctx === null) {
     throw new ImageLoadError("Failed to obtain 2D rendering context.");
   }

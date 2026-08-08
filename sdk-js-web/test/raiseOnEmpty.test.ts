@@ -17,6 +17,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 /** Tensors the stubbed session answers a `run` call with. */
 let cannedOutputs: Record<string, FakeTensor> = {};
 
+/** What the stubbed letterbox pipeline reports back. */
+const cannedLetterbox = { scale: 1, padLeft: 0, padTop: 0 };
+
 /** A stand-in for `ort.Tensor` carrying just what the SDK reads. */
 class FakeTensor {
   constructor(
@@ -42,17 +45,33 @@ vi.mock("onnxruntime-web", () => ({
   },
 }));
 
-vi.mock("../src/preprocess/image.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../src/preprocess/image.js")>();
-  const { RGBImage: Image } = await import("../src/types.js");
+vi.mock("../src/preprocess/pipeline.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../src/preprocess/pipeline.js")>();
   return {
     ...actual,
-    letterbox: (_image: unknown, targetWidth: number, targetHeight: number) => ({
-      image: new Image(new Uint8Array(targetWidth * targetHeight * 3), targetWidth, targetHeight),
-      scale: 1,
-      padLeft: 0,
-      padTop: 0,
-    }),
+    // The real one resamples through a canvas, which Node has none of, and its
+    // arithmetic has its own tests. Stubbing it keeps these tests on the
+    // question they exist to answer.
+    LetterboxPipeline: class {
+      constructor(
+        private readonly w: number,
+        private readonly h: number,
+      ) {}
+      run(): {
+        data: Float32Array;
+        scale: number;
+        padLeft: number;
+        padTop: number;
+        reused: boolean;
+      } {
+        return {
+          data: new Float32Array(3 * this.w * this.h),
+          ...cannedLetterbox,
+          reused: false,
+        };
+      }
+      release(): void {}
+    },
   };
 });
 

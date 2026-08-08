@@ -65,6 +65,7 @@ Per-instance types/classes: `DetectionResult`, `SegmentationResult`,
 | `OrtSession.inputShape` / `.inputShapes` | Shapes the graph declares, dynamic axes as `null`. |
 | `OrtSession.release()` | Frees the native session (needed when discarding a session while the page lives on). |
 | `task.inputSize` | The resolution the task actually preprocesses to. |
+| `task.warmup(runs?)` | Runs the model on a zero-filled tensor to pay shader compilation up front. |
 | `spatialInputSize` / `resolveInputSize` / `declaredShapesFrom` | Pure helpers behind the graph → caller → fallback precedence. |
 | `DeclaredShape` / `DeclaredDim` | A declared shape and one dimension (`number`, or `null` when symbolic). |
 

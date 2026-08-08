@@ -67,15 +67,33 @@ vi.mock("onnxruntime-web", () => ({
   },
 }));
 
-vi.mock("../src/preprocess/image.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../src/preprocess/image.js")>();
-  const { RGBImage: Image } = await import("../src/types.js");
+vi.mock("../src/preprocess/pipeline.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../src/preprocess/pipeline.js")>();
   return {
     ...actual,
-    letterbox: (_image: unknown, targetWidth: number, targetHeight: number) => ({
-      image: new Image(new Uint8Array(targetWidth * targetHeight * 3), targetWidth, targetHeight),
-      ...cannedLetterbox,
-    }),
+    // The real one resamples through a canvas, which Node has none of, and its
+    // arithmetic has its own tests. Stubbing it keeps these tests on the
+    // question they exist to answer.
+    LetterboxPipeline: class {
+      constructor(
+        private readonly w: number,
+        private readonly h: number,
+      ) {}
+      run(): {
+        data: Float32Array;
+        scale: number;
+        padLeft: number;
+        padTop: number;
+        reused: boolean;
+      } {
+        return {
+          data: new Float32Array(3 * this.w * this.h),
+          ...cannedLetterbox,
+          reused: false,
+        };
+      }
+      release(): void {}
+    },
   };
 });
 
@@ -450,6 +468,45 @@ describe("DetectClassify filtering", () => {
     const result = (await pipeline.call(image(), { classes: [1] }))[0];
 
     expect([...(result ?? [])].map((d) => d.name)).toEqual(["dog"]);
+  });
+});
+
+describe("DetectClassify warmup", () => {
+  it("runs the graph without needing a real image", async () => {
+    serveOutputs();
+    const pipeline = await DetectClassify.create(pipelineModel());
+    await pipeline.warmup();
+
+    expect(Object.keys(capturedFeeds)).toEqual(["images"]);
+    expect(capturedFeeds.images?.dims).toEqual([1, 3, 64, 64]);
+  });
+
+  it("feeds every input a pipeline with the original crop source declares", async () => {
+    serveOutputs();
+    const pipeline = await DetectClassify.create(pipelineModel({ crop_source: "original" }));
+    await pipeline.warmup();
+
+    expect(Object.keys(capturedFeeds).sort()).toEqual([
+      "images",
+      "letterbox_pad",
+      "letterbox_scale",
+      "source_image",
+    ]);
+  });
+
+  it("honours the requested number of runs", async () => {
+    serveOutputs();
+    let runs = 0;
+    const pipeline = await DetectClassify.create(pipelineModel());
+    const session = pipeline.session as unknown as { run: (f: unknown) => Promise<unknown> };
+    const original = session.run.bind(session);
+    session.run = (feeds) => {
+      runs += 1;
+      return original(feeds);
+    };
+    await pipeline.warmup(3);
+
+    expect(runs).toBe(3);
   });
 });
 

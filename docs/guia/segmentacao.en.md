@@ -76,6 +76,20 @@ Per instance, the mask is cropped to the bounding box:
 - **Web:** `inst.mask` is a `Mask` object (`data`/`width`/`height`, row-major
   layout), and `inst.segmentedImage` is an `RGBImage`.
 
+!!! check "Python and Web produce the same mask"
+    Both SDKs follow the same algorithm: combine the prototypes, apply sigmoid,
+    resample to the bounding box with half-pixel bilinear, and binarize at the
+    same cutoff. Shared fixtures under `fixtures/parity/` check that on both
+    sides, comparing the bitmaps pixel for pixel — so running the same model on
+    the backend and in the browser gives you the same masks.
+
+!!! warning "Masks produced up to 0.6.0 differ at the border"
+    Up to 0.6.0 the Python side resampled the mask through `uint8`, which put
+    the input to the `>= 0.5` test on a grid of `1/255` steps and shifted border
+    pixels for no reason. If you have masks stored from an earlier version,
+    expect a few border pixels to differ — the new ones are the correct ones
+    (they agree 100% with a `float64` reference; the old ones, 99.7%).
+
 ## When finding nothing is an error
 
 `Segmenter` takes the same `raise_on_empty` as `Detector`, with the same default
@@ -86,6 +100,7 @@ Per instance, the mask is cropped to the bounding box:
 seg = Segmenter("yolov8n-seg.onnx", conf_threshold=0.6, raise_on_empty=True)
 seg.predict("img.jpg")   # nothing >= 0.6 -> NoDetectionsError
 ```
+
 
 ## See also
 

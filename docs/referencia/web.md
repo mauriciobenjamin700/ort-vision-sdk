@@ -65,6 +65,7 @@ Tipos/classes por instância: `DetectionResult`, `SegmentationResult`,
 | `OrtSession.inputShape` / `.inputShapes` | Shapes declarados pelo grafo, eixos dinâmicos como `null`. |
 | `OrtSession.release()` | Libera a sessão nativa (necessário ao descartar uma sessão com a página viva). |
 | `task.inputSize` | Resolução em que a tarefa realmente pré-processa. |
+| `task.warmup(runs?)` | Roda o modelo com tensor zerado para pagar a compilação de shaders adiantado. |
 | `spatialInputSize` / `resolveInputSize` / `declaredShapesFrom` | Helpers puros da precedência grafo → chamador → fallback. |
 | `DeclaredShape` / `DeclaredDim` | Shape declarado e uma dimensão (`number`, ou `null` quando simbólica). |
 

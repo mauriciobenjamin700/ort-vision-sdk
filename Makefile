@@ -133,6 +133,34 @@ bump-web: _require-tag ## Atualiza versão do sdk-js-web (use TAG=0.3.0)
 	@echo "✓ sdk-js-web bumped → $(TAG)"
 
 # ---------------------------------------------------------------------------
+# Fixtures de teste e benchmarks
+# ---------------------------------------------------------------------------
+#
+# O baseline de benchmark é uma referência LOCAL, não um gate de CI: runners
+# compartilhados variam mais do que as regressões que vale detectar. Rode
+# bench-python-check na mesma máquina que gravou o baseline, antes e depois da
+# mudança.
+
+.PHONY: fixtures-models fixtures-parity bench-python bench-python-save bench-python-check
+
+BENCH_BASELINE := bench/baseline-python.json
+
+fixtures-models: ## Regera os modelos ONNX sintéticos dos testes e2e (precisa de onnx)
+	uv run --with onnx --with numpy python scripts/gen_test_models.py
+
+fixtures-parity: ## Regera as fixtures de paridade Python×Web (revise o diff!)
+	PYTHONPATH=$(PY_DIR)/src python scripts/gen_parity_fixtures.py
+
+bench-python: ## Roda os microbenchmarks do sdk-python e imprime a tabela
+	PYTHONPATH=$(PY_DIR)/src python scripts/bench.py
+
+bench-python-save: ## Regrava o baseline de benchmark com os números desta máquina
+	PYTHONPATH=$(PY_DIR)/src python scripts/bench.py --json $(BENCH_BASELINE)
+
+bench-python-check: ## Compara os benchmarks com o baseline (rode na mesma máquina)
+	PYTHONPATH=$(PY_DIR)/src python scripts/bench.py --compare $(BENCH_BASELINE)
+
+# ---------------------------------------------------------------------------
 # Validação local (mesmos checks que o CI roda)
 # ---------------------------------------------------------------------------
 

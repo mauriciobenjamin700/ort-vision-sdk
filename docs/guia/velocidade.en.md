@@ -59,6 +59,19 @@ with a cold cache, `load` is usually the largest slice of all.
     model and building the ORT session happens before, exactly once, and
     never shows up in `speed`.
 
+!!! tip "On Python, `preprocess` shrinks when the image is much larger than the input"
+    A downscale of 2x or more runs in two steps: an integer box reduction
+    first, then resampling onto the exact target. Letterboxing 1920x1080 to
+    640x640 went from 7.8 ms to 3.5 ms; from 4K, 29.8 ms to 10.5 ms. Below 2x
+    nothing changes — neither the cost nor the pixels.
+
+    Where the reduction applies, the pixels handed to the model **change**, and
+    so do the detections. This is not quality traded for speed, but it is not
+    quality gained either: measured against a LANCZOS reference, box reduction
+    wins on photographic content and loses when the content's period resonates
+    with the reduction factor — 2 px stripes every 6 rows, reduced by 3, are the
+    worst case. Across six content types the two split three-three.
+
 ## Reading the result
 
 ```python
@@ -139,3 +152,24 @@ given — no start/stop pairs to forget. Calling the same name twice
   because `predict()` decodes the input internally.
 - Loading the model is **not** in `speed` — that is startup cost.
 - `SpeedTimer` measures your own pipeline stages under the same rules.
+
+## Warm-up (`warmup`) — web only
+
+The first inference of a session is not representative: WebGPU compiles its
+shaders on it and the WASM backend faults in its arenas, which on a phone turns
+the first frame into seconds while every later frame is tens of milliseconds.
+
+`Detector`, `Segmenter`, `Classifier` and `DetectClassify` expose `warmup()`,
+which runs the model on a zero-filled tensor. Call it while a loading spinner is
+still up — the cost moves somewhere the user is already waiting:
+
+```typescript
+const det = await Detector.create("/models/yolov8n.onnx");
+await det.warmup();        // one pass is enough for WASM
+await det.warmup(2);       // WebGPU sometimes settles on the second
+```
+
+!!! tip "Worth more on a fused pipeline"
+    `DetectClassify` carries two models plus the bridge in one graph, so the
+    first inference compiles all of it at once. That is where warming up pays
+    the most.

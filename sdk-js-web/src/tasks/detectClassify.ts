@@ -31,7 +31,8 @@ import {
 import { type ImageInput, loadImage } from "../io/image.js";
 import { type LabelSpec, resolveLabels } from "../labels.js";
 import { softmax, topK } from "../postprocess/classification.js";
-import { letterbox, toCHW, toFloat32, toFloat32Tensor } from "../preprocess/image.js";
+import { toCHW, toFloat32, toFloat32Tensor } from "../preprocess/image.js";
+import { LetterboxPipeline, zeroTensorData } from "../preprocess/pipeline.js";
 import { Boxes, DetectClassifyResults } from "../results.js";
 import {
   BoundingBox,
@@ -108,6 +109,52 @@ export class DetectClassify extends VisionTask {
     private readonly _raiseOnEmpty: boolean,
   ) {
     super(session);
+  }
+
+  private _pipelineCache: LetterboxPipeline | null = null;
+
+  /**
+   * Run the model once on zero-filled inputs, paying one-time costs up front.
+   *
+   * Worth more here than on a single-stage task: a fused pipeline is two models
+   * plus the bridge in one graph, so the first inference compiles shaders for
+   * all of it. Calling this while a loading spinner is still up moves that cost
+   * somewhere the user is already waiting.
+   *
+   * @param runs How many warm-up inferences to run. One is enough for WASM;
+   *   WebGPU sometimes settles on the second.
+   */
+  async warmup(runs: number = 1): Promise<void> {
+    const [width, height] = this._spec.inputSize;
+    for (let i = 0; i < runs; i++) {
+      const feeds: Record<string, ort.Tensor> = {
+        [INPUT_IMAGE]: toFloat32Tensor(zeroTensorData(width, height), [1, 3, height, width]),
+      };
+      if (this._spec.needsSourceImage) {
+        feeds[INPUT_SOURCE] = toFloat32Tensor(
+          zeroTensorData(width, height),
+          [1, 3, height, width],
+        );
+        feeds[INPUT_SCALE] = toFloat32Tensor(new Float32Array([1]), [1]);
+        feeds[INPUT_PAD] = toFloat32Tensor(new Float32Array([0, 0]), [2]);
+      }
+      await this._session.run(feeds);
+    }
+  }
+
+  /**
+   * The fused preprocessing pipeline, built on first use.
+   *
+   * Lazily, because constructing it allocates canvases: a pipeline built in an
+   * environment without a canvas implementation stays constructible, and only
+   * fails if it is actually asked to preprocess something.
+   */
+  private get _pipeline(): LetterboxPipeline {
+    if (this._pipelineCache === null) {
+      const [width, height] = this._spec.inputSize;
+      this._pipelineCache = new LetterboxPipeline(width, height);
+    }
+    return this._pipelineCache;
   }
 
   /**
@@ -210,6 +257,7 @@ export class DetectClassify extends VisionTask {
     const { feeds, scale, padLeft, padTop } = this._preprocess(original);
     timer.stage("preprocess");
     const outputs = await this._session.run(feeds);
+    this._pipeline.release();
     timer.stage("inference");
 
     const probsTensor = output(outputs, OUTPUT_PROBS);
@@ -269,10 +317,17 @@ export class DetectClassify extends VisionTask {
   /**
    * Letterbox the image and build the graph's feeds.
    *
-   * A pipeline fused with `cropSource: "original"` takes the untouched image as
-   * a second input, plus the scale and padding of the letterbox — that is what
-   * lets the graph undo the letterbox transform internally and crop at native
-   * resolution instead of from the downscaled copy.
+   * The detector input runs through {@link LetterboxPipeline}, which fuses the
+   * resize, the padding and the HWC-to-CHW float conversion into one
+   * `drawImage` plus one readback, and reuses its output buffer between frames.
+   * That buffer goes straight to ONNX Runtime, so `_pipeline.release()` must not
+   * be called until the run resolves.
+   *
+   * A pipeline fused with `cropSource: "original"` also takes the untouched
+   * image as a second input, plus the scale and padding of the letterbox — that
+   * is what lets the graph undo the letterbox transform internally and crop at
+   * native resolution instead of from the downscaled copy. That one is **not**
+   * letterboxed by definition, so it does not go through the fused path.
    */
   private _preprocess(image: RGBImage): {
     feeds: Record<string, ort.Tensor>;
@@ -281,8 +336,10 @@ export class DetectClassify extends VisionTask {
     padTop: number;
   } {
     const [width, height] = this._spec.inputSize;
-    const boxed = letterbox(image, width, height);
-    const feeds: Record<string, ort.Tensor> = { [INPUT_IMAGE]: tensorOf(boxed.image) };
+    const boxed = this._pipeline.run(image);
+    const feeds: Record<string, ort.Tensor> = {
+      [INPUT_IMAGE]: toFloat32Tensor(boxed.data, [1, 3, height, width]),
+    };
 
     if (this._spec.needsSourceImage) {
       feeds[INPUT_SOURCE] = tensorOf(image);

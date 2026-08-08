@@ -26,11 +26,36 @@ export type ModelSource = string | ArrayBufferLike | Uint8Array;
 async function fetchModel(url: string): Promise<Uint8Array | string> {
   try {
     const response = await fetch(url);
-    if (!response.ok) return url;
+    if (!response.ok) {
+      warnMetadataUnavailable(url, `HTTP ${response.status} ${response.statusText}`);
+      return url;
+    }
     return new Uint8Array(await response.arrayBuffer());
-  } catch {
+  } catch (err) {
+    warnMetadataUnavailable(url, (err as Error).message);
     return url;
   }
+}
+
+/**
+ * Warn that a model's metadata could not be read, and say what that costs.
+ *
+ * The fallback itself is right — losing the metadata beats failing a load that
+ * ORT could have completed on its own — but it used to be silent, and the
+ * symptom it produces is remote from the cause: class names come back as
+ * `class_0`, `class_1`, ... with nothing anywhere explaining why. Whoever hits
+ * this needs to be told that passing `labels` is the way out.
+ *
+ * @param url The model URL that could not be fetched here.
+ * @param reason What went wrong, as reported by `fetch`.
+ */
+function warnMetadataUnavailable(url: string, reason: string): void {
+  console.warn(
+    `[@ort-vision-sdk/web] Could not fetch ${url} to read its metadata (${reason}). ` +
+      "Letting ONNX Runtime load it instead: the model will work, but its baked-in " +
+      "class names are unavailable, so labels fall back to class_0, class_1, ... " +
+      "Pass `labels` explicitly to name them.",
+  );
 }
 
 export interface OrtSessionOptions {

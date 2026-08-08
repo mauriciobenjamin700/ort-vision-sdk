@@ -59,6 +59,19 @@ primeira chamada com cache frio, `load` costuma ser a maior fatia de todas.
     modelo e subir a sessão ORT acontece antes, uma única vez, e não aparece
     no `speed`.
 
+!!! tip "No Python, `preprocess` encolhe quando a imagem é bem maior que a entrada"
+    Uma redução de 2x ou mais roda em dois passos: primeiro uma redução inteira
+    por média de bloco, e só então a reamostragem para o tamanho exato.
+    Letterbox de 1920x1080 para 640x640 caiu de 7,8 ms para 3,5 ms; de 4K, de
+    29,8 ms para 10,5 ms. Abaixo de 2x nada muda — nem o custo, nem os pixels.
+
+    Onde a redução se aplica, os pixels entregues ao modelo **mudam**, e
+    portanto as detecções também. Não é qualidade trocada por velocidade, mas
+    também não é qualidade ganha: contra uma referência LANCZOS, a média de
+    bloco vence em conteúdo fotográfico e perde quando o período do conteúdo
+    ressoa com o fator de redução — listras de 2 px a cada 6 linhas, reduzidas
+    por 3, são o pior caso. Em seis tipos de conteúdo o placar ficou 3 a 3.
+
 ## Lendo o resultado
 
 ```python
@@ -139,3 +152,24 @@ sem pares de start/stop para esquecer. Chamar o mesmo nome duas vezes
   porque o `predict()` decodifica a entrada por dentro.
 - Carregar o modelo **não** está no `speed` — é custo de inicialização.
 - `SpeedTimer` mede as etapas do seu próprio pipeline com as mesmas regras.
+
+## Aquecimento (`warmup`) — só no Web
+
+A primeira inferência de uma sessão não é representativa: o WebGPU compila os
+shaders nela e o backend WASM materializa suas arenas, o que num celular
+transforma o primeiro frame em segundos enquanto os seguintes ficam em dezenas
+de milissegundos.
+
+`Detector`, `Segmenter`, `Classifier` e `DetectClassify` expõem `warmup()`, que
+roda o modelo com um tensor zerado. Chame enquanto o spinner de carregamento
+ainda está na tela — o custo vai para onde o usuário já está esperando:
+
+```typescript
+const det = await Detector.create("/models/yolov8n.onnx");
+await det.warmup();        // uma passada basta no WASM
+await det.warmup(2);       // WebGPU às vezes só assenta na segunda
+```
+
+!!! tip "Num pipeline fundido vale mais"
+    `DetectClassify` carrega dois modelos e a ponte no mesmo grafo, então a
+    primeira inferência compila tudo de uma vez. É onde o aquecimento paga mais.

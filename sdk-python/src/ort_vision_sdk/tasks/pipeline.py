@@ -24,7 +24,7 @@ from ort_vision_sdk.fusion import (
     FusionSpec,
 )
 from ort_vision_sdk.io.image import ImageInput, load_image
-from ort_vision_sdk.labels import LabelSpec, resolve_labels
+from ort_vision_sdk.labels import LabelSpec, default_labels, resolve_labels
 from ort_vision_sdk.postprocess.classification import softmax, topk
 from ort_vision_sdk.preprocess.image import add_batch_dim, letterbox, to_tensor
 from ort_vision_sdk.results import Boxes, DetectClassifyResults
@@ -94,8 +94,11 @@ class DetectClassify(VisionTask):
                 is provided.
             labels: Class label spec for the **detection** stage — see
                 :func:`~ort_vision_sdk.labels.resolve_labels`. ``None``
-                (default) uses the names recorded at fusion time, falling back
-                to the 80-class COCO preset when the fusion recorded none.
+                (default) uses the names recorded at fusion time. A fusion
+                records a name for every class it can count, so the fallback
+                below it — :func:`~ort_vision_sdk.labels.default_labels` with no
+                count, i.e. the COCO preset — is reached only by a pipeline
+                built before that was true.
             classifier_labels: Class label spec for the **classification**
                 stage. ``None`` uses the recorded names, falling back to
                 generated ``class_<id>`` names.
@@ -145,7 +148,7 @@ class DetectClassify(VisionTask):
         self._spec: FusionSpec = spec
         self._raise_on_empty: bool = raise_on_empty
         self._labels: tuple[str, ...] = resolve_labels(
-            labels if labels is not None else spec.detector_names or "coco"
+            labels if labels is not None else spec.detector_names or default_labels(None)
         )
         self._names: dict[int, str] = dict(enumerate(self._labels))
         self._classifier_labels: tuple[str, ...] = resolve_labels(

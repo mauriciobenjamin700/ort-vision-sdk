@@ -115,6 +115,7 @@ envelope vazio, não um erro. Com `True`, levanta
 | --- | --- |
 | `raise_on_empty` | Argumento de construtor e de `predict()`; o valor por chamada vence o do construtor. |
 | `NoDetectionsError` | Levantado quando nada sobra e o flag está ativo. Exportado em `ort_vision_sdk.core`. |
+| `require_detections(count, ...)` | O helper compartilhado pelas três tarefas, exportado para quem constrói a própria tarefa. |
 
 ## Compondo pipelines (extra `[compose]`)
 

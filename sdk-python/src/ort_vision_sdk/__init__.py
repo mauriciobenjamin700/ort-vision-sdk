@@ -27,6 +27,7 @@ from ort_vision_sdk.tasks import (
     Segmenter,
     SegmenterHead,
     VisionTask,
+    require_detections,
 )
 from ort_vision_sdk.types import (
     BoundingBox,
@@ -37,7 +38,7 @@ from ort_vision_sdk.types import (
     SegmentationResult,
 )
 
-__version__: str = "0.7.0"
+__version__: str = "0.8.0"
 
 __all__: list[str] = [
     "COCO_CLASSES",
@@ -74,6 +75,7 @@ __all__: list[str] = [
     "model_names",
     "parse_names",
     "read_metadata",
+    "require_detections",
     "resolve_input_size",
     "resolve_labels",
     "spatial_input_size",

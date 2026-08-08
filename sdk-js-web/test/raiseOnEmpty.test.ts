@@ -200,6 +200,39 @@ describe("requireDetections", () => {
   });
 });
 
+describe("threshold formatting", () => {
+  /**
+   * The same table lives in the Python suite (`tests/test_raise_on_empty.py`).
+   * JavaScript's own number-to-string would print a whole threshold as `1`
+   * against Python's `1.0`, and would write `0.0000001` where Python switches to
+   * `1e-07` — two SDKs describing one run with two numbers. If either side's
+   * formatting drifts, one of these two tables fails.
+   */
+  const table: ReadonlyArray<readonly [number, string]> = [
+    [0, "0"],
+    [1, "1"],
+    [0.25, "0.25"],
+    [0.5, "0.5"],
+    [0.9, "0.9"],
+    [0.001, "0.001"],
+    [0.00001, "0.00001"],
+    [0.123456, "0.123456"],
+  ];
+
+  for (const [threshold, rendered] of table) {
+    it(`renders ${threshold} as ${rendered}, like the Python SDK`, () => {
+      expect(() =>
+        requireDetections(0, {
+          raiseOnEmpty: true,
+          confThreshold: threshold,
+          classes: undefined,
+          path: null,
+        }),
+      ).toThrow(`No detections: nothing cleared confThreshold=${rendered}.`);
+    });
+  }
+});
+
 describe("Detector raiseOnEmpty", () => {
   it("returns an empty envelope by default", async () => {
     serveDetectorHead(0.01);

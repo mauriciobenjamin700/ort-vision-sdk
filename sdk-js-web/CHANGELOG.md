@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-08-08
+
+### Fixed
+
+- **The threshold quoted in a `NoDetectionsError` now reads the same in both
+  SDKs.** This side rendered a whole threshold as `confThreshold=1` where the
+  Python SDK rendered `conf_threshold=1.0`, and wrote `0.0000001` where Python
+  switched to `1e-07`. A fused pipeline is built once and runs under both
+  runtimes from the same file, so the two SDKs were describing one run with two
+  different numbers. Both sides now render six decimals with the trailing zeros
+  trimmed, and the same table in both test suites fails if either side drifts.
+
+- **The changelog's link table is no longer stuck at 0.2.0.** `[Unreleased]`
+  compared against `web-v0.2.0`, so following it showed four releases of shipped
+  history as unreleased work, and `[0.3.0]` through `[0.6.0]` had no link
+  definition at all — they rendered as literal `[0.6.0]` text. The table is
+  rebuilt through 0.6.1. `[0.1.0]` loses its definition on purpose: no
+  `web-v0.1.0` tag was ever pushed, so that link was a 404.
+
 ## [0.6.0] - 2026-08-07
 
 ### Added
@@ -444,6 +463,13 @@ console.log(r.boxes.xyxy, r.boxes.cls, r.boxes.conf, r.names);
 - Execution-provider resolution defaulting to `["webgpu", "wasm"]`.
 - Public types mirroring the Python SDK: `BoundingBox`, `ClassProbability`, `ClassificationResult`, `DetectionResult`, `RGBImage`.
 
-[Unreleased]: https://github.com/mauriciobenjamin700/ort-vision-sdk/compare/web-v0.2.0...HEAD
+[Unreleased]: https://github.com/mauriciobenjamin700/ort-vision-sdk/compare/web-v0.6.1...HEAD
+[0.6.1]: https://github.com/mauriciobenjamin700/ort-vision-sdk/compare/web-v0.6.0...web-v0.6.1
+[0.6.0]: https://github.com/mauriciobenjamin700/ort-vision-sdk/compare/web-v0.5.1...web-v0.6.0
+[0.5.1]: https://github.com/mauriciobenjamin700/ort-vision-sdk/compare/web-v0.5.0...web-v0.5.1
+[0.5.0]: https://github.com/mauriciobenjamin700/ort-vision-sdk/compare/web-v0.4.0...web-v0.5.0
+[0.4.0]: https://github.com/mauriciobenjamin700/ort-vision-sdk/compare/web-v0.3.0...web-v0.4.0
+[0.3.0]: https://github.com/mauriciobenjamin700/ort-vision-sdk/compare/web-v0.2.2...web-v0.3.0
+[0.2.2]: https://github.com/mauriciobenjamin700/ort-vision-sdk/compare/web-v0.2.1...web-v0.2.2
+[0.2.1]: https://github.com/mauriciobenjamin700/ort-vision-sdk/compare/web-v0.2.0...web-v0.2.1
 [0.2.0]: https://github.com/mauriciobenjamin700/ort-vision-sdk/releases/tag/web-v0.2.0
-[0.1.0]: https://github.com/mauriciobenjamin700/ort-vision-sdk/releases/tag/web-v0.1.0

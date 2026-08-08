@@ -113,6 +113,7 @@ nothing returns an empty envelope, not an error. With `True`, it raises
 | --- | --- |
 | `raise_on_empty` | Constructor and `predict()` argument; the per-call value wins. |
 | `NoDetectionsError` | Raised when nothing survives and the flag is in effect. Exported from `ort_vision_sdk.core`. |
+| `require_detections(count, ...)` | The helper the three tasks share, exported for anyone building their own task. |
 
 ## Composing pipelines (`[compose]` extra)
 

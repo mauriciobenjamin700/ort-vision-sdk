@@ -18,6 +18,28 @@ export abstract class VisionTask {
 }
 
 /**
+ * Render a confidence threshold the way the Python SDK renders it.
+ *
+ * JavaScript and Python disagree on how a number becomes text. A whole
+ * threshold is `1` here and `1.0` there; JavaScript holds off on exponent
+ * notation until `1e-7` while Python switches at `1e-5`. A fused pipeline is
+ * built once and runs under both runtimes from the same file, so a message that
+ * quotes the threshold has to quote it identically — otherwise the two SDKs
+ * describe the same run with two different numbers.
+ *
+ * Six decimals with the trailing zeros trimmed covers every threshold a caller
+ * can meaningfully set and agrees byte for byte with `_format_threshold` in the
+ * Python SDK's `tasks/base.py`. The pairing is fixed by a shared table in both
+ * test suites, so a change on one side that is not mirrored on the other fails.
+ *
+ * @param value The threshold to render.
+ * @returns The threshold as text, without trailing zeros or a trailing dot.
+ */
+function formatThreshold(value: number): string {
+  return value.toFixed(6).replace(/0+$/, "").replace(/\.$/, "");
+}
+
+/**
  * Turn an empty result into an error, when the caller asked for that.
  *
  * Shared by every task that can come back with nothing — {@link Detector},
@@ -48,6 +70,6 @@ export function requireDetections(
       ? ""
       : ` among classes [${[...options.classes].sort((a, b) => a - b).join(", ")}]`;
   throw new NoDetectionsError(
-    `No detections${where}${narrowed}: nothing cleared confThreshold=${options.confThreshold}.`,
+    `No detections${where}${narrowed}: nothing cleared confThreshold=${formatThreshold(options.confThreshold)}.`,
   );
 }

@@ -3,8 +3,15 @@ name: CI
 on:
   push:
     branches: [main]
+  # No base-branch filter on purpose. Stacked pull requests target the branch
+  # below them rather than `main`, so a `branches: [main]` filter here silently
+  # skips CI on every PR in a stack except the last one — the reviewer sees no
+  # checks and cannot tell "passed" from "never ran".
   pull_request:
-    branches: [main]
+  # Lets a run be started by hand from the Actions tab, which is the only way
+  # back when a run was never scheduled in the first place (an account-level
+  # Actions restriction, a cancelled queue) and no push is due.
+  workflow_dispatch:
 
 permissions:
   contents: read

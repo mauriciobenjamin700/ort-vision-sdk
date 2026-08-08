@@ -7,6 +7,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-08-07
+
+### Added
+
+- **`DetectClassify` — run a fused detect→classify pipeline in the browser.**
+  A pipeline built by the Python SDK's `ort_vision_sdk.compose` (0.7.0) already
+  contains both models plus the crop-and-resize bridge between them. That matters
+  more in a tab than anywhere else: two models mean two `.onnx` downloads, two
+  WASM/WebGPU session initializations, and a per-crop round trip through
+  JavaScript to slice, resize and restack the regions before the second model can
+  see them. A fused pipeline has one download, one session, and no round trip.
+
+  ```typescript
+  import { DetectClassify } from "@mauriciobenjamin700/ort-vision-sdk-web";
+
+  const pipeline = await DetectClassify.create("/models/pipeline.onnx");
+  for (const d of (await pipeline.predict("/images/flock.jpg"))[0]) {
+    console.log(d.name, d.conf, d.classification?.name);
+  }
+  ```
+
+- **`readFusionSpec()` and the pipeline contract** (`FusionSpec`, `CropSource`,
+  the `INPUT_*` / `OUTPUT_*` names, `METADATA_PREFIX`). The letterbox resolution,
+  the crop size, whether the classifier output still needs a softmax and the class
+  names of both stages are read out of the model's own `ovs.` metadata — the same
+  keys, encodings and fallbacks the Python side writes. A pipeline fused once
+  therefore behaves identically in both runtimes, off the same file.
+
+- **`DetectionResult.classification`** (optional, absent for a plain detector) and
+  the `DetectClassifyResults` envelope, which carries `names` and
+  `classifierNames` separately because the two stages have unrelated label spaces.
+
+- **`FusionError`** and `parseNames()`, split out of `modelNames()` so both class
+  maps of a pipeline can be parsed with the same reader.
+
+### Notes
+
+- Fusing models stays a Python-side build step; there is no ONNX protobuf writer
+  here and no reason for one. The browser only loads the result.
+- ORT Web returns `int64` outputs as `BigInt64Array`. The pipeline's class ids and
+  detection count are widened to `number` internally, so no caller has to handle
+  `BigInt`.
+
 ## [0.5.1] - 2026-08-05
 
 ### Fixed

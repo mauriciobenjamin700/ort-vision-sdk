@@ -10,6 +10,7 @@ Superfície pública do pacote `ort-vision-sdk` (tudo importável diretamente de
 | `Classifier` | Classificação de imagem (saída `(1, num_classes)`). |
 | `Detector` | Detecção de objetos (cabeças YOLO anchor-free). |
 | `Segmenter` | Segmentação de instância (cabeças YOLO-seg). |
+| `DetectClassify` | Pipeline fundido detector → classificador, num único `.onnx`. |
 | `VisionTask` | Classe base comum (não instancie diretamente). |
 | `DetectorHead` | Tipo das famílias de decoder de detecção (ex.: `"yolo"`). |
 | `SegmenterHead` | Tipo das famílias de decoder de segmentação (ex.: `"yolo-seg"`). |
@@ -33,7 +34,15 @@ Segmenter(model_path, *, head="yolo-seg", labels=None, providers=None,
           session_options=None, backend=None, input_size=None,
           conf_threshold=0.25, iou_threshold=0.45, max_detections=300,
           mask_threshold=0.5)
+
+DetectClassify(model_path, *, labels=None, classifier_labels=None,
+               providers=None, session_options=None, backend=None)
 ```
+
+`DetectClassify` tem só esses parâmetros porque todo o resto — resolução,
+tamanho do recorte, limiares, softmax, nomes de classe dos dois estágios — foi
+gravado no arquivo na hora da fusão. Ver
+[Pipelines fundidos](../guia/pipeline.md).
 
 Os três construtores aceitam `backend=` (v0.4.0): injeta um `InferenceBackend`
 para rodar a inferência fora do ONNX Runtime in-process (navegador, Android).
@@ -66,6 +75,7 @@ metadados, com os defaults antigos (224/640, preset COCO) como fallback. Ver
 | --- | --- | --- | --- |
 | `ClassificationResults` | `probs` | n/a (resultado único) | `cls`, `conf`, `name`, `probabilities` |
 | `DetectionResults` | `boxes` | `DetectionResult` | `cls`, `conf`, `box.xyxy`, `cropped_image` |
+| `DetectClassifyResults` | `boxes` | `DetectionResult` | + `classification`, e `classifier_names` no envelope |
 | `SegmentationResults` | `boxes`, `masks` | `SegmentationResult` | `cls`, `conf`, `box.xyxy`, `mask`, `segmented_image` |
 
 Todo envelope expõe também `names`, `orig_img`, `orig_shape`, `path` e
@@ -85,11 +95,24 @@ Todo envelope expõe também `names`, `orig_img`, `orig_shape`, `path` e
 
 | Tipo | Campos canônicos | Aliases Ultralytics |
 | --- | --- | --- |
-| `DetectionResult` | `class_id`, `class_name`, `confidence`, `bbox`, `cropped_image` | `cls`, `name`, `conf`, `box` |
+| `DetectionResult` | `class_id`, `class_name`, `confidence`, `bbox`, `cropped_image`, `classification` | `cls`, `name`, `conf`, `box` |
 | `SegmentationResult` | + `mask`, `segmented_image` | `cls`, `name`, `conf`, `box` |
 | `ClassificationResult` | `class_id`, `class_name`, `confidence` | `cls`, `name`, `conf` |
 | `ClassProbability` | `class_id`, `class_name`, `probability` | `cls`, `name` |
 | `BoundingBox` | `x1`, `y1`, `x2`, `y2` + `xyxy` | — |
+
+## Compondo pipelines (extra `[compose]`)
+
+| Símbolo | Descrição |
+| --- | --- |
+| `compose.fuse_detect_classify(...)` | Funde um detector YOLO e um classificador num único `.onnx`, e valida o resultado rodando-o. |
+| `compose.build_bridge(...)` | Monta só o subgrafo-ponte (NMS → RoiAlign → normalização). Útil para inspeção. |
+| `compose.MIN_OPSET` | Opset mínimo que a ponte exige (16, por causa do `RoiAlign`). |
+| `FusionError` | Erro levantado quando dois modelos não podem ser fundidos, ou o arquivo carregado não é um pipeline. |
+
+Este módulo é o único que importa `onnx`, e só é instalado com
+`pip install "ort-vision-sdk[compose]"`. Rodar o modelo fundido não precisa
+dele. Ver [Pipelines fundidos](../guia/pipeline.md).
 
 ## Imagens e rótulos
 
@@ -109,6 +132,9 @@ Todo envelope expõe também `names`, `orig_img`, `orig_shape`, `path` e
 | `spatial_input_size(shape)` | Extrai `(largura, altura)` de um shape NCHW estático; `None` quando os eixos são dinâmicos. |
 | `resolve_input_size(...)` | Aplica a precedência grafo → chamador → fallback, avisando quando o chamador contradiz um grafo estático. |
 | `model_names(metadata)` | Interpreta o `names` do Ultralytics (`repr` de `dict[int, str]`) via `ast.literal_eval`; `None` quando ausente ou inutilizável. |
+| `parse_names(raw)` | O mesmo parser, sobre uma string qualquer — usado pelos dois mapas de classe de um pipeline fundido. |
+| `FusionSpec` | O que um pipeline fundido declara sobre si mesmo; `FusionSpec.from_metadata(...)` o lê de volta. |
+| `CropSource` | `"detector_input"` ou `"original"` — de onde a ponte recorta as caixas. |
 | `task.input_size` | Resolução em que a tarefa realmente pré-processa. |
 
 !!! note "Fonte da verdade"

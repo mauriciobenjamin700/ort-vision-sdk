@@ -46,6 +46,7 @@ Using `onnxruntime` directly means you have to:
 | Classification   | `Classifier` | Any ONNX classifier with output shape `(1, num_classes)` (torchvision-style)  |
 | Object detection | `Detector`   | Anchor-free YOLO heads: v8, v9, v10, v11, v12, v26 (`(1, 4 + nc, N)`)         |
 | Inst. seg.       | `Segmenter`  | YOLO seg heads: v8-seg, v11-seg, v26-seg (`(1, 4 + nc + nm, N)` + prototypes) |
+| Detect → classify | `DetectClassify` | A detector and a classifier **fused into one `.onnx`** by `ort_vision_sdk.compose` |
 
 All three return the same envelope shape — a `list[Results]` of length 1 per image — so you can switch between tasks without rewriting your downstream code.
 
@@ -55,6 +56,7 @@ All three return the same envelope shape — a `list[Results]` of length 1 per i
 pip install ort-vision-sdk             # CPU only (default)
 pip install "ort-vision-sdk[gpu]"      # adds onnxruntime-gpu for CUDA / TensorRT
 pip install "ort-vision-sdk[opencv]"   # adds OpenCV image backend
+pip install "ort-vision-sdk[compose]"  # adds onnx, to fuse models into one pipeline
 pip install "ort-vision-sdk[dev]"      # ruff, mypy, pytest, build, twine
 ```
 
@@ -114,6 +116,34 @@ for d in result:
     print(d.name, d.conf, d.box.xyxy)
     # d.cropped_image is an HWC uint8 RGB ndarray of the box crop
 ```
+
+### Fused detect → classify pipeline
+
+Chaining a detector into a classifier normally costs two sessions, two model
+loads, and a Python round trip per crop. `ort_vision_sdk.compose` rewrites both
+models into a **single graph** — detector, crop-and-resize bridge, classifier —
+so it is one file, one session, and the crops never leave the runtime.
+
+```python
+from ort_vision_sdk.compose import fuse_detect_classify   # needs the [compose] extra
+
+fuse_detect_classify("yolov8n.onnx", "resnet18.onnx", "pipeline.onnx", max_detections=20)
+```
+
+```python
+from ort_vision_sdk import DetectClassify                 # runtime needs no extra
+
+pipeline = DetectClassify("pipeline.onnx")
+for d in pipeline.predict("flock.jpg")[0]:
+    print(d.name, d.conf, d.box.xyxy)                     # what the detector found
+    print(d.classification.name, d.classification.conf)   # what the classifier said
+```
+
+Nothing is restated at load time: the letterbox resolution, the crop size, the
+thresholds, the softmax and both class maps were written into the file at fusion
+time. The same `pipeline.onnx` runs in the browser through the web SDK's
+`DetectClassify`. Full guide:
+[Fused pipelines](https://mauriciobenjamin700.github.io/ort-vision-sdk/en/guia/pipeline/).
 
 ### Instance segmentation
 

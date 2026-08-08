@@ -7,7 +7,9 @@
 
 High-level SDKs for computer vision inference on top of [ONNX Runtime](https://onnxruntime.ai/).
 
-The repo distributes two sibling packages — same task-oriented API (`Classifier`, `Detector`), same typed result shapes (`BoundingBox`, `ClassificationResult`, `DetectionResult`) — one for Python servers/scripts and one for the browser.
+The repo distributes two sibling packages — same task-oriented API (`Classifier`, `Detector`, `Segmenter`, `DetectClassify`), same typed result shapes (`BoundingBox`, `ClassificationResult`, `DetectionResult`) — one for Python servers/scripts and one for the browser.
+
+Models can also be **fused**: `ort_vision_sdk.compose` rewrites a detector and a classifier into a single `.onnx`, so what would be two sessions and a per-crop round trip becomes one file, one session, and no round trip. The fused file runs unchanged in Python and in the browser — see [Fused pipelines](https://mauriciobenjamin700.github.io/ort-vision-sdk/en/guia/pipeline/).
 
 | Package               | Registry | Directory                          | Install                             |
 | --------------------- | -------- | ---------------------------------- | ----------------------------------- |

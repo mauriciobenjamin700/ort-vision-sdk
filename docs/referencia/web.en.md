@@ -10,6 +10,7 @@ Public surface of the `@mauriciobenjamin700/ort-vision-sdk-web` package
 | `Classifier` | `await Classifier.create(model, options)` | Image classification. |
 | `Detector` | `await Detector.create(model, options)` | Object detection (YOLO). |
 | `Segmenter` | `await Segmenter.create(model, options)` | Instance segmentation (YOLO-seg). |
+| `DetectClassify` | `await DetectClassify.create(model, options)` | Fused detector → classifier pipeline, in a single `.onnx`. |
 | `VisionTask` | — | Common base class. |
 
 `predict()` is always `async` and returns `Promise<...Results[]>` of length 1
@@ -23,6 +24,7 @@ per image. Each task exposes a `run()` alias.
 | `DetectorOptions` / `DetectorPredictOptions` | `Detector` (`head`, `labels`, `inputSize`, `confThreshold`, `iouThreshold`; overrides + `classes` on predict) |
 | `SegmenterOptions` / `SegmenterPredictOptions` | `Segmenter` (+ `maskThreshold`) |
 | `DetectorHead` (`"yolo"`) / `SegmenterHead` (`"yolo-seg"`) | decoder families |
+| `DetectClassifyOptions` / `DetectClassifyPredictOptions` | `DetectClassify` (`labels`, `classifierLabels`; `confThreshold`, `classes`, `topK` on predict) |
 
 ## Results
 
@@ -30,6 +32,7 @@ per image. Each task exposes a `run()` alias.
 | --- | --- | --- |
 | `ClassificationResults` | `probs` | n/a (single result) |
 | `DetectionResults` | `boxes` | `DetectionResult` |
+| `DetectClassifyResults` | `boxes` | `DetectionResult` with `classification` filled in (+ `classifierNames` on the envelope) |
 | `SegmentationResults` | `boxes`, `masks` | `SegmentationResult` |
 
 Every envelope exposes `names`, `origImg`, `origShape`, `path` and `speed` —
@@ -66,7 +69,22 @@ Per-instance types/classes: `DetectionResult`, `SegmentationResult`,
 
 Exported exception hierarchy: `OrtVisionError` (base), `ImageLoadError`,
 `InferenceError`, `LabelMapError`, `ModelLoadError`,
-`ProviderNotAvailableError`.
+`ProviderNotAvailableError`, `FusionError`.
+
+## Fused pipelines
+
+| Symbol | Description |
+| --- | --- |
+| `readFusionSpec(metadata)` | Reads what a fused pipeline declares about itself; `null` when the model is not a pipeline. |
+| `FusionSpec` / `CropSource` | The decoded contract, and where the crops come from. |
+| `INPUT_IMAGE` / `INPUT_SOURCE` / `INPUT_SCALE` / `INPUT_PAD` | Names of the fused graph's inputs. |
+| `OUTPUT_BOXES` / `OUTPUT_SCORES` / `OUTPUT_CLASSES` / `OUTPUT_NUM_DETECTIONS` / `OUTPUT_PROBS` | Names of its outputs. |
+| `METADATA_PREFIX` / `FUSION_KIND_DETECT_CLASSIFY` | The `ovs.` namespace and the pipeline family. |
+| `parseNames(raw)` | Parses a `repr`-encoded class map. |
+
+Fusing models is a **Python-side** build step (the `[compose]` extra); the
+browser only loads the resulting `.onnx`. See
+[Fused pipelines](../guia/pipeline.md).
 
 ## Pre/post-processing utilities
 

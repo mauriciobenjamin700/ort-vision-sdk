@@ -27,6 +27,13 @@ PY_DIR         := sdk-python
 WEB_DIR        := sdk-js-web
 RELEASES_FILE  := RELEASES.md
 
+# Interpretador para os helpers em `scripts/`. Prefere o venv do pacote, que é
+# onde as dependências deles já estão instaladas, e cai no `python` do PATH
+# quando esse venv não existe. Sem isso, numa máquina com pyenv sem versão
+# global todo alvo abaixo morre com "python: command not found" — o mesmo motivo
+# que quebrava a validação do release.
+PY := $(shell if [ -x $(PY_DIR)/.venv/bin/python ]; then echo $(PY_DIR)/.venv/bin/python; else echo python; fi)
+
 PY_VERSION_FILES  := $(PY_DIR)/pyproject.toml $(PY_DIR)/src/ort_vision_sdk/__init__.py
 WEB_VERSION_FILES := $(WEB_DIR)/package.json $(WEB_DIR)/package-lock.json $(WEB_DIR)/src/index.ts
 
@@ -65,27 +72,8 @@ last-python: ## Mostra a última tag publicada do sdk-python
 last-web: ## Mostra a última tag publicada do sdk-js-web
 	@git tag -l "web-v*.*.*" --sort=-v:refname | head -n 1 | grep . || echo "(nenhuma)"
 
-releases-check: ## Compara git tags × versões publicadas × GitHub Releases
-	@printf "\n%-16s %-10s %-10s %s\n" "TAG" "REGISTRY" "RELEASE" "STATUS"
-	@gh_releases=$$(gh release list --limit 200 --json tagName --jq '.[].tagName' 2>/dev/null | tr '\n' ' '); \
-	pypi_versions=$$(curl -sf https://pypi.org/pypi/ort-vision-sdk/json 2>/dev/null \
-	  | python3 -c "import json,sys; print(' '.join(json.load(sys.stdin)['releases']))" 2>/dev/null || true); \
-	npm_versions=$$(npm view @mauriciobenjamin700/ort-vision-sdk-web versions --json 2>/dev/null | tr -d '[]", ' | tr '\n' ' '); \
-	for tag in $$(git tag -l "v*.*.*" --sort=-v:refname); do \
-	  v=$${tag#v}; \
-	  case " $$pypi_versions " in *" $$v "*) n="ok";; *) n="FALTA";; esac; \
-	  case " $$gh_releases " in *" $$tag "*) r="ok";; *) r="FALTA";; esac; \
-	  if [ "$$n" = "ok" ] && [ "$$r" = "ok" ]; then st="sincronizado"; else st="DESSINCRONIZADO"; fi; \
-	  printf "%-16s %-10s %-10s %s\n" "$$tag" "$$n" "$$r" "$$st"; \
-	done; \
-	for tag in $$(git tag -l "web-v*.*.*" --sort=-v:refname); do \
-	  v=$${tag#web-v}; \
-	  case " $$npm_versions " in *" $$v "*) n="ok";; *) n="FALTA";; esac; \
-	  case " $$gh_releases " in *" $$tag "*) r="ok";; *) r="FALTA";; esac; \
-	  if [ "$$n" = "ok" ] && [ "$$r" = "ok" ]; then st="sincronizado"; else st="DESSINCRONIZADO"; fi; \
-	  printf "%-16s %-10s %-10s %s\n" "$$tag" "$$n" "$$r" "$$st"; \
-	done; \
-	printf "\n"
+releases-check: ## Compara git tags × versões publicadas × GitHub Releases (falha se dessincronizado)
+	@./scripts/releases-check.sh
 
 releases-sync: ## Cria os GitHub Releases faltantes para as git tags existentes
 	@./scripts/sync-github-releases.sh
@@ -149,16 +137,16 @@ fixtures-models: ## Regera os modelos ONNX sintéticos dos testes e2e (precisa d
 	uv run --with onnx --with numpy python scripts/gen_test_models.py
 
 fixtures-parity: ## Regera as fixtures de paridade Python×Web (revise o diff!)
-	PYTHONPATH=$(PY_DIR)/src python scripts/gen_parity_fixtures.py
+	PYTHONPATH=$(PY_DIR)/src $(PY) scripts/gen_parity_fixtures.py
 
 bench-python: ## Roda os microbenchmarks do sdk-python e imprime a tabela
-	PYTHONPATH=$(PY_DIR)/src python scripts/bench.py
+	PYTHONPATH=$(PY_DIR)/src $(PY) scripts/bench.py
 
 bench-python-save: ## Regrava o baseline de benchmark com os números desta máquina
-	PYTHONPATH=$(PY_DIR)/src python scripts/bench.py --json $(BENCH_BASELINE)
+	PYTHONPATH=$(PY_DIR)/src $(PY) scripts/bench.py --json $(BENCH_BASELINE)
 
 bench-python-check: ## Compara os benchmarks com o baseline (rode na mesma máquina)
-	PYTHONPATH=$(PY_DIR)/src python scripts/bench.py --compare $(BENCH_BASELINE)
+	PYTHONPATH=$(PY_DIR)/src $(PY) scripts/bench.py --compare $(BENCH_BASELINE)
 
 # ---------------------------------------------------------------------------
 # Validação local (mesmos checks que o CI roda)
@@ -166,22 +154,11 @@ bench-python-check: ## Compara os benchmarks com o baseline (rode na mesma máqu
 
 .PHONY: validate-python validate-web
 
-validate-python: ## Lint + typecheck + build + twine check do sdk-python
-	cd $(PY_DIR) && \
-	  python -m pip install --quiet -e ".[dev]" && \
-	  ruff check src && \
-	  ruff format --check src && \
-	  mypy src && \
-	  rm -rf dist && \
-	  python -m build && \
-	  twine check dist/*
+validate-python: ## Lint + typecheck + testes + build + twine check do sdk-python
+	./scripts/validate.sh python
 
-validate-web: ## Typecheck + build + pack do sdk-js-web
-	cd $(WEB_DIR) && \
-	  npm ci && \
-	  npm run typecheck && \
-	  npm run build && \
-	  npm pack --dry-run
+validate-web: ## Typecheck + testes + build + pack do sdk-js-web
+	./scripts/validate.sh web
 
 # ---------------------------------------------------------------------------
 # Release pipeline

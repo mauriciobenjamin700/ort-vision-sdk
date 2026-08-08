@@ -96,9 +96,17 @@ locally without pushing or opening a PR.
 2. Commit the changelog (the Makefile requires a clean working tree).
 3. (Recommended) Run a dry-run: `make release PROJECT=python TAG=0.3.0 DRY_RUN=1`.
 4. Run the real release: `make release PROJECT=python TAG=0.3.0`.
-5. **The tag triggers the workflow** — track it under **GitHub → Actions** and
-   approve the `pypi` deployment when prompted. Publishing runs independently of
-   the PR merge (the tag is the source of truth).
+5. **The tag triggers the workflow** — track it under **GitHub → Actions**.
+   Publishing runs independently of the PR merge (the tag is the source of
+   truth).
+
+    !!! danger "No approval stands between the tag and the registry"
+        This repository's `pypi` environment has **no required reviewers**, so the
+        publish job never pauses: pushing the tag *is* publishing. npm works the
+        same way by construction. Neither registry lets a version be replaced, so
+        treat `make release` as irreversible — add required reviewers to the
+        `pypi` environment first if you want that brake.
+
 6. Merge the PR when ready to propagate the version bump to `main`.
 
 ### Accepted variables
@@ -130,7 +138,26 @@ Pushing the tag is the last manual step. From there GitHub Actions, in order:
     make releases-check      # tags x published versions x Releases, side by side
     ```
 
-    `releases-check` is the quick way to spot a tag with no published package — or the other way around.
+    `releases-check` is the quick way to spot a tag with no published package — or the other way around. It **exits non-zero** on a mismatch, so it works as a gate.
+
+!!! note "Tags whose publish never happened"
+    A tag can exist without the version ever reaching the registry — that is the
+    case for `web-v0.2.0` and `web-v0.2.2`, whose publish jobs failed in May 2026
+    and were never retried. Those absences are **expected**, and they are
+    recorded in [`scripts/never-published.tsv`](https://github.com/mauriciobenjamin700/ort-vision-sdk/blob/main/scripts/never-published.tsv),
+    one line per tag with the reason:
+
+    ```text
+    web-v0.2.0	publish nunca rodou — o job falhou antes, no smoke-install do tarball (run …)
+    ```
+
+    `releases-check` then reports `nunca publicada` instead of `DESSINCRONIZADO`
+    and does not fail on it. **The point is making the audit useful again**: while
+    those two lines stayed red forever, a new red line drew no attention at all.
+
+    Two rules: do not record a broken release here while publishing it is still
+    possible — publish it. And if a listed tag shows up in the registry, the check
+    reports `LEDGER OBSOLETO`, because at that point the file is lying.
 
 ## Versioning
 

@@ -46,7 +46,7 @@ case "$PROJECT" in
     REGISTRY="PyPI"
     REGISTRY_LOWER="pypi"
     WORKFLOW_FILE="release-pypi.yml"
-    DEPLOY_NOTE="- Aprove o deploy no environment \`pypi\` em **GitHub → Actions → Release to PyPI** para finalizar a publicação."
+    DEPLOY_NOTE="- O workflow \`release-pypi.yml\` publica **assim que a tag é pusheada** — o environment \`pypi\` deste repositório não tem required reviewers, então não há aprovação manual no caminho. Tag pusheada já é versão publicada; o PyPI nunca deixa substituir uma versão."
     ;;
   web|js|node)
     PROJECT="web"
@@ -117,21 +117,7 @@ esac
 
 if [[ "$SKIP_VALIDATE" != "1" ]]; then
   echo "→ Validando build localmente"
-  case "$PROJECT" in
-    python)
-      (cd "$PKG_DIR" && \
-        python -m pip install --quiet -e ".[dev]" && \
-        ruff check src && \
-        ruff format --check src && \
-        mypy src && \
-        rm -rf dist && \
-        python -m build && \
-        twine check dist/*)
-      ;;
-    web)
-      (cd "$PKG_DIR" && npm ci && npm run typecheck && npm run build && npm pack --dry-run)
-      ;;
-  esac
+  "$(dirname "${BASH_SOURCE[0]}")/validate.sh" "$PROJECT"
 fi
 
 echo "→ Stage + commit do release"

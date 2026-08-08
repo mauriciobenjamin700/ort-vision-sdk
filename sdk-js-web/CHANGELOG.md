@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-08-08
+
 ### Added
 
 - **`Classifier.warmup(runs = 1)`.** The classifier was the one task left
@@ -500,7 +502,8 @@ console.log(r.boxes.xyxy, r.boxes.cls, r.boxes.conf, r.names);
 - Execution-provider resolution defaulting to `["webgpu", "wasm"]`.
 - Public types mirroring the Python SDK: `BoundingBox`, `ClassProbability`, `ClassificationResult`, `DetectionResult`, `RGBImage`.
 
-[Unreleased]: https://github.com/mauriciobenjamin700/ort-vision-sdk/compare/web-v0.6.1...HEAD
+[Unreleased]: https://github.com/mauriciobenjamin700/ort-vision-sdk/compare/web-v0.7.0...HEAD
+[0.7.0]: https://github.com/mauriciobenjamin700/ort-vision-sdk/compare/web-v0.6.1...web-v0.7.0
 [0.6.1]: https://github.com/mauriciobenjamin700/ort-vision-sdk/compare/web-v0.6.0...web-v0.6.1
 [0.6.0]: https://github.com/mauriciobenjamin700/ort-vision-sdk/compare/web-v0.5.1...web-v0.6.0
 [0.5.1]: https://github.com/mauriciobenjamin700/ort-vision-sdk/compare/web-v0.5.0...web-v0.5.1

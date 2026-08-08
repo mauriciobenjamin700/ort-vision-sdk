@@ -204,6 +204,22 @@ Steps that would be no-ops (zero mean, unit deviation, unit scale) are not
 emitted as nodes — a classifier that wants the raw `[0, 1]` crop pays for no
 arithmetic at all.
 
+## When finding nothing is an error
+
+A pipeline that finds nothing returns an empty envelope — the classifier never
+even gets a row to answer about. If the next step depends on something being
+there, `raise_on_empty` turns that into an exception, exactly as on
+[`Detector`](deteccao.md#when-finding-nothing-is-an-error):
+
+```python
+pipeline = DetectClassify("pipeline.onnx", raise_on_empty=True)
+pipeline.predict("empty-field.jpg")   # -> NoDetectionsError
+```
+
+The threshold named in the message is the **effective** one: the higher of what
+was frozen into the graph's NMS at fusion time and any stricter `conf_threshold`
+passed on the call.
+
 ## Limits worth knowing
 
 - **The head must be anchor-free YOLO** — output `(1, 4 + nc, N)`, the same

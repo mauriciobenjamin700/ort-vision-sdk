@@ -100,6 +100,74 @@ Você pode sobrescrever os thresholds e filtrar classes em cada `predict()`:
     }))[0];
     ```
 
+## Quando não detectar nada é um erro
+
+Por padrão, um `predict()` que não acha nada devolve um envelope **vazio**, não
+uma exceção. Isso é proposital: o modelo olhou e não encontrou nada é uma
+inferência bem-sucedida — uma foto de um pasto vazio é uma foto válida.
+
+Mas existe o caso oposto: um passo cuja **pré-condição** é que tenha alguma
+coisa ali, onde seguir com zero linhas é pior do que parar. Para esse caso,
+ligue `raise_on_empty`:
+
+=== "Python"
+
+    ```python
+    from ort_vision_sdk import Detector
+    from ort_vision_sdk.core import NoDetectionsError
+
+    det = Detector("yolov8n.onnx", conf_threshold=0.7, raise_on_empty=True)
+
+    try:
+        result = det.predict("img.jpg")[0]
+    except NoDetectionsError as error:
+        print(error)
+        # No detections in img.jpg: nothing cleared conf_threshold=0.7.
+    ```
+
+=== "Web (browser)"
+
+    ```typescript
+    import { Detector, NoDetectionsError } from "@mauriciobenjamin700/ort-vision-sdk-web";
+
+    const det = await Detector.create("/models/yolov8n.onnx", {
+      confThreshold: 0.7,
+      raiseOnEmpty: true,
+    });
+
+    try {
+      const result = (await det.predict("/img.jpg"))[0];
+    } catch (error) {
+      if (error instanceof NoDetectionsError) console.log(error.message);
+    }
+    ```
+
+!!! tip "\"Não detectou\" e \"não passou do limiar\" são o mesmo caso"
+    Quem decide o que **conta** como detecção é o `conf_threshold`. Então não
+    existe um limiar separado só para a exceção: suba o `conf_threshold` e a
+    exceção passa a cobrir a barra mais alta. A mensagem sempre diz qual limiar
+    valeu na chamada — sem isso não dá para distinguir uma imagem vazia de um
+    limiar alto demais.
+
+A mensagem também nomeia a imagem (quando a entrada foi um caminho) e o filtro
+de classes, quando um deles estreitou a busca:
+
+```text
+No detections in flock.jpg among classes [0, 16]: nothing cleared conf_threshold=0.25.
+```
+
+E dá para inverter por chamada, nas duas direções:
+
+```python
+det = Detector("yolov8n.onnx", raise_on_empty=True)
+
+det.predict("img.jpg", raise_on_empty=False)   # esta chamada devolve [] em paz
+det.predict("img.jpg", conf_threshold=0.9)     # sobe a barra; a exceção acompanha
+```
+
+O flag existe igual em `Detector`, `Segmenter` e `DetectClassify`, com o mesmo
+default (`False`) e a mesma mensagem.
+
 ## Padrões comuns
 
 ### Filtrar por classe

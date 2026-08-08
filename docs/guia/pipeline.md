@@ -204,6 +204,22 @@ Passos que seriam identidade (`mean` zero, `std` unitário, escala 1.0) não vir
 nós — um classificador que quer o recorte cru em `[0, 1]` não paga aritmética
 nenhuma.
 
+## Quando não detectar nada é um erro
+
+Um pipeline que não acha nada devolve um envelope vazio — o classificador nem
+chega a ter linha para responder. Se o passo seguinte depende de ter alguma
+coisa ali, `raise_on_empty` transforma isso em exceção, exatamente como no
+[`Detector`](deteccao.md#quando-nao-detectar-nada-e-um-erro):
+
+```python
+pipeline = DetectClassify("pipeline.onnx", raise_on_empty=True)
+pipeline.predict("pasto-vazio.jpg")   # -> NoDetectionsError
+```
+
+O limiar citado na mensagem é o **efetivo**: o maior entre o que foi congelado
+no NMS do grafo na fusão e qualquer `conf_threshold` mais estrito passado na
+chamada.
+
 ## Limites que valem saber
 
 - **A cabeça precisa ser YOLO anchor-free** — saída `(1, 4 + nc, N)`, a mesma

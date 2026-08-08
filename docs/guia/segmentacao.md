@@ -76,6 +76,17 @@ Por instância, a máscara é recortada na bounding box:
 - **Web:** `inst.mask` é um objeto `Mask` (`data`/`width`/`height`,
   layout row-major), e `inst.segmentedImage` é um `RGBImage`.
 
+## Quando não segmentar nada é um erro
+
+`Segmenter` aceita o mesmo `raise_on_empty` do `Detector`, com o mesmo default
+(`False`) e a mesma mensagem — ver
+[Quando não detectar nada é um erro](deteccao.md#quando-nao-detectar-nada-e-um-erro).
+
+```python
+seg = Segmenter("yolov8n-seg.onnx", conf_threshold=0.6, raise_on_empty=True)
+seg.predict("img.jpg")   # nada >= 0.6 -> NoDetectionsError
+```
+
 ## Veja também
 
 - [Guia de detecção](deteccao.md) — a mesma visão `Boxes` e o mesmo fluxo.

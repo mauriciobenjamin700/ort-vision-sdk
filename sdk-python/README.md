@@ -145,6 +145,30 @@ time. The same `pipeline.onnx` runs in the browser through the web SDK's
 `DetectClassify`. Full guide:
 [Fused pipelines](https://mauriciobenjamin700.github.io/ort-vision-sdk/en/guia/pipeline/).
 
+### When finding nothing is an error
+
+`predict()` returns an empty envelope when nothing is detected — the model
+looked and found nothing is a successful inference. When an empty result instead
+means the surrounding pipeline should stop, opt in:
+
+```python
+from ort_vision_sdk import Detector
+from ort_vision_sdk.core import NoDetectionsError
+
+det = Detector("yolov8n.onnx", conf_threshold=0.7, raise_on_empty=True)
+
+try:
+    result = det.predict("img.jpg")[0]
+except NoDetectionsError as error:
+    print(error)   # No detections in img.jpg: nothing cleared conf_threshold=0.7.
+```
+
+`conf_threshold` is what decides whether something counts as a detection, so
+"nothing detected" and "nothing confident enough" are the same case — raise the
+threshold and the error covers the stricter bar. Available on `Detector`,
+`Segmenter` and `DetectClassify`, and overridable per call
+(`predict(img, raise_on_empty=False)`).
+
 ### Instance segmentation
 
 ```python

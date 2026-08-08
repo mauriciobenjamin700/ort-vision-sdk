@@ -90,6 +90,30 @@ own metadata, so nothing is restated here. Building the pipeline is a Python-sid
 step; the browser only loads the result. Full guide:
 [Fused pipelines](https://mauriciobenjamin700.github.io/ort-vision-sdk/en/guia/pipeline/).
 
+### When finding nothing is an error
+
+`predict()` resolves to an empty envelope when nothing is detected. When an
+empty result instead means the surrounding flow should stop, opt in:
+
+```typescript
+import { Detector, NoDetectionsError } from "@mauriciobenjamin700/ort-vision-sdk-web";
+
+const det = await Detector.create("/models/yolov8n.onnx", {
+  confThreshold: 0.7,
+  raiseOnEmpty: true,
+});
+
+try {
+  const result = (await det.predict("/img.jpg"))[0];
+} catch (error) {
+  if (error instanceof NoDetectionsError) console.log(error.message);
+  // No detections in /img.jpg: nothing cleared confThreshold=0.7.
+}
+```
+
+Available on `Detector`, `Segmenter` and `DetectClassify`, and overridable per
+call (`predict(img, { raiseOnEmpty: false })`).
+
 ## Inference speed
 
 Every result envelope carries a per-stage timing breakdown:

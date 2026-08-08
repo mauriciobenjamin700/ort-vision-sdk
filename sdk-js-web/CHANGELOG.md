@@ -11,6 +11,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`raiseOnEmpty` — opt in to treating an empty result as an error.** Mirrors
+  the Python SDK: `Detector`, `Segmenter` and `DetectClassify` resolve to an
+  empty envelope by default, and throw the new `NoDetectionsError` when the flag
+  is set. Available on the construction options and as a per-call override, with
+  the same message — which names the threshold that applied, plus the image and
+  the class filter when either narrowed the search.
+
+  ```typescript
+  const det = await Detector.create("/models/yolov8n.onnx", {
+    confThreshold: 0.7,
+    raiseOnEmpty: true,
+  });
+  await det.predict("/img.jpg");
+  // NoDetectionsError: No detections in /img.jpg: nothing cleared confThreshold=0.7.
+  ```
+
 - **`DetectClassify` — run a fused detect→classify pipeline in the browser.**
   A pipeline built by the Python SDK's `ort_vision_sdk.compose` (0.7.0) already
   contains both models plus the crop-and-resize bridge between them. That matters

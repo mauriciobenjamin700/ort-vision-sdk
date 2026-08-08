@@ -26,6 +26,9 @@ por imagem. Cada tarefa expõe um alias `run()`.
 | `DetectorHead` (`"yolo"`) / `SegmenterHead` (`"yolo-seg"`) | famílias de decoder |
 | `DetectClassifyOptions` / `DetectClassifyPredictOptions` | `DetectClassify` (`labels`, `classifierLabels`; `confThreshold`, `classes`, `topK` no predict) |
 
+Os três tipos de detecção aceitam ainda `raiseOnEmpty` (construção e predict) —
+ver [Resultado vazio](#resultado-vazio).
+
 ## Resultados
 
 | Envelope | Visão em massa | Iterar produz |
@@ -69,7 +72,20 @@ Tipos/classes por instância: `DetectionResult`, `SegmentationResult`,
 
 Hierarquia de exceções exportada: `OrtVisionError` (base), `ImageLoadError`,
 `InferenceError`, `LabelMapError`, `ModelLoadError`,
-`ProviderNotAvailableError`, `FusionError`.
+`ProviderNotAvailableError`, `FusionError`, `NoDetectionsError`.
+
+## Resultado vazio
+
+`Detector`, `Segmenter` e `DetectClassify` aceitam `raiseOnEmpty` nas opções de
+construção e nas de `predict()`. Default `false`: não achar nada devolve um
+envelope vazio. Com `true`, lança `NoDetectionsError` — ver
+[Quando não detectar nada é um erro](../guia/deteccao.md#quando-nao-detectar-nada-e-um-erro).
+
+| Símbolo | Descrição |
+| --- | --- |
+| `raiseOnEmpty` | Opção de construção e de `predict()`; o valor por chamada vence. |
+| `NoDetectionsError` | Lançado quando nada sobra e o flag está ativo. |
+| `requireDetections(count, options)` | O helper compartilhado pelas três tarefas, exportado para quem constrói a própria tarefa. |
 
 ## Pipelines fundidos
 

@@ -100,6 +100,74 @@ You can override thresholds and filter classes on each `predict()`:
     }))[0];
     ```
 
+## When finding nothing is an error
+
+By default, a `predict()` that finds nothing returns an **empty** envelope, not
+an exception. That is deliberate: the model looked and found nothing is a
+successful inference — a photo of an empty field is a valid photo.
+
+But the opposite case exists: a step whose **precondition** is that something is
+there, where carrying on with zero rows is worse than stopping. For that, turn
+on `raise_on_empty`:
+
+=== "Python"
+
+    ```python
+    from ort_vision_sdk import Detector
+    from ort_vision_sdk.core import NoDetectionsError
+
+    det = Detector("yolov8n.onnx", conf_threshold=0.7, raise_on_empty=True)
+
+    try:
+        result = det.predict("img.jpg")[0]
+    except NoDetectionsError as error:
+        print(error)
+        # No detections in img.jpg: nothing cleared conf_threshold=0.7.
+    ```
+
+=== "Web (browser)"
+
+    ```typescript
+    import { Detector, NoDetectionsError } from "@mauriciobenjamin700/ort-vision-sdk-web";
+
+    const det = await Detector.create("/models/yolov8n.onnx", {
+      confThreshold: 0.7,
+      raiseOnEmpty: true,
+    });
+
+    try {
+      const result = (await det.predict("/img.jpg"))[0];
+    } catch (error) {
+      if (error instanceof NoDetectionsError) console.log(error.message);
+    }
+    ```
+
+!!! tip "\"Nothing detected\" and \"nothing confident enough\" are the same case"
+    What decides whether something **counts** as a detection is
+    `conf_threshold`. So there is no separate threshold just for the exception:
+    raise `conf_threshold` and the error covers the stricter bar. The message
+    always names the threshold that applied to the call — without it you cannot
+    tell a blank image from a threshold set too high.
+
+The message also names the image (when the input was a path) and the class
+filter, whenever one of them narrowed the search:
+
+```text
+No detections in flock.jpg among classes [0, 16]: nothing cleared conf_threshold=0.25.
+```
+
+And you can flip it per call, in either direction:
+
+```python
+det = Detector("yolov8n.onnx", raise_on_empty=True)
+
+det.predict("img.jpg", raise_on_empty=False)   # this call returns [] in peace
+det.predict("img.jpg", conf_threshold=0.9)     # raise the bar; the error follows
+```
+
+The flag exists identically on `Detector`, `Segmenter` and `DetectClassify`,
+with the same default (`False`) and the same message.
+
 ## Common patterns
 
 ### Filter by class

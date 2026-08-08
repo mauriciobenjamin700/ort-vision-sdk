@@ -27,15 +27,17 @@ Classifier(model_path, *, labels=None, providers=None, session_options=None,
 
 Detector(model_path, *, head="yolo", labels=None, providers=None,
          session_options=None, backend=None, input_size=None,
-         conf_threshold=0.25, iou_threshold=0.45, max_detections=300)
+         conf_threshold=0.25, iou_threshold=0.45, max_detections=300,
+         raise_on_empty=False)
 
 Segmenter(model_path, *, head="yolo-seg", labels=None, providers=None,
           session_options=None, backend=None, input_size=None,
           conf_threshold=0.25, iou_threshold=0.45, max_detections=300,
-          mask_threshold=0.5)
+          mask_threshold=0.5, raise_on_empty=False)
 
 DetectClassify(model_path, *, labels=None, classifier_labels=None,
-               providers=None, session_options=None, backend=None)
+               raise_on_empty=False, providers=None, session_options=None,
+               backend=None)
 ```
 
 `DetectClassify` takes only these parameters because everything else — the
@@ -98,6 +100,19 @@ Every envelope also exposes `names`, `orig_img`, `orig_shape`, `path`, and
 | `ClassificationResult` | `class_id`, `class_name`, `confidence` | `cls`, `name`, `conf` |
 | `ClassProbability` | `class_id`, `class_name`, `probability` | `cls`, `name` |
 | `BoundingBox` | `x1`, `y1`, `x2`, `y2` + `xyxy` | — |
+
+## Empty results
+
+`Detector`, `Segmenter` and `DetectClassify` take `raise_on_empty` on the
+constructor and as a per-call override on `predict()`. Default `False`: finding
+nothing returns an empty envelope, not an error. With `True`, it raises
+`NoDetectionsError` — see
+[When finding nothing is an error](../guia/deteccao.md#when-finding-nothing-is-an-error).
+
+| Symbol | Description |
+| --- | --- |
+| `raise_on_empty` | Constructor and `predict()` argument; the per-call value wins. |
+| `NoDetectionsError` | Raised when nothing survives and the flag is in effect. Exported from `ort_vision_sdk.core`. |
 
 ## Composing pipelines (`[compose]` extra)
 

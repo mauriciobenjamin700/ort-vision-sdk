@@ -96,9 +96,17 @@ locally without pushing or opening a PR.
 2. Commit the changelog (the Makefile requires a clean working tree).
 3. (Recommended) Run a dry-run: `make release PROJECT=python TAG=0.3.0 DRY_RUN=1`.
 4. Run the real release: `make release PROJECT=python TAG=0.3.0`.
-5. **The tag triggers the workflow** — track it under **GitHub → Actions** and
-   approve the `pypi` deployment when prompted. Publishing runs independently of
-   the PR merge (the tag is the source of truth).
+5. **The tag triggers the workflow** — track it under **GitHub → Actions**.
+   Publishing runs independently of the PR merge (the tag is the source of
+   truth).
+
+    !!! danger "No approval stands between the tag and the registry"
+        This repository's `pypi` environment has **no required reviewers**, so the
+        publish job never pauses: pushing the tag *is* publishing. npm works the
+        same way by construction. Neither registry lets a version be replaced, so
+        treat `make release` as irreversible — add required reviewers to the
+        `pypi` environment first if you want that brake.
+
 6. Merge the PR when ready to propagate the version bump to `main`.
 
 ### Accepted variables

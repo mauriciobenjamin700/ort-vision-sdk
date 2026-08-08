@@ -53,7 +53,7 @@ Antes do PyPI de verdade, valide tudo no [test.pypi.org](https://test.pypi.org):
 
 1. No GitHub: **Settings → Environments → New environment**.
 2. Nome: `pypi`.
-3. (Opcional, mas recomendado) **Required reviewers** → adicione você mesmo: cada release exige aprovação manual antes de publicar.
+3. (Opcional, mas recomendado) **Required reviewers** → adicione você mesmo: cada release passa a exigir aprovação manual antes de publicar. **Hoje este repositório não tem reviewer configurado** — sem esse passo, pushear a tag publica direto.
 4. (Opcional) **Deployment branches** → restrinja a `main` e tags `v*.*.*`.
 
 Não precisa de secret nenhum aqui — OIDC cuida da autenticação.
@@ -157,13 +157,20 @@ Exemplo: subir o sdk-python para `0.3.0`.
    - Avisar se o `CHANGELOG.md` não menciona `[0.3.0]`
    - Criar a branch `release/v0.3.0` a partir do HEAD atual
    - Atualizar a versão em `pyproject.toml` e em `src/ort_vision_sdk/__init__.py`
-   - Rodar lint + typecheck + build + `twine check` (mesmos checks do CI)
+   - Rodar lint + typecheck + **testes** + build + `twine check` (mesmos checks do CI), num ambiente resolvido nesta ordem: `sdk-python/.venv` se existir, senão um ambiente efêmero do `uv`, senão `pip` no interpretador atual
    - Criar o commit `chore(python): release v0.3.0` e a tag `v0.3.0` na branch
    - Regenerar [RELEASES.md](https://github.com/mauriciobenjamin700/ort-vision-sdk/blob/main/RELEASES.md) e fazer commit dele
    - `git push -u origin release/v0.3.0` + `git push origin v0.3.0`
    - Abrir um PR via `gh pr create` com o template padrão em PT-BR
 
-5. **A tag já dispara o workflow** — acompanhe em **GitHub → Actions → Release to PyPI** e aprove o deploy no environment `pypi` quando solicitado. A publicação corre **independente** do merge do PR (a tag é a fonte da verdade).
+5. **A tag já dispara o workflow** — acompanhe em **GitHub → Actions → Release to PyPI**. A publicação corre **independente** do merge do PR (a tag é a fonte da verdade).
+
+    !!! danger "Neste repositório não existe aprovação no caminho"
+        O environment `pypi` está criado **sem required reviewers**, então o job
+        de publish não pausa: pushear a tag **é** publicar. O npm é igual, por
+        construção. Como nenhum dos dois registries deixa substituir uma versão,
+        trate `make release` como irreversível — se quiser o freio, configure
+        required reviewers (passo [1.3](#13-environment-pypi-no-github)) antes.
 
 6. **Faça merge do PR** quando estiver pronto — isso propaga para `main` o bump de versão e a entrada em `RELEASES.md`.
 

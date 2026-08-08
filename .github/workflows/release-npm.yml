@@ -40,13 +40,20 @@ jobs:
       - name: Upgrade npm for Trusted Publishing
         run: npm install -g npm@latest
 
-      # Guard: the git tag and package.json must agree before anything is
-      # published, otherwise npm gets a version the tag does not describe and
-      # the GitHub Release ends up pointing at the wrong code.
+      # Guard: the git tag, package.json and the exported VERSION must all agree
+      # before anything is published, otherwise npm gets a version the tag does
+      # not describe and the GitHub Release ends up pointing at the wrong code.
+      # npm never lets a version be republished, so this has to fail *before*
+      # the publish, not after.
       - name: Resolve version and check it matches the tag
         id: version
         run: |
           PKG_VERSION=$(node -p "require('./package.json').version")
+          SRC_VERSION=$(node -p "require('fs').readFileSync('src/index.ts','utf8').match(/^export const VERSION: string = \"([^\"]+)\";/m)[1]")
+          if [ "$SRC_VERSION" != "$PKG_VERSION" ]; then
+            echo "::error::src/index.ts VERSION ${SRC_VERSION} does not match package.json version ${PKG_VERSION}"
+            exit 1
+          fi
           if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
             TAG_VERSION="${GITHUB_REF_NAME#web-v}"
             if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then

@@ -35,6 +35,12 @@ jobs:
       # describe and the GitHub Release ends up pointing at the wrong code.
       # PyPI never lets a version be replaced, so this has to fail *before* the
       # upload, not after.
+      #
+      # The __version__ pattern is anchored on the whole assignment on purpose.
+      # `__version__.*"([^"]+)"` looks equivalent but is not: the greedy `.*`
+      # swallows the opening quote, and `[^"]` matches newlines, so the capture
+      # starts at the closing quote of the version and runs on to the first
+      # string literal further down the file. It never read a version.
       - name: Resolve version and check it matches the tag
         id: version
         run: |
@@ -42,7 +48,7 @@ jobs:
             print(tomllib.loads(pathlib.Path('pyproject.toml').read_text())['project']['version'])")
           DUNDER_VERSION=$(python -c "import re,pathlib; \
             src = pathlib.Path('src/ort_vision_sdk/__init__.py').read_text(); \
-            print(re.search(r'__version__.*\"([^\"]+)\"', src).group(1))")
+            print(re.search(r'^__version__\s*:\s*str\s*=\s*\"([^\"]+)\"', src, re.M).group(1))")
           if [ "$DUNDER_VERSION" != "$PKG_VERSION" ]; then
             echo "::error::__version__ ${DUNDER_VERSION} does not match pyproject version ${PKG_VERSION}"
             exit 1

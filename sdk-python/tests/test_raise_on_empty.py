@@ -16,9 +16,8 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from ort_vision_sdk import Detector, Segmenter
+from ort_vision_sdk import Detector, Segmenter, require_detections
 from ort_vision_sdk.core.exceptions import NoDetectionsError
-from ort_vision_sdk.tasks.base import require_detections
 
 
 class StubBackend:
@@ -174,6 +173,63 @@ class TestRequireDetections:
             require_detections(
                 0, raise_on_empty=True, conf_threshold=0.25, classes=[3, 0], path=None
             )
+
+
+class TestPublicSurface:
+    """The helper is reachable without importing a submodule.
+
+    ``VisionTask`` is public, so writing a task of your own is a supported thing
+    to do — and such a task needs this helper to raise the same error the
+    built-in ones raise. Reaching into ``ort_vision_sdk.tasks.base`` for it left
+    the caller either breaking the project's own import convention or writing a
+    second wording of the same error.
+    """
+
+    def test_exported_from_the_package_root(self) -> None:
+        import ort_vision_sdk
+
+        assert "require_detections" in ort_vision_sdk.__all__
+
+    def test_exported_from_the_tasks_barrel(self) -> None:
+        from ort_vision_sdk import tasks
+
+        assert "require_detections" in tasks.__all__
+        assert tasks.require_detections is require_detections
+
+
+class TestThresholdFormatting:
+    """The threshold in the message is rendered identically in both SDKs.
+
+    The same table lives in the web suite
+    (``test/raiseOnEmpty.test.ts``). Python's own ``str(float)`` would print a
+    whole threshold as ``1.0`` against JavaScript's ``1``, and would switch to
+    ``1e-05`` where JavaScript still writes ``0.00001`` — two SDKs describing one
+    run with two numbers. If either side's formatting drifts, one of these two
+    tables fails.
+    """
+
+    @pytest.mark.parametrize(
+        ("threshold", "rendered"),
+        [
+            (0.0, "0"),
+            (1.0, "1"),
+            (0.25, "0.25"),
+            (0.5, "0.5"),
+            (0.9, "0.9"),
+            (0.001, "0.001"),
+            (0.00001, "0.00001"),
+            (0.123456, "0.123456"),
+        ],
+    )
+    def test_renders_the_threshold_like_the_web_sdk(
+        self, threshold: float, rendered: str
+    ) -> None:
+        with pytest.raises(NoDetectionsError) as caught:
+            require_detections(
+                0, raise_on_empty=True, conf_threshold=threshold, classes=None, path=None
+            )
+
+        assert str(caught.value) == f"No detections: nothing cleared conf_threshold={rendered}."
 
 
 class TestDetector:

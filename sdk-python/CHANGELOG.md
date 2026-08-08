@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-08-08
+
+### Added
+
+- **`require_detections` is part of the public API.** `VisionTask` has always
+  been exported, so writing a task of your own is a supported thing to do — but
+  the helper the built-in tasks use to raise `NoDetectionsError` was only
+  reachable as `ort_vision_sdk.tasks.base.require_detections`. A custom task
+  therefore either imported from a submodule, against the convention every other
+  import in this package follows, or wrote a second wording of the same error —
+  the exact outcome a single shared helper exists to prevent. It is now exported
+  from `ort_vision_sdk` and `ort_vision_sdk.tasks`, next to `VisionTask`. The web
+  SDK already exported `requireDetections`; this closes the gap between the two.
+
+### Fixed
+
+- **The threshold quoted in a `NoDetectionsError` now reads the same in both
+  SDKs.** Python rendered a whole threshold as `conf_threshold=1.0` where the web
+  SDK rendered `confThreshold=1`, and switched to `1e-05` where the web SDK still
+  wrote `0.00001`. A fused pipeline is built once and runs under both runtimes
+  from the same file, so the two SDKs were describing one run with two different
+  numbers. Both sides now render six decimals with the trailing zeros trimmed,
+  and the same table in both test suites fails if either side drifts.
+
+- **The changelog's link table is no longer stuck at 0.2.0.** `[Unreleased]`
+  compared against `v0.2.0`, so following it showed five releases of shipped
+  history as unreleased work, and `[0.3.0]` through `[0.7.0]` had no link
+  definition at all — they rendered as literal `[0.7.0]` text. The table is
+  rebuilt through 0.8.0. `[0.1.0]` loses its definition on purpose: no `v0.1.0`
+  tag was ever pushed, so that link was a 404.
+
 ## [0.7.0] - 2026-08-07
 
 ### Added
@@ -586,6 +617,14 @@ print(r.boxes.xyxy.shape, r.boxes.cls, r.boxes.conf, r.names)
 - Public types: `BoundingBox`, `ClassProbability`, `ClassificationResult`, `DetectionResult`, `ImageArray`.
 - Optional extras: `gpu` (onnxruntime-gpu), `opencv` (opencv-python), `dev` (test/lint tooling).
 
-[Unreleased]: https://github.com/mauriciobenjamin700/ort-vision-sdk/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/mauriciobenjamin700/ort-vision-sdk/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/mauriciobenjamin700/ort-vision-sdk/compare/v0.7.0...v0.8.0
+[0.7.0]: https://github.com/mauriciobenjamin700/ort-vision-sdk/compare/v0.6.0...v0.7.0
+[0.6.0]: https://github.com/mauriciobenjamin700/ort-vision-sdk/compare/v0.5.0...v0.6.0
+[0.5.0]: https://github.com/mauriciobenjamin700/ort-vision-sdk/compare/v0.4.0...v0.5.0
+[0.4.0]: https://github.com/mauriciobenjamin700/ort-vision-sdk/compare/v0.3.2...v0.4.0
+[0.3.2]: https://github.com/mauriciobenjamin700/ort-vision-sdk/compare/v0.3.1...v0.3.2
+[0.3.1]: https://github.com/mauriciobenjamin700/ort-vision-sdk/compare/v0.3.0...v0.3.1
+[0.3.0]: https://github.com/mauriciobenjamin700/ort-vision-sdk/compare/v0.2.1...v0.3.0
+[0.2.1]: https://github.com/mauriciobenjamin700/ort-vision-sdk/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/mauriciobenjamin700/ort-vision-sdk/releases/tag/v0.2.0
-[0.1.0]: https://github.com/mauriciobenjamin700/ort-vision-sdk/releases/tag/v0.1.0

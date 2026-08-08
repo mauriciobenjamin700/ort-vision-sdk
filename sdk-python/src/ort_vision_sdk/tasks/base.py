@@ -88,6 +88,31 @@ class VisionTask:
         return self._session
 
 
+def _format_threshold(value: float) -> str:
+    """Render a confidence threshold the way the web SDK renders it.
+
+    Python and JavaScript disagree on how a number becomes text. A whole
+    threshold is ``1.0`` here and ``1`` there; Python switches to an exponent
+    at ``1e-05`` while JavaScript holds off until ``1e-07``. A fused pipeline
+    is built once and runs under both runtimes from the same file, so a message
+    that quotes the threshold has to quote it identically — otherwise the two
+    SDKs describe the same run with two different numbers.
+
+    Six decimals with the trailing zeros trimmed covers every threshold a
+    caller can meaningfully set and agrees byte for byte with
+    ``formatThreshold`` in the web SDK's ``tasks/base.ts``. The pairing is
+    fixed by a shared table in both test suites, so a change on one side that
+    is not mirrored on the other fails.
+
+    Args:
+        value (float): The threshold to render.
+
+    Returns:
+        The threshold as text, without trailing zeros or a trailing dot.
+    """
+    return f"{value:.6f}".rstrip("0").rstrip(".")
+
+
 def require_detections(
     count: int,
     *,
@@ -124,5 +149,6 @@ def require_detections(
     where = f" in {path}" if path else ""
     narrowed = f" among classes {sorted(classes)}" if classes is not None else ""
     raise NoDetectionsError(
-        f"No detections{where}{narrowed}: nothing cleared conf_threshold={conf_threshold}."
+        f"No detections{where}{narrowed}: "
+        f"nothing cleared conf_threshold={_format_threshold(conf_threshold)}."
     )

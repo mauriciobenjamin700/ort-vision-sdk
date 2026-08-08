@@ -16,6 +16,7 @@ export {
 export {
   Boxes,
   ClassificationResults,
+  DetectClassifyResults,
   DetectionResults,
   Masks,
   Probs,
@@ -30,6 +31,7 @@ export {
 } from "./labels.js";
 
 export {
+  FusionError,
   ImageLoadError,
   InferenceError,
   LabelMapError,
@@ -53,11 +55,28 @@ export {
   resolveInputSize,
   spatialInputSize,
 } from "./core/graph.js";
-export { modelNames, readModelMetadata } from "./core/metadata.js";
+export { modelNames, parseNames, readModelMetadata } from "./core/metadata.js";
 export { DEFAULT_PROVIDERS, resolveProviders } from "./core/providers.js";
 export { type Speed, SpeedTimer } from "./core/timing.js";
 
 export { type ImageInput, loadImage } from "./io/image.js";
+
+export {
+  FUSION_KIND_DETECT_CLASSIFY,
+  INPUT_IMAGE,
+  INPUT_PAD,
+  INPUT_SCALE,
+  INPUT_SOURCE,
+  METADATA_PREFIX,
+  OUTPUT_BOXES,
+  OUTPUT_CLASSES,
+  OUTPUT_NUM_DETECTIONS,
+  OUTPUT_PROBS,
+  OUTPUT_SCORES,
+  type CropSource,
+  type FusionSpec,
+  readFusionSpec,
+} from "./fusion.js";
 
 export {
   type LetterboxResult,
@@ -107,6 +126,11 @@ export {
   type ClassifierPredictOptions,
   Classifier,
 } from "./tasks/classifier.js";
+export {
+  type DetectClassifyOptions,
+  type DetectClassifyPredictOptions,
+  DetectClassify,
+} from "./tasks/detectClassify.js";
 export {
   type DetectorHead,
   type DetectorOptions,

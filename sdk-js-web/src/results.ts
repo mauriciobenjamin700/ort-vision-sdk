@@ -273,6 +273,50 @@ export class DetectionResults implements Iterable<DetectionResult> {
 }
 
 /**
+ * Per-image envelope for a fused detect→classify pipeline.
+ *
+ * Structurally a {@link DetectionResults} with a second class map: every
+ * detection it yields carries a populated `classification`, and the two stages
+ * have their own, unrelated label spaces — a detector that finds `sheep`
+ * feeding a classifier that answers `famacha_3` shares no class ids with it.
+ * Merging them into one `names` record would make `cls` and
+ * `classification.cls` look comparable when they are not.
+ *
+ * ```typescript
+ * const result = (await pipeline.predict("flock.jpg"))[0];
+ * for (const detection of result) {
+ *   console.log(detection.name, detection.conf, detection.classification?.name);
+ * }
+ * ```
+ */
+export class DetectClassifyResults implements Iterable<DetectionResult> {
+  constructor(
+    public readonly boxes: Boxes,
+    public readonly detections: readonly DetectionResult[],
+    public readonly names: Readonly<Record<number, string>>,
+    public readonly classifierNames: Readonly<Record<number, string>>,
+    public readonly origImg: RGBImage,
+    public readonly origShape: readonly [number, number],
+    public readonly path: string | null = null,
+    public readonly speed: Readonly<Speed> = NO_SPEED,
+  ) {}
+
+  /** Number of surviving detections. */
+  get length(): number {
+    return this.detections.length;
+  }
+
+  /** Index into the per-instance detections. */
+  get(index: number): DetectionResult | undefined {
+    return this.detections[index];
+  }
+
+  [Symbol.iterator](): Iterator<DetectionResult> {
+    return this.detections[Symbol.iterator]();
+  }
+}
+
+/**
  * Per-image classification envelope (Ultralytics-style `Results`).
  */
 export class ClassificationResults {

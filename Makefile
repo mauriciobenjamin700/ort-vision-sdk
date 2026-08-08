@@ -72,27 +72,8 @@ last-python: ## Mostra a última tag publicada do sdk-python
 last-web: ## Mostra a última tag publicada do sdk-js-web
 	@git tag -l "web-v*.*.*" --sort=-v:refname | head -n 1 | grep . || echo "(nenhuma)"
 
-releases-check: ## Compara git tags × versões publicadas × GitHub Releases
-	@printf "\n%-16s %-10s %-10s %s\n" "TAG" "REGISTRY" "RELEASE" "STATUS"
-	@gh_releases=$$(gh release list --limit 200 --json tagName --jq '.[].tagName' 2>/dev/null | tr '\n' ' '); \
-	pypi_versions=$$(curl -sf https://pypi.org/pypi/ort-vision-sdk/json 2>/dev/null \
-	  | python3 -c "import json,sys; print(' '.join(json.load(sys.stdin)['releases']))" 2>/dev/null || true); \
-	npm_versions=$$(npm view @mauriciobenjamin700/ort-vision-sdk-web versions --json 2>/dev/null | tr -d '[]", ' | tr '\n' ' '); \
-	for tag in $$(git tag -l "v*.*.*" --sort=-v:refname); do \
-	  v=$${tag#v}; \
-	  case " $$pypi_versions " in *" $$v "*) n="ok";; *) n="FALTA";; esac; \
-	  case " $$gh_releases " in *" $$tag "*) r="ok";; *) r="FALTA";; esac; \
-	  if [ "$$n" = "ok" ] && [ "$$r" = "ok" ]; then st="sincronizado"; else st="DESSINCRONIZADO"; fi; \
-	  printf "%-16s %-10s %-10s %s\n" "$$tag" "$$n" "$$r" "$$st"; \
-	done; \
-	for tag in $$(git tag -l "web-v*.*.*" --sort=-v:refname); do \
-	  v=$${tag#web-v}; \
-	  case " $$npm_versions " in *" $$v "*) n="ok";; *) n="FALTA";; esac; \
-	  case " $$gh_releases " in *" $$tag "*) r="ok";; *) r="FALTA";; esac; \
-	  if [ "$$n" = "ok" ] && [ "$$r" = "ok" ]; then st="sincronizado"; else st="DESSINCRONIZADO"; fi; \
-	  printf "%-16s %-10s %-10s %s\n" "$$tag" "$$n" "$$r" "$$st"; \
-	done; \
-	printf "\n"
+releases-check: ## Compara git tags × versões publicadas × GitHub Releases (falha se dessincronizado)
+	@./scripts/releases-check.sh
 
 releases-sync: ## Cria os GitHub Releases faltantes para as git tags existentes
 	@./scripts/sync-github-releases.sh

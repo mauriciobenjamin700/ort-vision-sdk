@@ -223,7 +223,27 @@ Empurrar a tag é o último passo manual. A partir dela o GitHub Actions faz, na
     make releases-check      # tags × versões publicadas × Releases, lado a lado
     ```
 
-    `releases-check` é o jeito rápido de ver se alguma tag existe sem pacote publicado — ou o contrário.
+    `releases-check` é o jeito rápido de ver se alguma tag existe sem pacote publicado — ou o contrário. Ele **sai com status != 0** quando acha dessincronia, então serve de gate.
+
+!!! note "Tags cuja publicação nunca aconteceu"
+    Uma tag pode existir sem que a versão tenha ido para o registry — foi o caso
+    de `web-v0.2.0` e `web-v0.2.2`, cujos jobs de publish falharam em maio de
+    2026 e nunca foram retomados. Essas ausências são **esperadas** e ficam
+    registradas em [`scripts/never-published.tsv`](https://github.com/mauriciobenjamin700/ort-vision-sdk/blob/main/scripts/never-published.tsv),
+    uma linha por tag com o motivo:
+
+    ```text
+    web-v0.2.0	publish nunca rodou — o job falhou antes, no smoke-install do tarball (run …)
+    ```
+
+    O `releases-check` então reporta `nunca publicada` em vez de
+    `DESSINCRONIZADO` e não falha por causa dela. **O motivo de existir é a
+    auditoria voltar a ser útil**: enquanto essas duas linhas ficavam vermelhas
+    para sempre, uma linha vermelha nova não chamava atenção nenhuma.
+
+    Duas regras: não registre aqui uma release quebrada que ainda pode ser
+    publicada — publique. E se uma tag listada aparecer no registry, o check
+    acusa `LEDGER OBSOLETO`, porque aí o arquivo passou a mentir.
 
 ### 3.6. Quando algo dá errado
 

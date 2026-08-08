@@ -138,7 +138,26 @@ Pushing the tag is the last manual step. From there GitHub Actions, in order:
     make releases-check      # tags x published versions x Releases, side by side
     ```
 
-    `releases-check` is the quick way to spot a tag with no published package — or the other way around.
+    `releases-check` is the quick way to spot a tag with no published package — or the other way around. It **exits non-zero** on a mismatch, so it works as a gate.
+
+!!! note "Tags whose publish never happened"
+    A tag can exist without the version ever reaching the registry — that is the
+    case for `web-v0.2.0` and `web-v0.2.2`, whose publish jobs failed in May 2026
+    and were never retried. Those absences are **expected**, and they are
+    recorded in [`scripts/never-published.tsv`](https://github.com/mauriciobenjamin700/ort-vision-sdk/blob/main/scripts/never-published.tsv),
+    one line per tag with the reason:
+
+    ```text
+    web-v0.2.0	publish nunca rodou — o job falhou antes, no smoke-install do tarball (run …)
+    ```
+
+    `releases-check` then reports `nunca publicada` instead of `DESSINCRONIZADO`
+    and does not fail on it. **The point is making the audit useful again**: while
+    those two lines stayed red forever, a new red line drew no attention at all.
+
+    Two rules: do not record a broken release here while publishing it is still
+    possible — publish it. And if a listed tag shows up in the registry, the check
+    reports `LEDGER OBSOLETO`, because at that point the file is lying.
 
 ## Versioning
 

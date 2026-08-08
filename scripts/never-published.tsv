@@ -1,0 +1,15 @@
+# Tags de release cuja publicação nunca aconteceu.
+#
+# Uma tag listada aqui é ausência **esperada** no registry: `make releases-check`
+# reporta "nunca publicada" em vez de "DESSINCRONIZADO", e não falha por causa
+# dela. Isso existe para a auditoria voltar a ser útil — enquanto essas duas
+# linhas ficavam vermelhas para sempre, uma linha vermelha nova não chamava
+# atenção nenhuma.
+#
+# Não é lugar para esconder release quebrada recente: se a publicação ainda pode
+# acontecer, o certo é publicar, não registrar aqui. E se uma tag listada
+# aparecer no registry, o check acusa `LEDGER OBSOLETO` — a linha tem que sair.
+#
+# Formato: <tag><TAB><motivo>
+web-v0.2.0	publish nunca rodou — o job falhou antes, no smoke-install do tarball (run 25286525334, 2026-05-03)
+web-v0.2.2	publish rodou e falhou no passo "Publish (with provenance)" (run 26715539172, 2026-05-31)

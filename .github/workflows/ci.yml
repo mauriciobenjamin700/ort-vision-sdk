@@ -3,15 +3,29 @@ name: CI
 on:
   push:
     branches: [main]
-  # No base-branch filter on purpose. Stacked pull requests target the branch
-  # below them rather than `main`, so a `branches: [main]` filter here silently
-  # skips CI on every PR in a stack except the last one — the reviewer sees no
-  # checks and cannot tell "passed" from "never ran".
+  # No base-branch filter on purpose. A stacked pull request targets the branch
+  # below it rather than `main`, so a `branches: [main]` filter here skips CI on
+  # every PR in a stack except the last one — and skips it silently: no checks
+  # appear at all, so neither reviewer nor author can tell "passed" from "never
+  # ran". A pull request only exists against branches someone opened it for.
   pull_request:
-  # Lets a run be started by hand from the Actions tab, which is the only way
-  # back when a run was never scheduled in the first place (an account-level
-  # Actions restriction, a cancelled queue) and no push is due.
+  # Manual trigger, for when the run that should have fired never did.
+  #
+  # GitHub throttles webhook delivery during Actions incidents, and an `opened`
+  # or `synchronize` event dropped that way leaves a pull request with no checks
+  # at all and no way to ask for any. Closing and reopening the PR re-fires
+  # `reopened` and is the usual workaround, until the throttling reaches that
+  # event too — which is exactly what happened on #20 and #22.
+  #
+  # `workflow_dispatch` is only readable from the default branch, so adding it
+  # inside a pull request does nothing for that pull request. It has to be on
+  # main before it can rescue anything, which is why this is its own change.
   workflow_dispatch:
+    inputs:
+      ref:
+        description: "Branch, tag or SHA to check out and run against"
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -26,9 +40,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.10", "3.11", "3.12"]
+        python-version: ["3.11", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Empty on push/pull_request, which is checkout's default behaviour.
+          ref: ${{ inputs.ref }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -87,6 +104,9 @@ jobs:
         node-version: ["18", "20", "22"]
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Empty on push/pull_request, which is checkout's default behaviour.
+          ref: ${{ inputs.ref }}
 
       - name: Set up Node.js
         uses: actions/setup-node@v4

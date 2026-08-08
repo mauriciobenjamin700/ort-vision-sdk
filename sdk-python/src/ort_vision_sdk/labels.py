@@ -113,6 +113,31 @@ _PRESETS: dict[str, tuple[str, ...]] = {
 }
 
 
+def default_labels(num_classes: int | None) -> LabelSpec:
+    """Pick the fallback label spec for a model that declares no class names.
+
+    The COCO preset is the right default for a stock YOLO export and an
+    impossible one for anything else: it names exactly 80 classes, so handing
+    it to a 3-class head makes :func:`resolve_labels` raise
+    ``Resolved 80 labels but the model has 3 classes`` and the task cannot be
+    constructed at all. A custom model without baked-in ``names`` is an
+    ordinary thing to have — it should come up as ``class_0``, ``class_1``, ...,
+    not as a crash.
+
+    Args:
+        num_classes (int | None): Number of classes the model predicts, or
+            ``None`` when the output shape does not say.
+
+    Returns:
+        LabelSpec: ``"coco"`` when the preset can actually describe the model,
+        otherwise ``None`` — which makes :func:`resolve_labels` generate
+        ``class_N`` names.
+    """
+    if num_classes is None or num_classes == len(COCO_CLASSES):
+        return "coco"
+    return None
+
+
 def resolve_labels(
     spec: LabelSpec,
     *,

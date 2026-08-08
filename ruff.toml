@@ -1,0 +1,11 @@
+# Lint config for the repository-root helper scripts under `scripts/`.
+#
+# Rules are not restated here — they are extended from the Python package, so a
+# script is held to the same standard as the code it drives. What this file adds
+# is `src`: without it, ruff sees `ort_vision_sdk` as a third-party import from
+# the root and asks for an import order that contradicts the package's own.
+#
+# `sdk-python/` and `sdk-js-web/` are unaffected; ruff picks the nearest config,
+# and `sdk-python/pyproject.toml` still governs everything inside it.
+extend = "sdk-python/pyproject.toml"
+src = ["sdk-python/src", "scripts"]

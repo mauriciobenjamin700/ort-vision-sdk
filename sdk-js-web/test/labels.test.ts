@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { LabelMapError } from "../src/core/exceptions.js";
-import { COCO_CLASSES, resolveLabels } from "../src/labels.js";
+import { defaultLabels, COCO_CLASSES, resolveLabels } from "../src/labels.js";
 
 describe("COCO_CLASSES preset", () => {
   it("has 80 classes in canonical Ultralytics order", () => {
@@ -45,5 +45,29 @@ describe("resolveLabels", () => {
 
   it("throws when null + numClasses missing", () => {
     expect(() => resolveLabels(null)).toThrow(LabelMapError);
+  });
+});
+
+describe("defaultLabels", () => {
+  it("keeps the COCO preset when it can describe the model", () => {
+    expect(defaultLabels(80)).toBe("coco");
+  });
+
+  it("keeps the COCO preset when the class count is unknown", () => {
+    expect(defaultLabels(undefined)).toBe("coco");
+  });
+
+  it("falls back to generated names for any other class count", () => {
+    expect(defaultLabels(3)).toBeNull();
+    expect(defaultLabels(1)).toBeNull();
+    expect(defaultLabels(1000)).toBeNull();
+  });
+
+  it("produces class_N labels once resolved", () => {
+    expect(resolveLabels(defaultLabels(3), { numClasses: 3 })).toEqual([
+      "class_0",
+      "class_1",
+      "class_2",
+    ]);
   });
 });

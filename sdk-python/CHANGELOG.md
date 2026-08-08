@@ -7,6 +7,175 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+
+- **`decode_yolov8`, `decode_yolov8_anchors` and `decode_yolov8_seg` are gone.**
+  Deprecated in 0.2.0 with "will be removed in 0.3.0", and still shipping at
+  0.6.0 — a deprecation nobody enforces stops being one. Use `decode_yolo`,
+  `decode_yolo_anchors` and `decode_yolo_seg`: same functions, honest names.
+  The decoder was never v8-specific; it covers every anchor-free YOLO head from
+  v8 through v12.
+
+  `tests/test_deprecations.py` now guards the removal rather than the
+  deprecation, so a re-add fails loudly.
+
+- **Python 3.10 is no longer supported.** `requires-python` is `>=3.11`.
+  `onnxruntime` stopped publishing cp310 wheels at 1.24, so a 3.10 install was
+  already pinned to `onnxruntime <= 1.23` without saying so — a floor that
+  quietly decays is worse than one that is stated. The CI matrix moves to
+  3.11 / 3.12 / 3.13.
+
+### Fixed
+
+- **A custom model with no baked-in `names` no longer fails to construct.** The
+  fallback for a model that declares no class names was the COCO preset, which
+  names exactly 80 classes — so a 3-class detector raised `Resolved 80 labels
+  but the model has 3 classes` and could not be built at all without passing
+  `labels`. An export without `names` is an ordinary thing to have; the labels
+  now come up as `class_0`, `class_1`, ... and the COCO preset is used only when
+  the model really does have 80 classes. `default_labels` is exported for
+  callers who want the same decision.
+
+- **Automatic provider selection no longer tries TensorRT.** `onnxruntime-gpu`
+  reports `TensorrtExecutionProvider` as available whenever it was compiled in,
+  not when it can load — so on a machine without the TensorRT shared libraries,
+  which is the common case for that wheel, every session printed four lines of
+  failed provider registration and fallback notices to stderr before recovering
+  on CUDA:
+
+  ```text
+  *************** EP Error ***************
+  EP Error ... Please install TensorRT libraries as mentioned in the GPU
+  requirements page ... when using ['TensorrtExecutionProvider', ...]
+  Falling back to ['CUDAExecutionProvider', 'CPUExecutionProvider'] and retrying.
+  ****************************************
+  ```
+
+  TensorRT also builds an engine on first run that can take minutes, which is
+  not a cost to opt somebody into by default. `providers=["tensorrt"]` still
+  selects it, and still raises `ProviderNotAvailableError` when the installed
+  build does not carry it.
+
+### Fixed
+
+- **Instance masks no longer lose precision to a `uint8` round-trip.** Resizing
+  a soft mask to its bounding box went through PIL, which cannot resample a
+  float array — so the mask was quantized to `uint8` first. That put the input
+  to the `>= mask_threshold` test on a grid of `1/255` steps and flipped border
+  pixels for no reason. Resampling is now a bilinear pass in `float32`, and it
+  agrees with a `float64` reference on **100%** of pixels where the old path
+  agreed on 99.7%.
+
+  This also removes a divergence between the two published SDKs: the web
+  implementation always resampled in float, so the same model on the same image
+  produced different masks in Python and in the browser. They now produce the
+  same bitmap, and `fixtures/parity/` checks it.
+
+  Masks stored by 0.6.0 or earlier will differ from new ones by a few border
+  pixels.
+
+- **Score ties in `nms` and `batched_nms` resolve deterministically, to the
+  lowest index.** `nms` ordered candidates with `scores.argsort()[::-1]`, which
+  reverses a stable sort — so tied scores were visited in *descending* index
+  order, the opposite of `torchvision` and of the web SDK. Two boxes tied on
+  score therefore produced a different survivor in each SDK. `batched_nms` had
+  the same problem across classes, where the surviving order also depended on
+  the class-iteration order. Both now break ties by index explicitly.
+
+- **`nms` no longer emits `RuntimeWarning: invalid value encountered in
+  divide`.** The IoU was computed for every pair and then masked, so a pair of
+  zero-area boxes evaluated `0 / 0` before the result was discarded. Letterbox
+  padding clips boxes down to zero area on ordinary frames, so the warning
+  reached callers' logs during normal use. The division is now masked instead of
+  discarded.
+
+### Changed
+
+- **`decode_yolo` is up to 8x faster on frames with few or no detections.** The
+  decoder transposed the model's `(channels, anchors)` output to
+  `(anchors, channels)` before reducing, which made every reduction walk a
+  column with a stride of `num_anchors` — a cache line fetched per element. It
+  now reduces over the channel axis in the model's own layout, reading
+  contiguous rows, and asks `argmax` which class won only for the anchors that
+  passed the confidence threshold instead of for all 8400.
+
+  | Candidates above threshold | Before | After | Speedup |
+  | --- | --- | --- | --- |
+  | none | 0.52 ms | 0.06 ms | 8.10x |
+  | 50 | 0.87 ms | 0.47 ms | 1.84x |
+  | 500 | 5.63 ms | 5.15 ms | 1.09x |
+  | 2000 | 19.52 ms | 19.22 ms | 1.02x |
+
+  The gain lands where the decode itself is the cost, which is the ordinary
+  case: a frame with nothing in it, or with a handful of objects. Once hundreds
+  of candidates survive, NMS dominates and this changes little.
+
+  Output is unchanged — the parity fixtures are what says so, rather than an
+  argument about equivalence.
+
+- **Downscaling by 2x or more runs in two steps, roughly halving `preprocess`.**
+  `resize` now applies an integer box reduction (`PIL.Image.reduce`) before
+  resampling onto the exact target — the optimization PIL exposes as
+  `reducing_gap`, applied explicitly so it engages at the ratios this SDK
+  actually sees. Letterboxing 1920x1080 into 640x640 went from 7.8 ms to 3.5 ms
+  (2.25x), 1280x720 from 4.8 ms to 2.3 ms (2.08x), 3840x2160 from 29.8 ms to
+  10.5 ms (2.84x).
+
+  Where the reduction applies, **the pixels fed to the model change, and so do
+  the detections**. Below a 2x downscale, and for every upscale, the output is
+  byte-identical to before — pinned by tests. `NEAREST` is exempt entirely,
+  since a caller asking for it wants unblended pixels.
+
+  This is not a quality improvement, and the distinction is worth stating
+  plainly. Against a LANCZOS reference, box reduction wins on photographic
+  content but loses badly when the content's period resonates with the
+  reduction factor: 2 px stripes every 6 rows, reduced by 3, score an MSE of
+  106 against the single pass's 13. Across six content types the two paths
+  split three-three. What changes is *which* artifacts a downscale produces,
+  not how many — `test_resonant_content_is_the_known_weak_case` pins the losing
+  case so it stays visible.
+
+  The new `reduction_factor` helper is exported, so a caller can ask whether a
+  given source/target pair takes the two-step path.
+
+- **`decode_yolo_seg` is 1.3x–6.7x faster**, depending on how many instances
+  survive and how large they are. The prototype combination and the sigmoid ran
+  over every prototype pixel of every instance, and the result was cropped to
+  the bounding box afterwards. They now run on the cropped region only — sigmoid
+  is elementwise, so slicing first is exact, and it skips the pixels that were
+  about to be discarded. Measured on 8400 anchors with 160x160 prototypes: 6.7x
+  at 100 instances of 60px, 2.0x at 30 instances of 80px, 1.3x at 30 instances
+  of 200px.
+
+### Internal
+
+- **End-to-end tests against real ONNX Runtime sessions**
+  (`tests/test_e2e_onnx.py`). The suite previously drove every task through a
+  fake backend, so nothing checked that a task can load a file, feed ORT a
+  tensor it accepts and read the outputs back — `ort_async_run` in particular had
+  never run against real ORT. Five tiny `.onnx` fixtures with `Constant` outputs
+  make the expected predictions exact and need no download;
+  `scripts/gen_test_models.py` regenerates them (it needs `onnx`, which stays out
+  of the package's dependencies).
+
+- **Shared Python/Web parity fixtures** (`fixtures/parity/`) covering `nms`,
+  `batched_nms`, `decode_yolo`, `decode_yolo_seg`, `softmax`, `topk` and
+  `model_names`. Both suites read the same committed numbers, which is how the
+  mask and tie-break divergences above were found.
+
+- **Benchmark harness** (`scripts/bench.py`, `make bench-python`) with a
+  committed baseline, so the remaining optimization work is measurable. The
+  baseline is a local reference, not a CI gate. Cases whose median falls under
+  `NOISE_FLOOR_MS` are reported but never counted as regressions — `softmax`
+  runs in ~5 microseconds, where a context switch reads as a "+253% regression"
+  on code nobody touched.
+
+- **Direct tests for the preprocessing primitives**
+  (`tests/test_preprocess_image.py`). `resize`, `letterbox`, `to_tensor`,
+  `to_chw`, `normalize` and the cv2 interop helpers had no tests of their own —
+  they were only reachable through a task, so a change to any of them surfaced
+  as a puzzling assertion about bounding boxes.
+
 ## [0.6.0] - 2026-08-03
 
 ### Added

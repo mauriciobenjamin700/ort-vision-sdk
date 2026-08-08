@@ -1,6 +1,8 @@
 """Composable image preprocessing primitives."""
 
 from ort_vision_sdk.preprocess.image import (
+    IMAGENET_MEAN,
+    IMAGENET_STD,
     add_batch_dim,
     from_cv2,
     letterbox,
@@ -12,6 +14,8 @@ from ort_vision_sdk.preprocess.image import (
 )
 
 __all__: list[str] = [
+    "IMAGENET_MEAN",
+    "IMAGENET_STD",
     "add_batch_dim",
     "from_cv2",
     "letterbox",

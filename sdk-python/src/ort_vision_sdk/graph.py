@@ -22,6 +22,7 @@ import warnings
 
 __all__ = [
     "model_names",
+    "parse_names",
     "resolve_input_size",
     "spatial_input_size",
 ]
@@ -110,7 +111,25 @@ def model_names(metadata: dict[str, str] | None) -> dict[int, str] | None:
     """
     if not metadata:
         return None
-    raw = metadata.get("names")
+    return parse_names(metadata.get("names"))
+
+
+def parse_names(raw: str | None) -> dict[int, str] | None:
+    """Parse a ``repr``-encoded ``dict[int, str]`` class map.
+
+    Split out of :func:`model_names` because the same encoding is reused by a
+    fused pipeline, which carries one class map per stage and therefore cannot
+    store both under the single ``names`` key Ultralytics uses.
+
+    Args:
+        raw (str | None): The encoded map — e.g. ``"{0: 'deworm', 1: 'not_deworm'}"``.
+
+    Returns:
+        dict[int, str] | None: Class id → name, or ``None`` when ``raw`` is
+        empty, unparseable, not a dict, or not keyed by contiguous integers
+        from zero. Half-valid maps are rejected outright: a partially applied
+        label map silently renames the wrong classes.
+    """
     if not raw:
         return None
     try:

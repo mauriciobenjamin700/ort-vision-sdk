@@ -6,6 +6,7 @@ from ort_vision_sdk.core.backend import (
     read_metadata,
 )
 from ort_vision_sdk.core.exceptions import (
+    FusionError,
     ImageLoadError,
     InferenceError,
     LabelMapError,
@@ -19,6 +20,7 @@ from ort_vision_sdk.core.timing import STAGES, SpeedTimer
 
 __all__: list[str] = [
     "STAGES",
+    "FusionError",
     "ImageLoadError",
     "InferenceBackend",
     "InferenceError",

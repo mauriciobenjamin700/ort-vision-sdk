@@ -95,8 +95,12 @@ export {
 
 export {
   type FusedLetterboxResult,
+  type FusedResizeResult,
   LetterboxPipeline,
+  ResizePipeline,
   letterboxToTensorData,
+  resizeToTensorData,
+  writePlanarFloat32,
   zeroTensorData,
 } from "./preprocess/pipeline.js";
 

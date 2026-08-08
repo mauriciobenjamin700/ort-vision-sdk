@@ -40,7 +40,7 @@ import {
   type ClassificationResult,
   type DetectionResult,
 } from "../types.js";
-import { VisionTask } from "./base.js";
+import { VisionTask, requireDetections } from "./base.js";
 
 export interface DetectClassifyOptions extends OrtSessionOptions {
   /**
@@ -54,6 +54,14 @@ export interface DetectClassifyOptions extends OrtSessionOptions {
    * names, falling back to generated `class_<id>` names.
    */
   readonly classifierLabels?: LabelSpec;
+  /**
+   * If `true`, a run that finds nothing throws {@link NoDetectionsError}
+   * instead of returning an empty envelope. Default `false`, because looking
+   * and finding nothing is a successful inference. Turn it on when an empty
+   * result means the surrounding pipeline should stop rather than carry on with
+   * zero rows. Can be overridden per `predict` call.
+   */
+  readonly raiseOnEmpty?: boolean;
 }
 
 export interface DetectClassifyPredictOptions {
@@ -66,6 +74,8 @@ export interface DetectClassifyPredictOptions {
   readonly classes?: readonly number[];
   /** Truncate each detection's `classification.probabilities` to its top-k entries. */
   readonly topK?: number;
+  /** Override the constructor's `raiseOnEmpty` setting for this call. */
+  readonly raiseOnEmpty?: boolean;
 }
 
 /**
@@ -95,6 +105,7 @@ export class DetectClassify extends VisionTask {
     private readonly _names: Readonly<Record<number, string>>,
     private readonly _classifierLabels: readonly string[],
     private readonly _classifierNames: Readonly<Record<number, string>>,
+    private readonly _raiseOnEmpty: boolean,
   ) {
     super(session);
   }
@@ -133,6 +144,7 @@ export class DetectClassify extends VisionTask {
       indexNames(labels),
       classifierLabels,
       indexNames(classifierLabels),
+      options.raiseOnEmpty ?? false,
     );
   }
 
@@ -230,6 +242,13 @@ export class DetectClassify extends VisionTask {
         ),
       );
     }
+
+    requireDetections(detections.length, {
+      raiseOnEmpty: options.raiseOnEmpty ?? this._raiseOnEmpty,
+      confThreshold: Math.max(floor, this._spec.confThreshold),
+      classes: options.classes,
+      path,
+    });
 
     const origShape: readonly [number, number] = [original.height, original.width];
     timer.stage("postprocess");

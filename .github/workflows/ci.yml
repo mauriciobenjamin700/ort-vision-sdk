@@ -3,8 +3,12 @@ name: CI
 on:
   push:
     branches: [main]
+  # No base-branch filter on purpose. A stacked pull request targets the branch
+  # below it rather than `main`, so a `branches: [main]` filter here skips CI on
+  # every PR in a stack except the last one — and skips it silently: no checks
+  # appear at all, so neither reviewer nor author can tell "passed" from "never
+  # ran". A pull request only exists against branches someone opened it for.
   pull_request:
-    branches: [main]
   # Manual trigger, for when the run that should have fired never did.
   #
   # GitHub throttles webhook delivery during Actions incidents, and an `opened`

@@ -26,6 +26,65 @@ import { RGBImage } from "../types.js";
 
 const INV_255 = 1 / 255;
 
+/** One claim on a {@link ReusableBuffer}. */
+interface BufferClaim {
+  /** The buffer to write into, always `size` long. */
+  readonly data: Float32Array;
+  /** Whether {@link data} is the held buffer rather than a fresh allocation. */
+  readonly reused: boolean;
+}
+
+/**
+ * A `Float32Array` held across calls, handed out one claim at a time.
+ *
+ * Both pipelines want the same thing — allocate once, write into it every frame,
+ * and fall back to a fresh array when a previous result has not been released
+ * yet — so the bookkeeping lives here instead of twice.
+ *
+ * The part that is not obvious is {@link claim} re-allocating a buffer that is
+ * *detached*. `ort.env.wasm.proxy` runs ONNX Runtime in a worker and posts the
+ * input tensors with their `ArrayBuffer`s in the transfer list, which detaches
+ * them on this side. A detached `Float32Array` is silently 0 long: writing to it
+ * is a no-op, and the next `InferenceSession.run` rejects with
+ * `Tensor's size(N) does not match data length(0)` on every other call — once for
+ * the detached buffer, then the throw leaves the claim outstanding so the call
+ * after it allocates and succeeds. Treating a buffer that changed length as spent
+ * turns that into one extra allocation per transfer, which is what reuse was
+ * avoiding, and keeps it correct for any consumer that transfers the tensor
+ * rather than copying it.
+ */
+class ReusableBuffer {
+  private readonly _size: number;
+  private _buffer: Float32Array;
+  private _inUse = false;
+
+  /** @param size Length in floats of every buffer this hands out. */
+  constructor(size: number) {
+    this._size = size;
+    this._buffer = new Float32Array(size);
+  }
+
+  /**
+   * Take the held buffer, or a fresh one when it is unavailable.
+   *
+   * Unavailable means either still checked out by an unreleased claim, or
+   * detached by whoever it was handed to. The first case allocates for this call
+   * only; the second replaces the held buffer, so the allocation is paid once per
+   * transfer rather than on every call after it.
+   */
+  claim(): BufferClaim {
+    if (this._inUse) return { data: new Float32Array(this._size), reused: false };
+    if (this._buffer.length !== this._size) this._buffer = new Float32Array(this._size);
+    this._inUse = true;
+    return { data: this._buffer, reused: true };
+  }
+
+  /** Mark the held buffer free for the next {@link claim}. */
+  release(): void {
+    this._inUse = false;
+  }
+}
+
 /** Geometry of a letterbox, plus the planar tensor data it produced. */
 export interface FusedLetterboxResult {
   /** CHW float32 in `[0, 1]`, length `3 * targetHeight * targetWidth`. */
@@ -58,10 +117,9 @@ export class LetterboxPipeline {
   private readonly _fill: readonly [number, number, number];
   private readonly _target: Canvas2D;
   private readonly _targetContext: Context2D;
-  private readonly _buffer: Float32Array;
+  private readonly _buffer: ReusableBuffer;
   private _source: Canvas2D | null = null;
   private _sourceContext: Context2D | null = null;
-  private _bufferInUse = false;
 
   /**
    * @param targetWidth Model input width in pixels.
@@ -83,7 +141,7 @@ export class LetterboxPipeline {
     this._targetContext = get2DContext(this._target, { willReadFrequently: true });
     this._targetContext.imageSmoothingEnabled = true;
     this._targetContext.imageSmoothingQuality = "high";
-    this._buffer = new Float32Array(3 * targetHeight * targetWidth);
+    this._buffer = new ReusableBuffer(3 * targetHeight * targetWidth);
   }
 
   /** The `[width, height]` this pipeline letterboxes into. */
@@ -98,7 +156,9 @@ export class LetterboxPipeline {
    * still checked out — {@link release} marks it free again. A second `run`
    * before the first is released allocates a fresh buffer rather than
    * corrupting it, so concurrent `predict()` calls on one task stay correct at
-   * the cost of the allocation they were trying to avoid.
+   * the cost of the allocation they were trying to avoid. A buffer that was
+   * detached by a consumer that transferred it is replaced rather than written
+   * into — see {@link ReusableBuffer}.
    *
    * @param image Source image in the SDK's canonical HWC RGB layout.
    */
@@ -132,9 +192,7 @@ export class LetterboxPipeline {
     );
 
     const rgba = context.getImageData(0, 0, targetWidth, targetHeight).data;
-    const reused = !this._bufferInUse;
-    const data = reused ? this._buffer : new Float32Array(3 * targetHeight * targetWidth);
-    this._bufferInUse = true;
+    const { data, reused } = this._buffer.claim();
 
     const plane = targetWidth * targetHeight;
     for (let pixel = 0, offset = 0; pixel < plane; pixel++, offset += 4) {
@@ -154,7 +212,7 @@ export class LetterboxPipeline {
    * the WASM heap and the buffer can be overwritten.
    */
   release(): void {
-    this._bufferInUse = false;
+    this._buffer.release();
   }
 
   /**
@@ -254,12 +312,11 @@ export class ResizePipeline {
   private readonly _targetHeight: number;
   private readonly _mean: readonly [number, number, number];
   private readonly _std: readonly [number, number, number];
-  private readonly _buffer: Float32Array;
+  private readonly _buffer: ReusableBuffer;
   private _target: Canvas2D | null = null;
   private _targetContext: Context2D | null = null;
   private _source: Canvas2D | null = null;
   private _sourceContext: Context2D | null = null;
-  private _bufferInUse = false;
 
   /**
    * @param targetWidth Model input width in pixels.
@@ -280,7 +337,7 @@ export class ResizePipeline {
     this._targetHeight = targetHeight;
     this._mean = mean;
     this._std = std;
-    this._buffer = new Float32Array(3 * targetHeight * targetWidth);
+    this._buffer = new ReusableBuffer(3 * targetHeight * targetWidth);
   }
 
   /** The `[width, height]` this pipeline resizes into. */
@@ -296,14 +353,15 @@ export class ResizePipeline {
    * keeps the result identical to `resize()`, whose own fast path returns the
    * input untouched.
    *
+   * Buffer reuse follows {@link ReusableBuffer}: held across calls, replaced when
+   * a consumer detached it by transferring the tensor.
+   *
    * @param image Source image in the SDK's canonical HWC RGB layout.
    */
   run(image: RGBImage): FusedResizeResult {
     const targetWidth = this._targetWidth;
     const targetHeight = this._targetHeight;
-    const reused = !this._bufferInUse;
-    const data = reused ? this._buffer : new Float32Array(3 * targetHeight * targetWidth);
-    this._bufferInUse = true;
+    const { data, reused } = this._buffer.claim();
 
     if (image.width === targetWidth && image.height === targetHeight) {
       writePlanarFloat32(image.data, targetWidth, targetHeight, this._mean, this._std, data, 3);
@@ -329,7 +387,7 @@ export class ResizePipeline {
    * the WASM heap and the buffer can be overwritten.
    */
   release(): void {
-    this._bufferInUse = false;
+    this._buffer.release();
   }
 
   /**

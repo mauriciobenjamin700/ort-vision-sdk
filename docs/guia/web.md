@@ -139,6 +139,52 @@ navegador Chromium com WebGPU habilitado e um contexto seguro (`https://` ou
 `localhost`) — ou os cabeçalhos COOP/COEP corretos se também quiser threading
 wasm baseado em `SharedArrayBuffer`.
 
+## Saindo da main thread (`env.wasm.proxy`)
+
+O backend WASM roda na thread que chamou ele. Como essa é a main thread, tanto a
+criação da sessão quanto cada `predict()` **travam a interface** enquanto rodam —
+e não é pouco: medido num desktop de 32 núcleos, um `warmup()` do detector +
+classificador congelou a página por **805 ms**; num celular de 4 núcleos / 2 GB,
+uma análise leva de 50 a 103 s.
+
+O ONNX Runtime resolve isso com uma flag: `env.wasm.proxy`. Com ela ligada, o ORT
+cria um Web Worker próprio (`onnxruntime-web-proxy-worker`) e manda create, run e
+release por `postMessage`. O mesmo warmup medido acima: pior frame de **18 ms**,
+zero frames acima de 50 ms.
+
+Ligue **uma vez, antes da primeira sessão**:
+
+```typescript
+import { env } from "onnxruntime-web";
+import { Detector } from "@mauriciobenjamin700/ort-vision-sdk-web";
+
+env.wasm.proxy = true; // antes do primeiro Detector.create / Classifier.create
+
+const det = await Detector.create("/models/yolov8n.onnx", { providers: ["wasm"] });
+const result = (await det.predict("/images/img.jpg"))[0];
+for (const d of result) console.log(d.className, d.confidence, d.bbox.asXyxy());
+```
+
+!!! warning "Antes da primeira sessão, não depois"
+    O ORT lê `env.wasm` quando inicializa o runtime WASM, e isso acontece dentro
+    do primeiro `InferenceSession.create`. Setar a flag depois disso é ignorado
+    em silêncio — a inferência volta pra main thread sem nada avisar.
+
+!!! note "O worker não deixa nada mais barato"
+    Ele muda *onde* o custo é pago, não o quanto. O heap WASM e a reserva de
+    memória compartilhada do build pthread apenas mudam de thread; um aparelho que
+    não consegue criar a sessão na main thread também não consegue no worker.
+
+??? info "Detalhe técnico: por que isso precisou de um fix no SDK (0.7.1)"
+    O proxy posta os tensores de entrada com os `ArrayBuffer`s na *transfer list*,
+    o que **destaca** o buffer do lado de quem enviou. Como `LetterboxPipeline` e
+    `ResizePipeline` guardam um `Float32Array` e reentregam o mesmo a cada `run()`,
+    a predict seguinte escrevia num buffer destacado — silenciosamente com
+    `length === 0` — e o ORT rejeitava com
+    `Tensor's size(1228800) does not match data length(0).` a cada duas chamadas.
+    Desde a 0.7.1 o buffer é substituído quando foi destacado. Em versões
+    anteriores, `env.wasm.proxy` não funciona com as tasks embutidas.
+
 ## Resultados
 
 Os formatos de resultado espelham os do Python:

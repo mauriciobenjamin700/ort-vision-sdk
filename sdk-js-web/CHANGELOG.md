@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-08-14
+
+### Fixed
+
+- **A pipeline buffer that a consumer transferred away is replaced instead of
+  written into.** `LetterboxPipeline` and `ResizePipeline` hold one
+  `Float32Array` and hand the same one out every call, which is the whole point
+  of them — but `ort.env.wasm.proxy` (ONNX Runtime in a worker) posts the input
+  tensors with their `ArrayBuffer`s in the transfer list, and that **detaches**
+  them on this side. A detached `Float32Array` is silently `0` long: the writes
+  land nowhere and the next `InferenceSession.run` rejects with
+
+  ```text
+  Tensor's size(1228800) does not match data length(0).
+  ```
+
+  on every other call — the detached buffer throws, the throw leaves the claim
+  outstanding, so the call after it allocates a fresh array and succeeds.
+  Measured in Chromium against a 640×640 YOLO detector: run 1 ok (195 ms), run 2
+  rejected, run 3 ok (206 ms).
+
+  The buffer holder now treats a length that no longer matches the target as
+  spent and allocates a replacement, so the cost is one allocation per transfer
+  instead of a failure every second inference — and reuse still holds for every
+  consumer that copies the tensor rather than transferring it. Nothing about the
+  public shape changed: `run()` still reports `reused: true` when the returned
+  data is the pipeline's own buffer.
+
+  Without this, `env.wasm.proxy` is unusable with the built-in tasks, and that
+  flag is the only way to keep inference off the browser's main thread — measured
+  at 805 ms of frozen UI for one warm-up on a 32-core desktop, against 18 ms with
+  the worker.
+
 ## [0.7.0] - 2026-08-08
 
 ### Added

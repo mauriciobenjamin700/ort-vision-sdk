@@ -16,6 +16,11 @@ import { RGBImage } from "../src/types.js";
  * That is the claim the 0.6.0 letterbox work made about its own output, and the
  * one a caller depends on when a model's predictions are compared across SDK
  * versions.
+ *
+ * The buffer bookkeeping is asserted through `ResizePipeline` only because it is
+ * the pipeline with a canvas-free path. `LetterboxPipeline` holds the same
+ * `ReusableBuffer`, so the checkout and detach rules proved here are the rules
+ * the detector follows too.
  */
 
 /** Deterministic pseudo-random image, so a failure reproduces exactly. */
@@ -27,6 +32,19 @@ function image(width: number, height: number, seed = 1): RGBImage {
     data[i] = state % 256;
   }
   return new RGBImage(data, width, height);
+}
+
+/**
+ * Detach a buffer the way a consumer that transfers it would.
+ *
+ * `ort.env.wasm.proxy` posts the input tensors to its worker with their
+ * `ArrayBuffer`s in the transfer list; `structuredClone` with `transfer` is the
+ * same operation without needing a worker to receive it.
+ *
+ * @param view The typed array whose backing buffer should be given away.
+ */
+function transferAway(view: Float32Array): void {
+  structuredClone(view.buffer, { transfer: [view.buffer] });
 }
 
 /** The composable path a classifier took before the pipeline existed. */
@@ -96,6 +114,34 @@ describe("ResizePipeline", () => {
 
     pipeline.release();
     expect(pipeline.run(image(4, 4)).reused).toBe(true);
+  });
+
+  it("replaces the held buffer when a consumer transferred it away", () => {
+    const pipeline = new ResizePipeline(4, 4);
+    const first = pipeline.run(image(4, 4));
+    pipeline.release();
+    transferAway(first.data);
+    expect(first.data.length).toBe(0);
+
+    const source = image(4, 4, 9);
+    const second = pipeline.run(source);
+
+    expect(second.data.length).toBe(3 * 4 * 4);
+    expect(Array.from(second.data)).toEqual(Array.from(composedPath(source, [0, 0, 0], [1, 1, 1])));
+  });
+
+  it("keeps the replacement instead of allocating on every later call", () => {
+    const pipeline = new ResizePipeline(4, 4);
+    const first = pipeline.run(image(4, 4));
+    pipeline.release();
+    transferAway(first.data);
+
+    const second = pipeline.run(image(4, 4, 9));
+    pipeline.release();
+    const third = pipeline.run(image(4, 4, 17));
+
+    expect(third.data).toBe(second.data);
+    expect(third.reused).toBe(true);
   });
 
   it("reports the target size it was built for", () => {

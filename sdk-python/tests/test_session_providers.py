@@ -22,42 +22,62 @@ from ort_vision_sdk.core.session import OrtSession
 
 MODEL = Path(__file__).parent / "fixtures" / "models" / "tiny_identity.onnx"
 
-_REAL_SESSION = ort.InferenceSession
-"""The genuine class, captured before any test swaps the attribute out."""
+
+class _Meta:
+    """The shape ``get_modelmeta()`` returns, reduced to what the wrapper reads."""
+
+    custom_metadata_map: dict[str, str] = {}
+
+
+class _Value:
+    """An input/output descriptor, reduced to what the wrapper reads."""
+
+    def __init__(self, name: str, shape: list[int]) -> None:
+        """Store the declared name and shape.
+
+        Args:
+            name: Tensor name.
+            shape: Declared dimensions.
+        """
+        self.name = name
+        self.shape = shape
 
 
 class _FallbackSession:
-    """An ``InferenceSession`` that quietly registers fewer providers than asked.
+    """An ``InferenceSession`` that registers fewer providers than it was given.
 
-    Wraps a real session so every piece of metadata the wrapper reads stays
-    truthful, and overrides only :meth:`get_providers` — exactly the divergence
-    a provider that fails to load produces.
+    Deliberately pure Python: it starts no ONNX Runtime session at all. An
+    earlier version wrapped a real one to keep its metadata honest, which cost
+    nothing in correctness and a great deal in stability — every test left a live
+    ORT session with its own thread pool un-released, and the suite began hanging
+    intermittently (4 runs in 6) somewhere unrelated. Nothing here needs a
+    runtime: the behaviour under test is which list the wrapper reports.
     """
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:  # noqa: ANN401
-        """Build the underlying CPU session, ignoring the requested providers.
+        """Record the requested providers without starting anything.
 
         Args:
-            *args: Positional arguments for ``ort.InferenceSession``.
-            **kwargs: Keyword arguments for it; ``providers`` is replaced.
+            *args: Positional arguments ORT would take; ignored.
+            **kwargs: Keyword arguments ORT would take; ignored.
         """
-        kwargs["providers"] = ["CPUExecutionProvider"]
-        self._inner = _REAL_SESSION(*args, **kwargs)
+        self.requested: list[str] = list(kwargs.get("providers") or [])
 
     def get_providers(self) -> list[str]:
-        """Report the fallback ORT actually ended up with."""
+        """Report the CPU fallback, whatever was asked for."""
         return ["CPUExecutionProvider"]
 
-    def __getattr__(self, name: str) -> Any:  # noqa: ANN401
-        """Forward everything else to the real session.
+    def get_inputs(self) -> list[_Value]:
+        """Declare one NCHW image input."""
+        return [_Value("images", [1, 3, 64, 64])]
 
-        Args:
-            name: Attribute being looked up.
+    def get_outputs(self) -> list[_Value]:
+        """Declare one output."""
+        return [_Value("output0", [1, 3])]
 
-        Returns:
-            The underlying session's attribute.
-        """
-        return getattr(self._inner, name)
+    def get_modelmeta(self) -> _Meta:
+        """Report an empty custom-metadata map."""
+        return _Meta()
 
 
 @pytest.fixture

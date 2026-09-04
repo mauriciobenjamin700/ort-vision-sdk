@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import warnings
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -19,6 +20,45 @@ if TYPE_CHECKING:
     import onnxruntime as ort
 
 
+def _warn_on_dropped_providers(
+    *,
+    requested: list[str],
+    effective: list[str],
+    model_path: Path,
+) -> None:
+    """Warn when ORT did not register a provider that was asked for by name.
+
+    Only explicit requests are worth a warning. Auto-selection walks a priority
+    list precisely so that falling back is the expected outcome, but a caller
+    who wrote ``providers=["cuda"]`` and got CPU has a deployment that is ~6x
+    slower than intended and no error to point at — the failure surfaces weeks
+    later as a latency bill.
+
+    The usual cause is a provider that is compiled into the wheel but cannot
+    load: ``onnxruntime-gpu`` always lists ``CUDAExecutionProvider`` as
+    available, and it still registers CPU when the loader cannot find
+    ``libcudnn``. That makes the outcome depend on things outside this process,
+    down to whether ``torch`` (which ships its own cuDNN) was imported first.
+
+    Args:
+        requested: Providers passed to ``InferenceSession``, canonical names.
+        effective: Providers the session reports having registered.
+        model_path: Model the session was built from, named in the message.
+    """
+    dropped = [provider for provider in requested if provider not in effective]
+    if not dropped:
+        return
+    warnings.warn(
+        f"ONNX Runtime did not register the requested execution provider(s) {dropped} for "
+        f"{model_path}; the session is running on {effective}. The provider is compiled into "
+        "this onnxruntime build but failed to load — for CUDA this is usually a cuDNN the "
+        "dynamic loader cannot find. Inference will still produce correct results, on the "
+        "fallback provider.",
+        UserWarning,
+        stacklevel=3,
+    )
+
+
 class OrtSession:
     """Wrap an ONNX Runtime ``InferenceSession`` with convenient metadata access.
 
@@ -28,7 +68,15 @@ class OrtSession:
 
     Attributes:
         model_path: Filesystem path of the loaded ONNX model.
-        providers: Resolved execution providers, in preference order.
+        providers: Execution providers ONNX Runtime actually registered for this
+            session, read back from it after construction. This is the answer to
+            "where is this running", and it is not always what was asked for —
+            see :attr:`requested_providers`.
+        requested_providers: Execution providers that were asked for, after
+            alias expansion and auto-selection. Kept separate because ORT can
+            silently drop one: ``onnxruntime.get_available_providers()`` reports
+            what the wheel was *compiled with*, not what can load, so a CUDA
+            build whose cuDNN the loader cannot find registers CPU instead.
     """
 
     def __init__(
@@ -50,6 +98,11 @@ class OrtSession:
         Raises:
             ModelLoadError: If the model file does not exist or cannot be loaded.
             ProviderNotAvailableError: If a requested provider is not installed.
+
+        Warns:
+            UserWarning: If ``providers`` named a provider explicitly and ONNX
+                Runtime did not register it, which means the session silently
+                fell back — usually to CPU.
         """
         import onnxruntime as ort
 
@@ -58,16 +111,24 @@ class OrtSession:
             raise ModelLoadError(f"Model file not found: {path}")
 
         self.model_path: Path = path
-        self.providers: list[str] = resolve_providers(providers)
+        self.requested_providers: list[str] = resolve_providers(providers)
 
         try:
             self._session: ort.InferenceSession = ort.InferenceSession(
                 str(path),
                 sess_options=session_options,
-                providers=self.providers,
+                providers=self.requested_providers,
             )
         except Exception as exc:
             raise ModelLoadError(f"Failed to load ONNX model from {path}: {exc}") from exc
+
+        self.providers: list[str] = list(self._session.get_providers())
+        if providers is not None:
+            _warn_on_dropped_providers(
+                requested=self.requested_providers,
+                effective=self.providers,
+                model_path=path,
+            )
 
         self._input_names: list[str] = [i.name for i in self._session.get_inputs()]
         self._output_names: list[str] = [o.name for o in self._session.get_outputs()]

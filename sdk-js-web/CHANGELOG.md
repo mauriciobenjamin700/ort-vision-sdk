@@ -11,6 +11,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **`Classifier` no longer applies a second softmax to a probability vector.**
+  `applySoftmax` defaulted to `true`, but every Ultralytics classification export
+  ends in a `Softmax` node, so the task was softmaxing an already-normalized
+  vector. It is monotonic, which is why it survived: top-1 is unchanged and every
+  confidence attached to it is wrong. Measured in the Python SDK against
+  Ultralytics' own pipeline over the same file, the maximum absolute probability
+  error went from `7.6e-07` to `0.82`.
+
+  It now defaults to undefined, which reads the model's metadata and answers
+  `false` for that family; passing a boolean still overrides.
+  `classifier.appliesSoftmax` reports the choice.
+
 - **`Classifier` picks its normalization from the model.** The default was the
   ImageNet mean and deviation for everybody, which is right for a
   torchvision-style model and wrong for an Ultralytics one — its classification

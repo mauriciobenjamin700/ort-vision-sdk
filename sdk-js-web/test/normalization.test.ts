@@ -174,6 +174,37 @@ describe("resolveNormalization", () => {
   });
 });
 
+describe("Classifier softmax detection", () => {
+  /**
+   * Build a classifier over a model whose metadata is `metadata`.
+   *
+   * @param metadata Metadata the mocked session reports.
+   * @param options Extra classifier options.
+   */
+  async function build(
+    metadata: Record<string, string>,
+    options: Record<string, unknown> = {},
+  ): Promise<InstanceType<typeof Classifier>> {
+    pipelineArgs = [];
+    sessionMetadata = metadata;
+    return Classifier.create(new ArrayBuffer(8), { labels: ["a", "b"], ...options });
+  }
+
+  it("does not softmax an Ultralytics export again", async () => {
+    // Every Ultralytics classification export ends in a Softmax node — verified
+    // against real v8, v11 and v26 exports at ultralytics 8.4.106.
+    expect((await build(ULTRALYTICS)).appliesSoftmax).toBe(false);
+  });
+
+  it("still softmaxes anything else", async () => {
+    expect((await build(TORCHVISION)).appliesSoftmax).toBe(true);
+  });
+
+  it("lets an explicit choice override the detection", async () => {
+    expect((await build(ULTRALYTICS, { applySoftmax: true })).appliesSoftmax).toBe(true);
+  });
+});
+
 describe("Classifier preprocessing", () => {
   /**
    * Build a classifier over a model whose metadata is `metadata`.

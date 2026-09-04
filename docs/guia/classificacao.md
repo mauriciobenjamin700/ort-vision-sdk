@@ -93,6 +93,42 @@ Para escolher à mão, ou fugir dos dois presets:
 Pedir uma normalização não-identidade para um modelo Ultralytics ainda funciona,
 mas emite aviso — o SDK não decide por você, só se recusa a ficar calado.
 
+## Softmax: uma vez, não duas
+
+A mesma família de modelo traz a mesma armadilha do outro lado da inferência.
+**Todo export de classificação do Ultralytics termina num nó `Softmax`** —
+conferido em v8, v11 e v26 — então a saída já é uma distribuição de
+probabilidade. Aplicar softmax de novo em cima dela é monotônico: a classe
+predita não muda, e **todas as confianças mudam**.
+
+Por isso `apply_softmax` (`applySoftmax` no web) tem default `None`/indefinido,
+que lê os metadados e responde `False` para essa família:
+
+=== "Python"
+
+    ```python
+    clf = Classifier("yolo11n-cls.onnx")
+    print(clf.applies_softmax)   # False — o grafo já termina em Softmax
+    ```
+
+=== "Web (browser)"
+
+    ```typescript
+    const clf = await Classifier.create("/models/yolo11n-cls.onnx");
+    console.log(clf.appliesSoftmax);   // false
+    ```
+
+!!! warning "Por que isso passa despercebido"
+    O softmax duplo preserva a ordenação, então o top-1 continua certo e
+    qualquer verificação que só olhe a classe predita passa. Medido num
+    `yolo11n-cls` real contra o pipeline do próprio Ultralytics: a concordância
+    de top-1 era **100 %** nos dois casos, mas o erro absoluto de probabilidade
+    ia de `7,6·10⁻⁷` (correto) para **`0,82`**. Uma confiança de 0,99 chega como
+    0,73 — e um limiar de confiança lê exatamente esse número.
+
+A detecção cobre a família Ultralytics. Para qualquer outro modelo que já emita
+probabilidades, passe `apply_softmax=False` explicitamente.
+
 ## Predizendo
 
 `predict()` devolve uma lista de comprimento 1 — use `[0]`.

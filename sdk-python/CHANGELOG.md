@@ -21,6 +21,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **`Classifier` no longer applies a second softmax to a probability vector.**
+  `apply_softmax` defaulted to `True`, but every Ultralytics classification
+  export ends in a `Softmax` node — verified on real v8, v11 and v26 exports at
+  ultralytics 8.4.106 — so the task was softmaxing an already-normalized vector.
+  That is monotonic, which is exactly why it survived: the predicted class is
+  unchanged, so every check that looks at top-1 passes, while every confidence
+  attached to it is wrong. Measured on a real `yolo11n-cls` against Ultralytics'
+  own pipeline over the same file: top-1 agreement was 100% either way, and the
+  maximum absolute probability error went from `7.6e-07` to `0.82`. A confidence
+  of 0.99 arrives as 0.73 — and a confidence threshold reads that number.
+
+  `apply_softmax` now defaults to `None`, which reads the model's metadata and
+  answers `False` for that family; `True`/`False` still override. The new
+  `Classifier.applies_softmax` reports the choice. `fuse_detect_classify` already
+  did this detection by inspecting the graph; this closes the same gap in the
+  standalone task.
+
 - **`Classifier` picks its normalization from the model.** The same defect the
   fusion had, in the task people reach for first: `mean`/`std` defaulted to the
   ImageNet values, which is right for a torchvision-style model and wrong for an

@@ -94,6 +94,42 @@ To choose by hand, or to escape both presets:
 Asking for a non-identity normalization on an Ultralytics model still works, but
 warns — the SDK does not decide for you, it just refuses to stay quiet.
 
+## Softmax: once, not twice
+
+The same model family carries the matching trap on the other side of inference.
+**Every Ultralytics classification export ends in a `Softmax` node** — checked
+across v8, v11 and v26 — so its output is already a probability distribution.
+Softmaxing that again is monotonic: the predicted class does not move, and
+**every confidence does**.
+
+So `apply_softmax` (`applySoftmax` on the web) defaults to `None`/undefined,
+which reads the metadata and answers `False` for that family:
+
+=== "Python"
+
+    ```python
+    clf = Classifier("yolo11n-cls.onnx")
+    print(clf.applies_softmax)   # False — the graph already ends in Softmax
+    ```
+
+=== "Web (browser)"
+
+    ```typescript
+    const clf = await Classifier.create("/models/yolo11n-cls.onnx");
+    console.log(clf.appliesSoftmax);   // false
+    ```
+
+!!! warning "Why this goes unnoticed"
+    A double softmax preserves the ranking, so the top-1 stays right and any
+    check that only looks at the predicted class passes. Measured on a real
+    `yolo11n-cls` against Ultralytics' own pipeline: top-1 agreement was **100%**
+    either way, while the absolute probability error went from `7.6e-07`
+    (correct) to **`0.82`**. A confidence of 0.99 arrives as 0.73 — and a
+    confidence threshold reads exactly that number.
+
+Detection covers the Ultralytics family. For any other model that already emits
+probabilities, pass `apply_softmax=False` explicitly.
+
 ## Predicting
 
 `predict()` returns a length-1 list — use `[0]`.

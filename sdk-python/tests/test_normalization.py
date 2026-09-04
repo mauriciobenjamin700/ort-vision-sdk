@@ -28,16 +28,24 @@ _TORCHVISION: dict[str, str] = {}
 class RecordingBackend:
     """A backend that carries metadata and remembers the tensor it was fed."""
 
-    def __init__(self, metadata: dict[str, str], num_classes: int = 2) -> None:
-        """Store the metadata to report and size the canned output.
+    def __init__(
+        self,
+        metadata: dict[str, str],
+        num_classes: int = 2,
+        output: np.ndarray | None = None,
+    ) -> None:
+        """Store the metadata to report and the output to return.
 
         Args:
             metadata: The custom metadata map to expose.
-            num_classes: Width of the logits this backend returns.
+            num_classes: Width of the output when ``output`` is not given.
+            output: The exact ``(1, num_classes)`` array to return, for tests
+                that care what the model emits rather than what it was fed.
         """
         self.metadata: dict[str, str] = dict(metadata)
         self.fed: np.ndarray | None = None
-        self._num_classes = num_classes
+        self._num_classes = num_classes if output is None else int(output.shape[-1])
+        self._output = output
 
     @property
     def input_names(self) -> list[str]:
@@ -85,6 +93,8 @@ class RecordingBackend:
             list[np.ndarray]: One ``(1, num_classes)`` array of zeros.
         """
         self.fed = next(iter(feeds.values()))
+        if self._output is not None:
+            return [self._output]
         return [np.zeros((1, self._num_classes), dtype=np.float32)]
 
 
@@ -226,3 +236,55 @@ class TestClassifierPreprocessing:
 
         with pytest.warns(UserWarning, match="Ultralytics export"):
             Classifier("unused.onnx", backend=backend, mean=IMAGENET_MEAN, std=IMAGENET_STD)
+
+
+class TestSoftmaxDetection:
+    """Not softmaxing a graph that already ends in one."""
+
+    def test_an_ultralytics_export_is_not_softmaxed_again(self) -> None:
+        """Every Ultralytics classification export ends in a `Softmax` node.
+
+        Verified against real v8, v11 and v26 exports at ultralytics 8.4.106.
+        """
+        classifier = Classifier("unused.onnx", backend=RecordingBackend(_ULTRALYTICS))
+
+        assert classifier.applies_softmax is False
+
+    def test_anything_else_still_gets_a_softmax(self) -> None:
+        classifier = Classifier("unused.onnx", backend=RecordingBackend(_TORCHVISION))
+
+        assert classifier.applies_softmax is True
+
+    def test_an_explicit_choice_overrides_the_detection(self) -> None:
+        classifier = Classifier(
+            "unused.onnx", backend=RecordingBackend(_ULTRALYTICS), apply_softmax=True
+        )
+
+        assert classifier.applies_softmax is True
+
+    def test_a_second_softmax_flattens_the_confidences(self) -> None:
+        """Why this matters: the ranking survives, every probability does not.
+
+        A double softmax is monotonic, so the predicted class is unchanged and
+        any check that only looks at top-1 passes. The confidence attached to it
+        is what breaks — and a confidence threshold is exactly what a caller
+        reads to decide whether to trust the prediction at all.
+        """
+        probabilities = np.asarray([[0.99, 0.01]], dtype=np.float32)
+
+        honest = Classifier(
+            "unused.onnx",
+            backend=RecordingBackend(_ULTRALYTICS, output=probabilities),
+        )
+        doubled = Classifier(
+            "unused.onnx",
+            backend=RecordingBackend(_ULTRALYTICS, output=probabilities),
+            apply_softmax=True,
+        )
+
+        kept = honest.predict(_white_image())[0].probs
+        flattened = doubled.predict(_white_image())[0].probs
+
+        assert kept.top1 == flattened.top1 == 0
+        assert kept.top1conf == pytest.approx(0.99)
+        assert flattened.top1conf == pytest.approx(0.7271, abs=1e-3)

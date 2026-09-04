@@ -12,6 +12,7 @@ import { modelNames } from "../core/metadata.js";
 import { type LabelSpec, resolveLabels } from "../labels.js";
 import {
   type Normalization,
+  isUltralyticsClassifier,
   resolveNormalization,
 } from "../normalization.js";
 import { softmax, topK } from "../postprocess/classification.js";
@@ -63,9 +64,14 @@ export interface ClassifierOptions extends OrtSessionOptions {
   /** Per-channel RGB standard deviation, overriding the preset. */
   readonly std?: readonly [number, number, number];
   /**
-   * If `true` (default), apply softmax to the raw model output. Set to
-   * `false` for models whose final layer already produces a probability
-   * distribution.
+   * Whether the model's output still needs a softmax.
+   *
+   * Left undefined (the default), this reads the model's metadata and answers
+   * `false` for an Ultralytics classification export, whose graph already ends
+   * in one — applying a second softmax to a probability vector keeps the
+   * ranking but flattens the confidences, so the top-1 stays right while every
+   * number attached to it is wrong. Detection covers that family; for any other
+   * model that already emits probabilities, pass `false` explicitly.
    */
   readonly applySoftmax?: boolean;
 }
@@ -112,6 +118,18 @@ export class Classifier extends VisionTask {
     private readonly _normalization: string,
   ) {
     super(session);
+  }
+
+  /**
+   * Whether a softmax is applied to the model's output before ranking.
+   *
+   * Resolved once at construction. Worth reading when confidences look
+   * compressed: a second softmax over an already-normalized vector leaves the
+   * ordering intact and the numbers meaningless, which is invisible to any check
+   * that only looks at the predicted class.
+   */
+  get appliesSoftmax(): boolean {
+    return this._applySoftmax;
   }
 
   /**
@@ -202,7 +220,7 @@ export class Classifier extends VisionTask {
       }),
       normalization.mean,
       normalization.std,
-      options.applySoftmax ?? true,
+      options.applySoftmax ?? !isUltralyticsClassifier(session.metadata),
       normalization.name,
     );
   }

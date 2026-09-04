@@ -13,7 +13,11 @@ from ort_vision_sdk.core.timing import SpeedTimer
 from ort_vision_sdk.graph import model_names, resolve_input_size
 from ort_vision_sdk.io.image import ImageInput, load_image
 from ort_vision_sdk.labels import LabelSpec, resolve_labels
-from ort_vision_sdk.normalization import Normalization, resolve_normalization
+from ort_vision_sdk.normalization import (
+    Normalization,
+    is_ultralytics_classifier,
+    resolve_normalization,
+)
 from ort_vision_sdk.postprocess.classification import softmax, topk
 from ort_vision_sdk.preprocess.image import add_batch_dim, normalize, resize, to_chw
 from ort_vision_sdk.results import ClassificationResults, Probs
@@ -65,7 +69,7 @@ class Classifier(VisionTask):
         normalization: Normalization = "auto",
         mean: tuple[float, float, float] | None = None,
         std: tuple[float, float, float] | None = None,
-        apply_softmax: bool = True,
+        apply_softmax: bool | None = None,
     ) -> None:
         """Initialize the classifier.
 
@@ -99,9 +103,14 @@ class Classifier(VisionTask):
                 (default) takes it from ``normalization``.
             std: Per-channel RGB standard deviation, overriding the preset.
                 ``None`` (default) takes it from ``normalization``.
-            apply_softmax: If ``True`` (default), apply softmax to the raw model
-                output before deriving probabilities. Set to ``False`` for
-                models whose final layer is already a probability distribution.
+            apply_softmax: Whether the model's output still needs a softmax.
+                ``None`` (default) reads the model's metadata and answers
+                ``False`` for an Ultralytics classification export, whose graph
+                already ends in one — applying a second softmax to a probability
+                vector keeps the ranking but flattens the confidences, so the
+                top-1 stays right while every number attached to it is wrong.
+                Detection covers that family; for any other model that already
+                emits probabilities, pass ``False`` explicitly.
 
         Raises:
             ValueError: If ``normalization`` names an unknown preset, or names
@@ -130,12 +139,28 @@ class Classifier(VisionTask):
         self._normalization, self._mean, self._std = resolve_normalization(
             metadata, normalization=normalization, mean=mean, std=std
         )
-        self._apply_softmax: bool = apply_softmax
+        self._apply_softmax: bool = (
+            apply_softmax if apply_softmax is not None else not is_ultralytics_classifier(metadata)
+        )
 
         num_classes = self._infer_num_classes()
         spec: LabelSpec = labels if labels is not None else model_names(metadata)
         self._labels: tuple[str, ...] = resolve_labels(spec, num_classes=num_classes)
         self._names: dict[int, str] = {i: name for i, name in enumerate(self._labels)}
+
+    @property
+    def applies_softmax(self) -> bool:
+        """Whether a softmax is applied to the model's output before ranking.
+
+        Resolved once at construction. Worth reading when confidences look
+        compressed: a second softmax over an already-normalized vector leaves the
+        ordering intact and the numbers meaningless, which is invisible to any
+        check that only looks at the predicted class.
+
+        Returns:
+            bool: ``True`` when the task softmaxes the raw output itself.
+        """
+        return self._apply_softmax
 
     @property
     def normalization(self) -> str:

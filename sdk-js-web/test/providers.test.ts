@@ -128,12 +128,25 @@ describe("OrtSession providers", () => {
     expect(warn).not.toHaveBeenCalled();
   });
 
-  it("keeps the request when nothing survives, rather than passing an empty list", async () => {
+  it("falls back to wasm when nothing survives, rather than to an unsatisfiable list", async () => {
+    // Handing ORT a list it cannot satisfy is not a graceful failure: real
+    // Chromium rejects `InferenceSession.create` with "no available backend
+    // found" and the page gets no inference at all.
     vi.stubGlobal("navigator", undefined);
     vi.spyOn(console, "warn").mockImplementation(() => {});
 
     const session = await OrtSession.create(new ArrayBuffer(8), { providers: ["webgpu"] });
 
-    expect(session.providers).toEqual(["webgpu"]);
+    expect(session.providers).toEqual(["wasm"]);
+    expect(session.requestedProviders).toEqual(["webgpu"]);
+  });
+
+  it("names the real fallback in the warning, not an empty list", async () => {
+    vi.stubGlobal("navigator", undefined);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    await OrtSession.create(new ArrayBuffer(8), { providers: ["webgpu"] });
+
+    expect(warn.mock.calls[0]?.[0]).toMatch(/\["wasm"\]/);
   });
 });

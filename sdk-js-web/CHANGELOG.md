@@ -50,6 +50,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A session asking only for `webgpu` on a device without it now runs, instead
+  of failing to load.** Capability detection can rule out every requested
+  provider, and handing ORT the unsatisfiable list makes `InferenceSession.create`
+  reject with `no available backend found` — the page gets no inference at all
+  rather than the slow-but-working fallback. The effective list now floors at
+  `wasm`, which ORT-Web can always run, and the warning names it instead of
+  claiming the session will run on `[]`. Found in a real Chromium, where
+  `navigator.gpu` exists but yields no adapter; no amount of stubbed
+  `navigator` in the unit tests reproduced it.
+
 - **`OrtSession.providers` no longer names a provider this browser cannot run.**
   It held the result of `resolveProviders(...)` — the list that was *asked for* —
   and ORT-Web falls back in silence, so a page requesting `webgpu` on a device

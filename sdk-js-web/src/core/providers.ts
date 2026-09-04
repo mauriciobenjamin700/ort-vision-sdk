@@ -15,6 +15,16 @@
 export const DEFAULT_PROVIDERS: readonly string[] = ["webgpu", "wasm"];
 
 /**
+ * The provider ORT-Web can always run, whatever the device.
+ *
+ * Used as the floor when capability detection rules everything else out. Passing
+ * ORT a list it cannot satisfy is not a graceful failure — `InferenceSession.create`
+ * rejects with "no available backend found" and the page gets no inference at
+ * all, which is worse than the slow-but-working fallback the warning describes.
+ */
+export const FALLBACK_PROVIDER = "wasm";
+
+/**
  * Resolve the execution providers to pass to `InferenceSession.create`.
  *
  * @param requested Explicit provider list in preference order; `undefined` returns the default.

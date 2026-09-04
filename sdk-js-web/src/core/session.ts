@@ -8,7 +8,7 @@ import * as ortRuntime from "onnxruntime-web";
 import { InferenceError, ModelLoadError } from "./exceptions.js";
 import { type DeclaredShape, declaredShapesFrom } from "./graph.js";
 import { readModelMetadata } from "./metadata.js";
-import { detectProviders, resolveProviders } from "./providers.js";
+import { FALLBACK_PROVIDER, detectProviders, resolveProviders } from "./providers.js";
 
 /** Anything `InferenceSession.create` accepts. */
 export type ModelSource = string | ArrayBufferLike | Uint8Array;
@@ -134,10 +134,12 @@ export class OrtSession {
      * {@link requestedProviders} for what was asked for.
      *
      * When nothing survives — a caller asking for `webgpu` alone on a device
-     * without it — this falls back to the requested list rather than reporting
-     * an empty one, because an empty `executionProviders` is not something ORT
-     * accepts and inventing a provider nobody asked for would be worse. The
-     * `console.warn` is the honest signal in that case.
+     * without it — this falls back to {@link FALLBACK_PROVIDER}, which ORT-Web
+     * can always run. Handing ORT the unsatisfiable list instead makes
+     * `InferenceSession.create` reject with "no available backend found", so the
+     * page gets no inference at all rather than the slow-but-working fallback
+     * the `console.warn` describes. Measured in a real Chromium, where
+     * `navigator.gpu` exists but yields no adapter.
      */
     public readonly providers: readonly string[],
     private readonly _metadata: Readonly<Record<string, string>>,
@@ -173,15 +175,14 @@ export class OrtSession {
     options: OrtSessionOptions = {},
   ): Promise<OrtSession> {
     const requested = resolveProviders(options.providers);
-    const providers = await detectProviders(requested);
+    const detected = await detectProviders(requested);
+    const providers = detected.length > 0 ? detected : [FALLBACK_PROVIDER];
     if (options.providers !== undefined && options.providers.length > 0) {
       warnOnDroppedProviders(requested, providers);
     }
     const sessionOptions: ort.InferenceSession.SessionOptions = {
       ...(options.sessionOptions ?? {}),
-      executionProviders: (providers.length > 0
-        ? providers
-        : requested) as ort.InferenceSession.SessionOptions["executionProviders"],
+      executionProviders: providers as ort.InferenceSession.SessionOptions["executionProviders"],
     };
     const wantsMetadata = options.readMetadata !== false;
     const source =
@@ -208,12 +209,7 @@ export class OrtSession {
       );
     }
 
-    return new OrtSession(
-      session,
-      providers.length > 0 ? providers : requested,
-      metadata,
-      requested,
-    );
+    return new OrtSession(session, providers, metadata, requested);
   }
 
   /** Names of the model's inputs, in declaration order. */

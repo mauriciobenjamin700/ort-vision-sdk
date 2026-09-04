@@ -7,6 +7,76 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-09-04
+
+### Changed
+
+- **`fuse_detect_classify` picks the classifier's normalization from the
+  classifier.** The default was ImageNet for everybody, which is right for a
+  torchvision model and wrong for an Ultralytics one — its classification head
+  consumes raw `[0, 1]`. Fusing a `YOLO(...).export(format="onnx")` classifier
+  with the old default inserted a `Sub`/`Div` the model never saw in training,
+  and nothing said so: no exception, no warning, and `validate=True` passes
+  because it checks shape, not semantics. The graph ran, returned a `probs` row
+  of the right shape, and classified worse.
+
+  The answer was already in the file: every Ultralytics export stamps
+  `author: Ultralytics` and `task: classify` into its metadata, a block the SDK
+  already read for class names. The new `normalization` argument defaults to
+  `"auto"`, which reads it and picks — `"ultralytics"` (identity) for that
+  export, `"imagenet"` for anything else. `"imagenet"`, `"ultralytics"` and
+  `"none"` name the presets explicitly, `mean`/`std` still override, and passing
+  both raises `ValueError` rather than silently preferring one. Supplying only
+  one of `mean`/`std` now leaves the other at the preset value instead of
+  resetting it. The choice is recorded in the fused file as
+  `ovs.classifier_normalization`, so it is readable off the artifact afterwards.
+
+  **This changes the graph produced for an Ultralytics classifier fused with the
+  defaults.** Those pipelines were being built degraded, so the change corrects
+  them rather than breaking them; re-fuse to pick it up. Fusing one with
+  non-identity `mean`/`std` now also emits a `UserWarning`.
+
+- **`boxes` reports the box that was actually classified.** The ROI handed to
+  `RoiAlign` is clamped to the image it crops from; the `boxes` output was not,
+  so a detection touching the frame edge drew a rectangle wider than the region
+  the classifier saw. On one real workload 41 of 169 images (24%) had their best
+  box leaving the frame — enough that a review UI showed a visible mismatch and
+  any IoU computed against `boxes` measured a box the pipeline never used.
+
+  Clamping now runs before padding, so the reported boxes and the cropped ROI
+  are the same tensor on every real row, and surplus rows are still exactly
+  zero. With `crop_source="original"` the clamped ROI is mapped back through the
+  letterbox, keeping `boxes` in the letterboxed pixel space both runtimes
+  already expect.
+
+- **The clamp keeps the last column and row of the image.** The far corner was
+  clipped to `W - 1`, but with `coordinate_transformation_mode="half_pixel"` and
+  `spatial_scale=1.0` RoiAlign's continuous domain is `[0, W]` — pixel centres
+  sit at `0.5 … W - 0.5`. A box reaching the right edge of a 640-wide frame lost
+  a full column of valid image. It now clips to `W`, with the one-pixel minimum
+  extent unchanged.
+
+### Fixed
+
+- **`OrtSession.providers` no longer reports a provider ORT did not register.**
+  It held the result of `resolve_providers(...)` — the list that was *asked
+  for* — and was never reconciled with `session.get_providers()`. That matters
+  because `onnxruntime.get_available_providers()` reports what a wheel was
+  *compiled with*, not what can load: `onnxruntime-gpu` lists
+  `CUDAExecutionProvider` whenever it is compiled in, and still registers CPU
+  when the dynamic loader cannot find cuDNN. A deployment that asked for GPU got
+  CPU, the SDK said `CUDAExecutionProvider`, and the only symptom was ~6× worse
+  latency weeks later. (The trigger is slipperier still: importing `torch` first
+  makes CUDA load, because the torch wheel ships its own cuDNN — so the same
+  code works or does not depending on the import order of a library this SDK
+  does not depend on.)
+
+  `providers` now reads back what ORT registered, and the list that was asked
+  for is preserved as the new `requested_providers`. When `providers` was passed
+  explicitly and an entry is missing from the effective list, a `UserWarning`
+  names it. Auto-selection stays quiet: walking a priority list is what falling
+  back is for.
+
 ## [0.8.0] - 2026-08-08
 
 ### Added
@@ -617,7 +687,8 @@ print(r.boxes.xyxy.shape, r.boxes.cls, r.boxes.conf, r.names)
 - Public types: `BoundingBox`, `ClassProbability`, `ClassificationResult`, `DetectionResult`, `ImageArray`.
 - Optional extras: `gpu` (onnxruntime-gpu), `opencv` (opencv-python), `dev` (test/lint tooling).
 
-[Unreleased]: https://github.com/mauriciobenjamin700/ort-vision-sdk/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/mauriciobenjamin700/ort-vision-sdk/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/mauriciobenjamin700/ort-vision-sdk/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/mauriciobenjamin700/ort-vision-sdk/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/mauriciobenjamin700/ort-vision-sdk/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/mauriciobenjamin700/ort-vision-sdk/compare/v0.5.0...v0.6.0

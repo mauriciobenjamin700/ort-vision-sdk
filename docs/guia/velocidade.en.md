@@ -144,6 +144,13 @@ Each `stage()` closes the previous interval and credits the time to the name
 given — no start/stop pairs to forget. Calling the same name twice
 **accumulates**, so you can fold two inference passes into one key.
 
+!!! tip "Before fusing, measure the per-stage breakdown"
+    The breakdown `speed` gives you is what tells you whether fusing a detector
+    with a classifier is worth it: if the detector is ~80% of the cost, the
+    ceiling on what fusing can win is whatever is left. Measured numbers, and
+    the threading trap that inverts the conclusion, are in
+    [When fusing pays off](pipeline.en.md#when-fusing-pays-off).
+
 ## Recap
 
 - `results[0].speed` reports `load`, `preprocess`, `inference` and

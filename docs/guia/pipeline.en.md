@@ -187,18 +187,88 @@ fuse_detect_classify(det, clf, "pipeline.onnx", max_detections=None)
 
 ## Classifier normalization
 
-The crop leaves the graph in `[0, 1]`. The bridge applies your classifier's
-normalization right after, with the same parameters the `Classifier` task would
-use:
+The crop leaves the graph in `[0, 1]`. What has to happen next depends entirely
+on **how your classifier was trained** — and the two most common families
+disagree:
+
+| Family | Expects | Preset |
+| --- | --- | --- |
+| torchvision / timm | a tensor normalized with the ImageNet mean and deviation | `"imagenet"` |
+| Ultralytics (`YOLO(...).export()`) | raw `[0, 1]`, no normalization at all | `"ultralytics"` |
+
+So the default is `normalization="auto"`: the fusion **reads the classifier's
+metadata** and picks for you.
+
+```python
+from ort_vision_sdk.compose import fuse_detect_classify
+
+# Nothing to decide: the file says what it is.
+fuse_detect_classify(det, "yolo11s-cls.onnx", "pipeline.onnx")
+```
+
+Every Ultralytics export stamps `author: Ultralytics` and `task: classify` into
+the `.onnx` itself. That pair is deterministic, and the SDK already read this
+block to carry over class names — so the information needed to get it right was
+always inside the file you hand over.
+
+!!! danger "The failure mode this removes"
+    Up to 0.8.0 the default was ImageNet for everybody. Fusing an Ultralytics
+    classifier with that default inserts a `Sub`/`Div` the model **never saw in
+    training** — and nothing complains: no exception, no warning, and
+    `validate=True` passes (it checks shape, not semantics). The graph runs,
+    returns a `probs` row of the right shape, and classifies worse. Without
+    measuring agreement against the unfused route, there is no way to notice.
+
+### Choosing by hand
+
+```python
+fuse_detect_classify(det, clf, "pipeline.onnx", normalization="imagenet")
+fuse_detect_classify(det, clf, "pipeline.onnx", normalization="ultralytics")
+fuse_detect_classify(det, clf, "pipeline.onnx", normalization="none")
+```
+
+`"none"` is the same arithmetic as `"ultralytics"` — identity — under a name
+that says "this model wants raw `[0, 1]`" rather than naming a vendor.
+
+### Your own values
+
+A model whose normalization no preset describes takes the numbers directly:
 
 ```python
 fuse_detect_classify(
     det, clf, "pipeline.onnx",
-    mean=(0.485, 0.456, 0.406),  # default: ImageNet
-    std=(0.229, 0.224, 0.225),   # default: ImageNet
-    input_scale=1.0,             # 255.0 if your model expects 0..255
+    mean=(0.5, 0.5, 0.5),
+    std=(0.5, 0.5, 0.5),
+    input_scale=1.0,     # 255.0 if your model expects 0..255
 )
 ```
+
+!!! tip "`mean` and `std` are independent"
+    Passing only one of the two leaves the other at whatever the preset `auto`
+    would pick — passing a `mean` does not quietly reset the deviation to 1.
+
+Passing `mean`/`std` **together with** `normalization` raises `ValueError`: they
+are two answers to one question, and guessing which one you meant is how a graph
+ends up normalized one way with metadata claiming another.
+
+And if the classifier is an Ultralytics export and you ask for a normalization
+that is not the identity, you get a `UserWarning` — the graph is still built, but
+you know about it.
+
+### What the file records
+
+The choice goes into the fused model's metadata, under
+`ovs.classifier_normalization`:
+
+```bash
+python -c "import onnx; print({k.key: k.value for k in onnx.load('pipeline.onnx').metadata_props}['ovs.classifier_normalization'])"
+# ultralytics
+```
+
+Once fused, the normalization is a handful of `Sub`/`Div` nodes in the middle of
+a graph — invisible. "Which preprocessing does this pipeline assume?" is the
+first question when a fused model classifies worse than the cascade it replaced,
+and now the file answers it.
 
 Steps that would be no-ops (zero mean, unit deviation, unit scale) are not
 emitted as nodes — a classifier that wants the raw `[0, 1]` crop pays for no
@@ -220,6 +290,99 @@ The threshold named in the message is the **effective** one: the higher of what
 was frozen into the graph's NMS at fusion time and any stricter `conf_threshold`
 passed on the call.
 
+## When fusing pays off
+
+Fusing is **not** always faster. Intuition says it is — one artifact, one
+session, no round trip through the host — but the real cost depends on where the
+time actually is, and in a detection pipeline it is almost never in the bridge.
+
+These numbers come from a real pipeline (eye-mucosa detection at 640 →
+classification at 224, 12-core i9-13900F, RTX 4070 Ti SUPER, onnxruntime 1.24.3),
+200 timed passes after 20 warm-up passes, median of 20 repeats:
+
+| Device | Topology | Sessions | Latency | vs cascade |
+| --- | --- | --- | ---: | ---: |
+| CPU | cascade `.onnx`, 6+6 threads | 2 | **33.06 ms** | 1.00× |
+| CPU | **fused** | 1 | **50.65 ms** | **0.65×** |
+| CPU | cascade `.pt` (torch) | 2 | 69.45 ms | 0.48× |
+| GPU | cascade `.onnx`, 6+6 threads | 2 | **5.97 ms** | 1.00× |
+| GPU | **fused** | 1 | **5.74 ms** | **1.04×** |
+| GPU | cascade `.pt` (torch) | 2 | 11.24 ms | 0.53× |
+
+**On CPU the fused graph was 53% slower** than two well-configured sessions. On
+GPU it tied.
+
+### Why the ceiling is low
+
+The cascade's per-stage breakdown on CPU explains all of it:
+
+| Stage | ms | % of total |
+| --- | ---: | ---: |
+| detector | 25.79 | **78.0%** |
+| crop (`cv2` on the host) | 1.49 | **4.5%** |
+| classifier | 5.00 | 15.1% |
+
+Fusing can only remove the host-side crop and one hand-off between sessions —
+a **4.5% ceiling**. And the ~68 bridge nodes (NMS, TopK, Pad, clamp, `RoiAlign`)
+cost +17.6 ms on CPU, well over the `cv2.resize` they replace. On GPU those
+nodes are cheap and the tie reappears.
+
+!!! info "Capability has a price"
+    A minimal hand-written bridge (`ArgMax` + `RoiAlign`, 22 nodes, no NMS, no
+    padding, a single object) measured 0.99× on that same machine. The gap
+    between 0.99× and 0.65× is the price of thresholded NMS, `TopK`, padding to
+    a static shape, and clamping — fair for what it buys, but large on CPU.
+
+### The trap that inverts the conclusion
+
+!!! warning "A misconfigured cascade makes fusing look 5× faster"
+    The first measurement in that study gave 148 ms for the cascade against
+    30 ms fused. The number was **false**: the detector *alone* measured 110 ms
+    inside the cascade, and the fused graph contains exactly the same detector.
+
+    The cause is ONNX Runtime giving **each `InferenceSession` its own intra-op
+    pool**. In a cascade the two stages alternate, and the pool that just
+    finished sits in *spin-wait* stealing cores from the one that is running:
+
+    | Configuration | Total (CPU) |
+    | --- | ---: |
+    | 12 + 12 threads | 140.6 ms |
+    | 12 + 12, `intra_op.allow_spinning = 0` | 49.4 ms |
+    | 6 + 6 threads | 33.7 ms |
+
+    The fused graph has **one** pool and is immune to this by construction — so
+    comparing against a misconfigured cascade hands fusing a win it did not earn.
+    The honest baseline splits the thread budget between the sessions. (`torch`
+    does not suffer from this: `torch.set_num_threads` configures a single
+    process-wide pool.)
+
+### Reproducing the cascade numerically
+
+For the fused graph to reproduce a cascade that crops with `cv2.INTER_LINEAR`:
+
+- **`sampling_ratio=1`** — a plain bilinear resample. The default `0` adapts to
+  the box size and anti-aliases: better in general, but it samples differently
+  from a `cv2.resize`.
+- **`coordinate_transformation_mode="half_pixel"`** on `RoiAlign`, which is what
+  the bridge already uses: it reproduces `cv2.INTER_LINEAR` to a mean absolute
+  error of 4·10⁻⁵ on an image in `[0, 1]`, against 185× more for
+  `output_half_pixel`.
+
+With both, prediction agreement between fused and cascade came out at 0.982
+(3 disagreements in 169 samples, all with confidence between 0.47 and 0.60 —
+right on the decision boundary), median probability delta 3.4·10⁻⁵, and an
+identical selected box (0.000 px).
+
+### Recommendation
+
+- **Worth it** for portability and operations: one artifact, one session, static
+  shapes (TensorRT/NNAPI/WebGPU), the same file running in the web SDK.
+- **Not worth it** for CPU latency, and a tie on GPU, when the alternative is a
+  cascade with its thread budget split.
+- **Before measuring**, look at the per-stage breakdown with
+  [`timings`](velocidade.en.md): if the detector is ~80% of the cost, the
+  ceiling on what fusing can win is whatever is left.
+
 ## Limits worth knowing
 
 - **The head must be anchor-free YOLO** — output `(1, 4 + nc, N)`, the same
@@ -237,6 +400,11 @@ passed on the call.
 - **Opsets are reconciled upwards.** If the two models were exported at
   different versions, the older one is converted — and the floor is opset 16,
   required by the bridge's `RoiAlign`.
+- **`boxes` is the box that was classified.** A box running off the frame is
+  clamped to the image bounds before it becomes a crop, and it is that clamped
+  version that comes out in `boxes` — drawing the rectangle and looking at the
+  crop show the same region. Up to 0.8.0 the two diverged: `boxes` reported the
+  whole box while `RoiAlign` received the clamped one. Padded rows stay zero.
 
 ## Recap
 

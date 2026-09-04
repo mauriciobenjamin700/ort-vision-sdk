@@ -70,6 +70,8 @@ metadados, com os defaults antigos (224/640, preset COCO) como fallback. Ver
 | `OrtSession` | Backend padrão (ONNX Runtime in-process); satisfaz os dois protocolos. |
 | `OrtSession.metadata` | Mapa de metadados customizados do modelo (`names`, `task`, `imgsz`, ...). |
 | `OrtSession.input_shape` | Shape declarado da primeira entrada (eixos dinâmicos como string). |
+| `OrtSession.providers` | Providers que o ORT **registrou** — a resposta a "onde isto está rodando". |
+| `OrtSession.requested_providers` | Providers que foram **pedidos**, depois de expandir aliases e da auto-seleção. |
 
 ## Envelopes de resultado
 
@@ -124,6 +126,7 @@ envelope vazio, não um erro. Com `True`, levanta
 | `compose.fuse_detect_classify(...)` | Funde um detector YOLO e um classificador num único `.onnx`, e valida o resultado rodando-o. |
 | `compose.build_bridge(...)` | Monta só o subgrafo-ponte (NMS → RoiAlign → normalização). Útil para inspeção. |
 | `compose.MIN_OPSET` | Opset mínimo que a ponte exige (16, por causa do `RoiAlign`). |
+| `compose.Normalization` | `"auto"`, `"imagenet"`, `"ultralytics"` ou `"none"` — qual preprocessamento o classificador espera. |
 | `FusionError` | Erro levantado quando dois modelos não podem ser fundidos, ou o arquivo carregado não é um pipeline. |
 
 Este módulo é o único que importa `onnx`, e só é instalado com

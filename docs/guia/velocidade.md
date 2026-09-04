@@ -144,6 +144,13 @@ Cada `stage()` fecha o intervalo anterior e credita o tempo ao nome dado —
 sem pares de start/stop para esquecer. Chamar o mesmo nome duas vezes
 **acumula**, então dá para somar duas passadas de inferência na mesma chave.
 
+!!! tip "Antes de fundir, meça a quebra por estágio"
+    A quebra que o `speed` dá é o que diz se fundir um detector com um
+    classificador vale a pena: se o detector é ~80 % do custo, o teto do ganho
+    da fusão é o que sobra. Dados medidos e a armadilha de threads que inverte a
+    conclusão estão em
+    [Quando fundir compensa](pipeline.md#quando-fundir-compensa).
+
 ## Recapitulando
 
 - `results[0].speed` traz `load`, `preprocess`, `inference` e `postprocess`

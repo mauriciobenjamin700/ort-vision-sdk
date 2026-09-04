@@ -68,6 +68,8 @@ fallbacks. See [The model decides](../guia/modelo.en.md).
 | `OrtSession` | Default backend (in-process ONNX Runtime); satisfies both protocols. |
 | `OrtSession.metadata` | The model's custom metadata map (`names`, `task`, `imgsz`, ...). |
 | `OrtSession.input_shape` | Declared shape of the first input (dynamic axes as strings). |
+| `OrtSession.providers` | Providers ORT **registered** — the answer to "where is this running". |
+| `OrtSession.requested_providers` | Providers that were **asked for**, after alias expansion and auto-selection. |
 
 ## Result envelopes
 
@@ -122,6 +124,7 @@ nothing returns an empty envelope, not an error. With `True`, it raises
 | `compose.fuse_detect_classify(...)` | Fuses a YOLO detector and a classifier into one `.onnx`, and validates the result by running it. |
 | `compose.build_bridge(...)` | Builds just the bridge subgraph (NMS → RoiAlign → normalization). Useful for inspection. |
 | `compose.MIN_OPSET` | Lowest opset the bridge requires (16, because of `RoiAlign`). |
+| `compose.Normalization` | `"auto"`, `"imagenet"`, `"ultralytics"` or `"none"` — which preprocessing the classifier expects. |
 | `FusionError` | Raised when two models cannot be fused, or a loaded file is not a pipeline. |
 
 This module is the only one that imports `onnx`, and it ships only with

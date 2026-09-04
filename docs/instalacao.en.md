@@ -38,11 +38,47 @@ Base dependencies: `onnxruntime>=1.17.0`, `numpy>=1.24.0`, `pillow>=10.0.0`.
     environment. To use the GPU, install the `gpu` extra in a clean environment
     (without the CPU `onnxruntime` already present), or uninstall it first.
 
+!!! danger "Available GPU ≠ loadable GPU"
+    `onnxruntime.get_available_providers()` answers **"this was compiled into the
+    wheel"**, not "this can load". `onnxruntime-gpu` always lists
+    `CUDAExecutionProvider`, and still registers CPU when the dynamic loader
+    cannot find `libcudnn.so.9`. The result is a deployment that asked for GPU,
+    got CPU with no error at all, and only surfaces weeks later on the latency
+    bill.
+
+    The case is slipperier than it looks: **importing `torch` first** makes CUDA
+    load, because the torch wheel ships cuDNN and loads it into the process. The
+    same code works or does not depending on the import order of a library the
+    SDK does not even depend on.
+
+    From 0.9.0 the SDK reconciles this: `session.providers` reads back what ORT
+    **registered**, and asking for a provider by name and not getting it emits a
+    `UserWarning` instead of silence.
+
 ### Verify the install
 
 ```bash
 python -c "from ort_vision_sdk import Classifier, Detector, Segmenter; print('OK')"
 ```
+
+And when the intent is to run on GPU, confirm **where** it actually ran:
+
+```python
+from ort_vision_sdk import OrtSession
+
+session = OrtSession("yolov8n.onnx", providers=["cuda"])
+
+print(session.requested_providers)  # ['CUDAExecutionProvider'] — what was asked for
+print(session.providers)            # what ORT actually registered
+```
+
+If the second line prints only `['CPUExecutionProvider']`, cuDNN is not
+reachable — install it, or point `LD_LIBRARY_PATH` at where it lives.
+
+!!! tip "The tasks too"
+    `Detector`, `Classifier` and `Segmenter` build an `OrtSession` underneath and
+    expose it as `.session`, so `detector.session.providers` answers the same
+    question whenever you have not injected a backend of your own.
 
 ## Web (npm)
 

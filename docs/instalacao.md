@@ -38,11 +38,47 @@ Dependências base: `onnxruntime>=1.17.0`, `numpy>=1.24.0`, `pillow>=10.0.0`.
     Para usar GPU, instale o extra `gpu` em um ambiente limpo (sem o
     `onnxruntime` de CPU já presente), ou desinstale-o antes.
 
+!!! danger "GPU disponível ≠ GPU carregável"
+    `onnxruntime.get_available_providers()` responde **"isto foi compilado no
+    wheel"**, não "isto consegue carregar". O `onnxruntime-gpu` lista
+    `CUDAExecutionProvider` sempre, e ainda assim registra CPU quando o loader
+    dinâmico não acha o `libcudnn.so.9`. O resultado é um deploy que pediu GPU,
+    recebeu CPU sem erro nenhum, e só aparece na conta de latência semanas
+    depois.
+
+    O caso é mais escorregadio do que parece: **importar `torch` antes** faz o
+    CUDA carregar, porque o wheel do torch traz o cuDNN e o carrega no processo.
+    O mesmo código funciona ou não dependendo da ordem de import de uma
+    biblioteca que o SDK nem depende.
+
+    A partir da 0.9.0 o SDK reconcilia isso: `session.providers` lê de volta o
+    que o ORT **registrou**, e pedir um provider por nome e não recebê-lo emite
+    um `UserWarning` em vez de silêncio.
+
 ### Verificar a instalação
 
 ```bash
 python -c "from ort_vision_sdk import Classifier, Detector, Segmenter; print('OK')"
 ```
+
+E, quando a intenção é rodar em GPU, confirme **onde** ela de fato rodou:
+
+```python
+from ort_vision_sdk import OrtSession
+
+session = OrtSession("yolov8n.onnx", providers=["cuda"])
+
+print(session.requested_providers)  # ['CUDAExecutionProvider'] — o que foi pedido
+print(session.providers)            # o que o ORT registrou de verdade
+```
+
+!!! tip "Vale para as tasks também"
+    `Detector`, `Classifier` e `Segmenter` constroem um `OrtSession` por baixo e
+    o expõem em `.session`, então `detector.session.providers` responde a mesma
+    pergunta quando você não injetou um backend próprio.
+
+Se a segunda linha imprimir apenas `['CPUExecutionProvider']`, o cuDNN não está
+alcançável — instale-o, ou aponte o `LD_LIBRARY_PATH` para onde ele está.
 
 ## Web (npm)
 

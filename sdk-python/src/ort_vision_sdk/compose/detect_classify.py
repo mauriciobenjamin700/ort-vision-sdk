@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import warnings
 from pathlib import Path
+from typing import Literal
 
 import numpy as np
 import onnx
@@ -44,7 +45,47 @@ from ort_vision_sdk.graph import model_names
 from ort_vision_sdk.labels import LabelSpec, default_labels, resolve_labels
 from ort_vision_sdk.preprocess.image import IMAGENET_MEAN, IMAGENET_STD
 
-__all__ = ["fuse_detect_classify"]
+__all__ = ["Normalization", "fuse_detect_classify"]
+
+Normalization = Literal["auto", "imagenet", "ultralytics", "none"]
+"""Which preprocessing the classifier stage expects its crops to have had.
+
+The crops leave the bridge as ``float32`` in ``[0, 1]``, and what has to happen
+next depends entirely on how the classifier was trained:
+
+- ``"auto"`` (default) reads the classifier's own export metadata and picks. An
+  Ultralytics classification head gets ``"ultralytics"``; anything else gets
+  ``"imagenet"``, which is what a torchvision-style model wants.
+- ``"imagenet"`` subtracts the ImageNet mean and divides by the ImageNet
+  deviation — the torchvision convention.
+- ``"ultralytics"`` leaves the crop in ``[0, 1]``. Ultralytics' own classifier
+  applies no mean/std at all, so anything else feeds it images it never saw in
+  training.
+- ``"none"`` is the same arithmetic as ``"ultralytics"`` — identity — under a
+  name that says "this model wants raw ``[0, 1]``" rather than naming a vendor.
+
+The choice is recorded in the fused file as ``ovs.classifier_normalization``, so
+what a pipeline did is readable off the artifact afterwards.
+"""
+
+_IDENTITY_MEAN: tuple[float, float, float] = (0.0, 0.0, 0.0)
+"""Mean that leaves a crop untouched — what an Ultralytics classifier expects."""
+
+_IDENTITY_STD: tuple[float, float, float] = (1.0, 1.0, 1.0)
+"""Deviation that leaves a crop untouched — what an Ultralytics classifier expects."""
+
+_PRESETS: dict[str, tuple[tuple[float, float, float], tuple[float, float, float]]] = {
+    "imagenet": (IMAGENET_MEAN, IMAGENET_STD),
+    "ultralytics": (_IDENTITY_MEAN, _IDENTITY_STD),
+    "none": (_IDENTITY_MEAN, _IDENTITY_STD),
+}
+"""Named normalization presets → their ``(mean, std)``."""
+
+_CUSTOM_NORMALIZATION = "custom"
+"""Value recorded when the caller supplied ``mean``/``std`` directly."""
+
+_METADATA_KEY_NORMALIZATION = f"{METADATA_PREFIX}classifier_normalization"
+"""Metadata key naming which normalization the fused graph applies."""
 
 _DETECTOR_PREFIX = "det_"
 _CLASSIFIER_PREFIX = "clf_"
@@ -71,8 +112,9 @@ def fuse_detect_classify(
     max_boxes_per_class: int | None = None,
     input_size: tuple[int, int] | None = None,
     crop_size: tuple[int, int] | None = None,
-    mean: tuple[float, float, float] = IMAGENET_MEAN,
-    std: tuple[float, float, float] = IMAGENET_STD,
+    normalization: Normalization = "auto",
+    mean: tuple[float, float, float] | None = None,
+    std: tuple[float, float, float] | None = None,
     input_scale: float = 1.0,
     sampling_ratio: int = 0,
     apply_softmax: bool | None = None,
@@ -127,10 +169,14 @@ def fuse_detect_classify(
             export left its spatial axes dynamic.
         crop_size: ``(width, height)`` each crop is resampled to. ``None`` reads
             it from the classifier's graph.
-        mean: Per-channel mean subtracted from each crop. Defaults to the
-            ImageNet values, matching
-            :class:`~ort_vision_sdk.tasks.classifier.Classifier`.
-        std: Per-channel standard deviation each crop is divided by.
+        normalization: Which preprocessing the classifier expects — see
+            :data:`Normalization`. ``"auto"`` (default) reads the classifier's
+            own export metadata and picks ``"ultralytics"`` for an Ultralytics
+            classification head, ``"imagenet"`` for everything else.
+        mean: Per-channel mean subtracted from each crop, overriding the preset.
+            ``None`` (default) takes it from ``normalization``.
+        std: Per-channel standard deviation each crop is divided by, overriding
+            the preset. ``None`` (default) takes it from ``normalization``.
         input_scale: Multiplier applied to a crop before ``mean``/``std``. The
             pipeline feeds images as ``float32`` in ``[0, 1]``, so leave it at
             1.0 for a torchvision-style classifier and set 255.0 for one that
@@ -160,7 +206,13 @@ def fuse_detect_classify(
             declared by a graph nor supplied, the opsets cannot be reconciled,
             or ``validate`` is on and the fused graph fails to run.
         ValueError: If a numeric argument is out of range — propagated from
-            :func:`~ort_vision_sdk.compose.bridge.build_bridge`.
+            :func:`~ort_vision_sdk.compose.bridge.build_bridge` — or if
+            ``normalization`` names a preset that does not exist, or names one
+            while ``mean``/``std`` are also given.
+
+    Warns:
+        UserWarning: If the classifier is an Ultralytics export and the
+            ``mean``/``std`` supplied are not the identity it was trained with.
     """
     detector_model = _load(detector, role="detector")
     classifier_model = _load(classifier, role="classifier")
@@ -194,6 +246,9 @@ def fuse_detect_classify(
     softmax_needed = (
         apply_softmax if apply_softmax is not None else not _ends_in_softmax(classifier_model)
     )
+    normalization_name, resolved_mean, resolved_std = _resolve_normalization(
+        classifier_model, normalization=normalization, mean=mean, std=std
+    )
 
     spec = FusionSpec(
         input_size=resolved_input_size,
@@ -214,8 +269,9 @@ def fuse_detect_classify(
         spec=spec,
         channels=channels,
         max_boxes_per_class=_resolve_per_class_cap(max_boxes_per_class, max_detections),
-        mean=mean,
-        std=std,
+        mean=resolved_mean,
+        std=resolved_std,
+        normalization_name=normalization_name,
         input_scale=input_scale,
         sampling_ratio=sampling_ratio,
         target_opset=target_opset,
@@ -463,6 +519,102 @@ def _stage_names(
     return dict(enumerate(labels))
 
 
+def _is_ultralytics_classifier(model: onnx.ModelProto) -> bool:
+    """Whether this classifier came out of ``YOLO(...).export(format="onnx")``.
+
+    Every Ultralytics export stamps ``author`` and ``task`` into
+    ``metadata_props``, and the pair is unambiguous: ``"Ultralytics"`` plus
+    ``"classify"`` is a classification head from that codebase and nothing else.
+    That matters because the two families disagree about preprocessing —
+    torchvision classifiers are trained on ImageNet-normalized tensors,
+    Ultralytics' are trained on raw ``[0, 1]`` — and the answer is sitting in
+    the file the caller already handed us.
+
+    Args:
+        model: The classifier model.
+
+    Returns:
+        bool: ``True`` for an Ultralytics classification export.
+    """
+    metadata: dict[str, str] = {entry.key: entry.value for entry in model.metadata_props}
+    return (
+        metadata.get("author", "").strip().lower() == "ultralytics"
+        and metadata.get("task", "").strip().lower() == "classify"
+    )
+
+
+def _resolve_normalization(
+    classifier_model: onnx.ModelProto,
+    *,
+    normalization: Normalization,
+    mean: tuple[float, float, float] | None,
+    std: tuple[float, float, float] | None,
+) -> tuple[str, tuple[float, float, float], tuple[float, float, float]]:
+    """Settle which ``(mean, std)`` the bridge folds in, and what to call it.
+
+    Explicit ``mean``/``std`` always win — they are the escape hatch for a model
+    whose preprocessing neither preset describes. Anything they leave open falls
+    back to the preset, so passing only a ``mean`` does not silently reset the
+    deviation to 1.
+
+    Args:
+        classifier_model: The classifier, read for its export metadata.
+        normalization: The preset the caller asked for, or ``"auto"``.
+        mean: Explicit per-channel mean, or ``None``.
+        std: Explicit per-channel deviation, or ``None``.
+
+    Returns:
+        tuple[str, tuple[float, float, float], tuple[float, float, float]]: The
+        name to record in the fused file, followed by the mean and deviation to
+        apply.
+
+    Raises:
+        ValueError: If ``normalization`` is not a known preset, or names one
+            while ``mean``/``std`` are also supplied — two answers to the same
+            question, and guessing which one the caller meant is how a graph
+            ends up normalized differently from what its metadata claims.
+
+    Warns:
+        UserWarning: If the classifier is an Ultralytics export and the supplied
+            ``mean``/``std`` are not the identity it was trained with. Nothing
+            downstream fails in that case: the graph builds, runs, and returns a
+            ``probs`` row of the right shape — it is simply less accurate.
+    """
+    explicit = mean is not None or std is not None
+    if normalization not in ("auto", *_PRESETS):
+        raise ValueError(
+            f"normalization must be one of 'auto', 'imagenet', 'ultralytics', 'none'; "
+            f"got {normalization!r}."
+        )
+    if explicit and normalization != "auto":
+        raise ValueError(
+            f"Pass either normalization={normalization!r} or explicit mean/std, not both."
+        )
+
+    ultralytics = _is_ultralytics_classifier(classifier_model)
+    preset = normalization
+    if preset == "auto":
+        preset = "ultralytics" if ultralytics else "imagenet"
+    preset_mean, preset_std = _PRESETS[preset]
+
+    if not explicit:
+        return preset, preset_mean, preset_std
+
+    resolved_mean = mean if mean is not None else preset_mean
+    resolved_std = std if std is not None else preset_std
+    if ultralytics and (resolved_mean, resolved_std) != (_IDENTITY_MEAN, _IDENTITY_STD):
+        warnings.warn(
+            "The classifier is an Ultralytics export, whose classification head is trained on "
+            f"raw [0, 1] crops, but mean={resolved_mean} / std={resolved_std} was requested. "
+            "The fused graph will feed it images normalized in a way it never saw in training, "
+            "which degrades accuracy without raising anything. Drop mean/std to let "
+            "normalization='auto' pick the identity.",
+            UserWarning,
+            stacklevel=3,
+        )
+    return _CUSTOM_NORMALIZATION, resolved_mean, resolved_std
+
+
 def _ends_in_softmax(model: onnx.ModelProto) -> bool:
     """Whether the classifier's final output is produced by a ``Softmax`` node.
 
@@ -547,6 +699,7 @@ def _assemble(
     max_boxes_per_class: int,
     mean: tuple[float, float, float],
     std: tuple[float, float, float],
+    normalization_name: str,
     input_scale: float,
     sampling_ratio: int,
     target_opset: int,
@@ -567,6 +720,7 @@ def _assemble(
         max_boxes_per_class: NMS per-class cap.
         mean: Per-channel normalization mean.
         std: Per-channel normalization standard deviation.
+        normalization_name: Preset name recorded in the fused file's metadata.
         input_scale: Multiplier applied before normalization.
         sampling_ratio: RoiAlign samples per output bin.
         target_opset: Opset the fused graph declares.
@@ -640,7 +794,7 @@ def _assemble(
         producer_version=spec.sdk_version,
     )
     model.ir_version = max(detector_model.ir_version, classifier_model.ir_version)
-    _write_metadata(model, detector_model, spec)
+    _write_metadata(model, detector_model, spec, normalization_name=normalization_name)
 
     try:
         onnx.checker.check_model(model)
@@ -723,6 +877,8 @@ def _write_metadata(
     model: onnx.ModelProto,
     detector_model: onnx.ModelProto,
     spec: FusionSpec,
+    *,
+    normalization_name: str,
 ) -> None:
     """Record the pipeline spec — and the detector's own metadata — on the model.
 
@@ -735,6 +891,11 @@ def _write_metadata(
         model: The fused model to annotate.
         detector_model: The detector, read for its metadata entries.
         spec: The pipeline configuration.
+        normalization_name: Which normalization the bridge folded in. Recorded
+            because the arithmetic itself is invisible once it is a handful of
+            ``Sub``/``Div`` nodes in the middle of a graph, and "which
+            preprocessing does this pipeline assume" is the first question when
+            a fused model classifies worse than the cascade it replaced.
     """
     entries = {
         entry.key: entry.value
@@ -742,6 +903,7 @@ def _write_metadata(
         if not entry.key.startswith(METADATA_PREFIX)
     }
     entries.update(spec.to_metadata())
+    entries[_METADATA_KEY_NORMALIZATION] = normalization_name
     del model.metadata_props[:]
     for key, value in entries.items():
         model.metadata_props.add(key=key, value=value)

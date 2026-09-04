@@ -21,11 +21,12 @@ side never restates it — see :mod:`ort_vision_sdk.fusion` for that contract an
 """
 
 from ort_vision_sdk.compose.bridge import MIN_OPSET, BridgeGraph, build_bridge
-from ort_vision_sdk.compose.detect_classify import fuse_detect_classify
+from ort_vision_sdk.compose.detect_classify import Normalization, fuse_detect_classify
 
 __all__: list[str] = [
     "MIN_OPSET",
     "BridgeGraph",
+    "Normalization",
     "build_bridge",
     "fuse_detect_classify",
 ]

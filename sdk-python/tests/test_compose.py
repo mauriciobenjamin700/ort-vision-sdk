@@ -118,7 +118,13 @@ def _write_edge_detector(path: Path, *, boxes: list[tuple[float, float, float, f
     return path
 
 
-def _write_classifier(path: Path, *, opset: int = 17, with_softmax: bool = False) -> Path:
+def _write_classifier(
+    path: Path,
+    *,
+    opset: int = 17,
+    with_softmax: bool = False,
+    ultralytics: bool = False,
+) -> Path:
     """Write a classifier that reports each crop's per-channel mean.
 
     Being a pure reduction makes it batch-agnostic — which is exactly what the
@@ -129,6 +135,9 @@ def _write_classifier(path: Path, *, opset: int = 17, with_softmax: bool = False
         opset: Opset to declare.
         with_softmax: Append a ``Softmax``, so the fusion's auto-detection of an
             already-normalized output can be exercised.
+        ultralytics: Stamp the ``author``/``task`` metadata a
+            ``YOLO(...).export(format="onnx")`` classification run writes, so
+            the normalization auto-detection has something to detect.
 
     Returns:
         Path: ``path``, for chaining.
@@ -154,6 +163,9 @@ def _write_classifier(path: Path, *, opset: int = 17, with_softmax: bool = False
     model = helper.make_model(graph, opset_imports=[helper.make_opsetid("", opset)])
     model.ir_version = 9
     model.metadata_props.add(key="names", value=_CLASSIFIER_NAMES)
+    if ultralytics:
+        model.metadata_props.add(key="author", value="Ultralytics")
+        model.metadata_props.add(key="task", value="classify")
     onnx.save(model, str(path))
     return path
 
@@ -691,3 +703,93 @@ class TestBoxClamping:
         np.testing.assert_allclose(boxes[0], [0.0, 0.0, 16.0, 16.0])
         np.testing.assert_allclose(probs[0][0], 1.0, atol=1e-5)
 
+
+class TestNormalizationPresets:
+    """Picking the preprocessing the classifier was actually trained with."""
+
+    def _fuse_with(self, tmp_path: Path, *, ultralytics: bool, **kwargs: object) -> Path:
+        """Fuse the shared detector with a classifier of the requested provenance.
+
+        Args:
+            tmp_path: Directory to write the three models into.
+            ultralytics: Whether the classifier carries Ultralytics metadata.
+            **kwargs: Overrides forwarded to ``fuse_detect_classify``.
+
+        Returns:
+            Path: The fused model.
+        """
+        detector = _write_detector(tmp_path / "norm_det.onnx")
+        classifier = _write_classifier(tmp_path / "norm_clf.onnx", ultralytics=ultralytics)
+        output = tmp_path / "norm_fused.onnx"
+        defaults: dict[str, object] = {"sampling_ratio": 1, "max_detections": 2}
+        defaults.update(kwargs)
+        fuse_detect_classify(detector, classifier, output, **defaults)  # type: ignore[arg-type]
+        return output
+
+    def test_auto_leaves_an_ultralytics_classifier_unnormalized(self, tmp_path: Path) -> None:
+        """An Ultralytics classification head consumes raw ``[0, 1]``."""
+        fused = self._fuse_with(tmp_path, ultralytics=True)
+        probs = _session(fused).run(None, {"images": _marked_tensor()})[4]
+
+        np.testing.assert_allclose(probs[0], [1.0, 0.0, 0.0], atol=1e-5)
+
+    def test_auto_normalizes_anything_else_for_imagenet(self, tmp_path: Path) -> None:
+        fused = self._fuse_with(tmp_path, ultralytics=False)
+        probs = _session(fused).run(None, {"images": _marked_tensor()})[4]
+
+        expected = [
+            (1.0 - 0.485) / 0.229,
+            (0.0 - 0.456) / 0.224,
+            (0.0 - 0.406) / 0.225,
+        ]
+        np.testing.assert_allclose(probs[0], expected, atol=1e-4)
+
+    def test_an_explicit_preset_overrides_the_detection(self, tmp_path: Path) -> None:
+        fused = self._fuse_with(tmp_path, ultralytics=True, normalization="imagenet")
+        probs = _session(fused).run(None, {"images": _marked_tensor()})[4]
+
+        np.testing.assert_allclose(probs[0][0], (1.0 - 0.485) / 0.229, atol=1e-4)
+
+    def test_none_is_the_identity(self, tmp_path: Path) -> None:
+        fused = self._fuse_with(tmp_path, ultralytics=False, normalization="none")
+        probs = _session(fused).run(None, {"images": _marked_tensor()})[4]
+
+        np.testing.assert_allclose(probs[0], [1.0, 0.0, 0.0], atol=1e-5)
+
+    def test_an_explicit_mean_keeps_the_preset_deviation(self, tmp_path: Path) -> None:
+        """Supplying one half of the pair does not silently reset the other."""
+        fused = self._fuse_with(tmp_path, ultralytics=False, mean=(0.0, 0.0, 0.0))
+        probs = _session(fused).run(None, {"images": _marked_tensor()})[4]
+
+        np.testing.assert_allclose(probs[0][0], 1.0 / 0.229, atol=1e-4)
+
+    def test_records_the_choice_in_the_metadata(self, tmp_path: Path) -> None:
+        fused = self._fuse_with(tmp_path, ultralytics=True)
+        entries = {entry.key: entry.value for entry in onnx.load(str(fused)).metadata_props}
+
+        assert entries["ovs.classifier_normalization"] == "ultralytics"
+
+    def test_records_custom_when_the_caller_supplies_the_values(self, tmp_path: Path) -> None:
+        fused = self._fuse_with(tmp_path, ultralytics=False, mean=(0.1, 0.1, 0.1))
+        entries = {entry.key: entry.value for entry in onnx.load(str(fused)).metadata_props}
+
+        assert entries["ovs.classifier_normalization"] == "custom"
+
+    def test_warns_when_an_ultralytics_classifier_is_normalized(self, tmp_path: Path) -> None:
+        with pytest.warns(UserWarning, match="Ultralytics export"):
+            self._fuse_with(
+                tmp_path,
+                ultralytics=True,
+                mean=(0.485, 0.456, 0.406),
+                std=(0.229, 0.224, 0.225),
+            )
+
+    def test_rejects_a_preset_alongside_explicit_values(self, tmp_path: Path) -> None:
+        with pytest.raises(ValueError, match="not both"):
+            self._fuse_with(
+                tmp_path, ultralytics=False, normalization="imagenet", mean=(0.0, 0.0, 0.0)
+            )
+
+    def test_rejects_an_unknown_preset(self, tmp_path: Path) -> None:
+        with pytest.raises(ValueError, match="normalization must be one of"):
+            self._fuse_with(tmp_path, ultralytics=False, normalization="torchvision")

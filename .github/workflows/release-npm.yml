@@ -123,12 +123,21 @@ jobs:
             echo "::error::npm does not serve ${PKG_NAME}@${VERSION} (got '${PUBLISHED}')"
             exit 1
           fi
-          LATEST=$(npm view "${PKG_NAME}" dist-tags.latest 2>/dev/null || true)
-          if [ "$LATEST" != "$VERSION" ]; then
-            echo "::error::npm dist-tag latest is '${LATEST}', expected '${VERSION}'"
-            exit 1
-          fi
-          echo "✓ npm: ${PKG_NAME}@${VERSION} published and tagged latest"
+          # The dist-tag gets its own retry window. The version endpoint and the
+          # tag list are separate reads against a cache, so a single unlucky read
+          # right after publish reports the previous version and fails a release
+          # that succeeded — which is exactly what happened on the PyPI side.
+          for attempt in 1 2 3 4 5 6; do
+            LATEST=$(npm view "${PKG_NAME}" dist-tags.latest 2>/dev/null || true)
+            if [ "$LATEST" = "$VERSION" ]; then
+              echo "✓ npm: ${PKG_NAME}@${VERSION} published and tagged latest"
+              exit 0
+            fi
+            echo "· dist-tag latest still '${LATEST}' (attempt ${attempt}); retrying in 10s"
+            sleep 10
+          done
+          echo "::error::npm dist-tag latest is '${LATEST}', expected '${VERSION}'"
+          exit 1
 
       # Keeps GitHub in step with npm: every published version gets the matching
       # GitHub Release, with its CHANGELOG section as the notes and the packed

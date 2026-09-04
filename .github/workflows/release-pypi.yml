@@ -156,23 +156,40 @@ jobs:
         env:
           VERSION: ${{ needs.build.outputs.version }}
         run: |
-          for attempt in 1 2 3 4 5; do
-            if curl -sf "https://pypi.org/pypi/ort-vision-sdk/${VERSION}/json" -o /tmp/pypi.json; then
+          # The simple index is the authority on "is this published". PyPI's JSON
+          # API is a cache in front of it and lags: v0.9.0 was live on the simple
+          # index while /pypi/<pkg>/json still answered 0.8.0 as latest, and this
+          # step failed a release that had in fact succeeded. So prove publication
+          # against the simple index, and give `latest` its own retry window
+          # rather than one unlucky read.
+          for attempt in 1 2 3 4 5 6; do
+            if curl -sf "https://pypi.org/simple/ort-vision-sdk/" \
+              | grep -q "ort_vision_sdk-${VERSION}"; then
+              PUBLISHED=1
               break
             fi
-            echo "· index has not caught up yet (attempt ${attempt}); retrying in 10s"
+            echo "· simple index has not caught up yet (attempt ${attempt}); retrying in 10s"
             sleep 10
           done
-          if [ ! -s /tmp/pypi.json ]; then
+          if [ "${PUBLISHED:-0}" != "1" ]; then
             echo "::error::PyPI does not serve ort-vision-sdk ${VERSION}"
             exit 1
           fi
-          LATEST=$(curl -sf https://pypi.org/pypi/ort-vision-sdk/json | python -c "import json,sys; print(json.load(sys.stdin)['info']['version'])")
-          if [ "$LATEST" != "$VERSION" ]; then
-            echo "::error::PyPI latest is '${LATEST}', expected '${VERSION}'"
-            exit 1
-          fi
-          echo "✓ PyPI: ort-vision-sdk ${VERSION} published and served as latest"
+          echo "✓ PyPI: ort-vision-sdk ${VERSION} is on the simple index"
+
+          for attempt in 1 2 3 4 5 6; do
+            LATEST=$(curl -sf https://pypi.org/pypi/ort-vision-sdk/json \
+              | python -c "import json,sys; print(json.load(sys.stdin)['info']['version'])" \
+              || echo "")
+            if [ "$LATEST" = "$VERSION" ]; then
+              echo "✓ PyPI: ort-vision-sdk ${VERSION} served as latest"
+              exit 0
+            fi
+            echo "· JSON API still reports '${LATEST}' (attempt ${attempt}); retrying in 10s"
+            sleep 10
+          done
+          echo "::error::PyPI latest is '${LATEST}', expected '${VERSION}'"
+          exit 1
 
       # Keeps GitHub in step with PyPI: every published version gets the
       # matching GitHub Release, with its CHANGELOG section as the notes and the

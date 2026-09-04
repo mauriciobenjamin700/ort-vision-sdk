@@ -9,7 +9,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.9.0] - 2026-09-04
 
+### Added
+
+- **`ort_vision_sdk.normalization` is a module of its own.** `Normalization`,
+  `resolve_normalization`, `is_ultralytics_classifier` and the `IMAGENET_*` /
+  `IDENTITY_*` constants are exported from the package root. It imports nothing
+  beyond the standard library on purpose: the fusion needs it at build time
+  behind the `[compose]` extra, and `Classifier` needs it at run time on a plain
+  `onnxruntime` install. `preprocess.image.IMAGENET_MEAN` / `IMAGENET_STD` now
+  re-export from here rather than restating the values.
+
 ### Changed
+
+- **`Classifier` picks its normalization from the model.** The same defect the
+  fusion had, in the task people reach for first: `mean`/`std` defaulted to the
+  ImageNet values, which is right for a torchvision-style model and wrong for an
+  Ultralytics one. `normalization="auto"` (the new default) reads the model's own
+  export metadata and picks — `"ultralytics"` (identity) for a
+  `YOLO(...).export(format="onnx")` classification head, `"imagenet"` for
+  anything else. `mean`/`std` still override, passing them alongside
+  `normalization` raises `ValueError`, and supplying only one leaves the other at
+  the preset value. The new `Classifier.normalization` property reports which
+  choice is in effect, because "what preprocessing does this assume" is the first
+  question when a model underperforms.
+
+  **This changes what an Ultralytics classifier is fed when loaded with the
+  defaults.** Those models were being run degraded, so this corrects them rather
+  than breaking them.
 
 - **`fuse_detect_classify` picks the classifier's normalization from the
   classifier.** The default was ImageNet for everybody, which is right for a

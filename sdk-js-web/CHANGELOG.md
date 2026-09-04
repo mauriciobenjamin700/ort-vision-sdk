@@ -7,6 +7,69 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-09-04
+
+### Changed
+
+- **`Classifier` picks its normalization from the model.** The default was the
+  ImageNet mean and deviation for everybody, which is right for a
+  torchvision-style model and wrong for an Ultralytics one — its classification
+  head consumes raw `[0, 1]`. Loading a `YOLO(...).export(format="onnx")`
+  classifier with the old default fed it a tensor it never saw in training, and
+  nothing said so: no exception, no warning, a prediction of exactly the right
+  shape that is simply worse.
+
+  The answer was already in the file — every Ultralytics export stamps
+  `author: Ultralytics` and `task: classify` into its metadata, the same block
+  the class names already came from. The new `normalization` option defaults to
+  `"auto"`, which reads it and picks: `"ultralytics"` (identity) for that export,
+  `"imagenet"` for anything else. `"imagenet"`, `"ultralytics"` and `"none"` name
+  the presets explicitly, `mean`/`std` still override, and passing both throws
+  `RangeError` rather than silently preferring one. Supplying only one of
+  `mean`/`std` now leaves the other at the preset value.
+  `classifier.normalization` reports what is in effect.
+
+  **This changes what an Ultralytics classifier is fed when loaded with the
+  defaults.** Those models were being run degraded, so the change corrects them
+  rather than breaking them.
+
+  Mirrors the same change in `ort-vision-sdk` 0.9.0 (Python), including the
+  build-time `fuse_detect_classify`.
+
+### Fixed
+
+- **`OrtSession.providers` no longer names a provider this browser cannot run.**
+  It held the result of `resolveProviders(...)` — the list that was *asked for* —
+  and ORT-Web falls back in silence, so a page requesting `webgpu` on a device
+  without it ran on WASM several times slower with nothing in the console.
+
+  ORT-Web exposes no equivalent of Node's `getProviders()`, so the effective
+  provider cannot be read back. What the browser does answer is whether the
+  underlying API exists at all, and the new `detectProviders` uses that:
+  `webgpu` survives only where `navigator.gpu` returns an adapter, `webnn` only
+  where `navigator.ml` exists, and anything untestable is kept rather than
+  guessed away. `providers` now reports that narrowed list — best-effort, so an
+  entry means "not ruled out", not "confirmed" — and the requested list is
+  preserved as the new `requestedProviders`. Naming a provider explicitly and
+  not getting it emits a `console.warn`; the default list falling back stays
+  quiet, which is what it is for.
+
+  Mirrors the same fix in `ort-vision-sdk` 0.9.0 (Python), where ORT does report
+  the effective list and it is read back directly.
+
+- **The changelog's link table is no longer stuck at 0.7.0.** `[Unreleased]`
+  compared against `web-v0.7.0`, so the shipped 0.7.1 read as unreleased work,
+  and `[0.7.1]` had no link definition at all — it rendered as literal text.
+
+### Documentation
+
+- **`OUTPUT_BOXES` states which box a fused pipeline reports.** A file fused by
+  `ort-vision-sdk` 0.9.0 or later reports the box that was actually classified,
+  clamped to the image the crop came from; older files report the raw box, which
+  draws a rectangle wider than the region the classifier saw. No runtime change
+  on this side — the semantics live in the graph — but consumers drawing that
+  rectangle need to know which file they have.
+
 ## [0.7.1] - 2026-08-14
 
 ### Fixed
@@ -535,7 +598,9 @@ console.log(r.boxes.xyxy, r.boxes.cls, r.boxes.conf, r.names);
 - Execution-provider resolution defaulting to `["webgpu", "wasm"]`.
 - Public types mirroring the Python SDK: `BoundingBox`, `ClassProbability`, `ClassificationResult`, `DetectionResult`, `RGBImage`.
 
-[Unreleased]: https://github.com/mauriciobenjamin700/ort-vision-sdk/compare/web-v0.7.0...HEAD
+[Unreleased]: https://github.com/mauriciobenjamin700/ort-vision-sdk/compare/web-v0.8.0...HEAD
+[0.8.0]: https://github.com/mauriciobenjamin700/ort-vision-sdk/compare/web-v0.7.1...web-v0.8.0
+[0.7.1]: https://github.com/mauriciobenjamin700/ort-vision-sdk/compare/web-v0.7.0...web-v0.7.1
 [0.7.0]: https://github.com/mauriciobenjamin700/ort-vision-sdk/compare/web-v0.6.1...web-v0.7.0
 [0.6.1]: https://github.com/mauriciobenjamin700/ort-vision-sdk/compare/web-v0.6.0...web-v0.6.1
 [0.6.0]: https://github.com/mauriciobenjamin700/ort-vision-sdk/compare/web-v0.5.1...web-v0.6.0

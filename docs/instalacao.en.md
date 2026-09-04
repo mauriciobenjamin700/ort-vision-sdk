@@ -102,6 +102,28 @@ runtime so that you stay in control of the version and the bundle.
 node -e "import('@mauriciobenjamin700/ort-vision-sdk-web').then(m => console.log(Object.keys(m)))"
 ```
 
+And in the browser, confirm **where** inference actually ran:
+
+```typescript
+const det = await Detector.create("/models/yolov8n.onnx", {
+  providers: ["webgpu"],
+});
+
+console.log(det.session.requestedProviders);  // ["webgpu"] — what was asked for
+console.log(det.session.providers);           // what this browser can offer
+```
+
+!!! danger "Available WebGPU ≠ loadable WebGPU"
+    ORT-Web exposes **no** equivalent of Node's `getProviders()`: there is no way
+    to ask which provider a session ended up on. A page that asks for `webgpu` on
+    a device without it runs on WASM several times slower, with no error at all.
+
+    From 0.8.0 the SDK narrows the requested list by what the browser can
+    actually offer (`navigator.gpu` existing **and** returning an adapter), and
+    naming a provider you do not get emits a `console.warn`. It is best-effort: a
+    provider that survives the check can still fail inside ORT for a reason the
+    browser does not surface.
+
 ## Next steps
 
 - [Quick start](inicio-rapido.md) — first examples side by side.

@@ -20,7 +20,7 @@ por imagem. Cada tarefa expõe um alias `run()`.
 
 | Tipo | Para |
 | --- | --- |
-| `ClassifierOptions` / `ClassifierPredictOptions` | construção / `predict` do `Classifier` (`labels`, `numClasses`, `inputSize`, `applySoftmax`, `providers`; `topK` no predict) |
+| `ClassifierOptions` / `ClassifierPredictOptions` | construção / `predict` do `Classifier` (`labels`, `numClasses`, `inputSize`, `normalization`, `mean`/`std`, `applySoftmax`, `providers`; `topK` no predict) |
 | `DetectorOptions` / `DetectorPredictOptions` | `Detector` (`head`, `labels`, `inputSize`, `confThreshold`, `iouThreshold`; overrides + `classes` no predict) |
 | `SegmenterOptions` / `SegmenterPredictOptions` | `Segmenter` (+ `maskThreshold`) |
 | `DetectorHead` (`"yolo"`) / `SegmenterHead` (`"yolo-seg"`) | famílias de decoder |
@@ -61,8 +61,12 @@ Tipos/classes por instância: `DetectionResult`, `SegmentationResult`,
 | `COCO_CLASSES` | As 80 classes do preset COCO. |
 | `DEFAULT_PROVIDERS` | `["webgpu", "wasm"]`. |
 | `resolveProviders(...)` | Resolve a lista de providers para nomes do ORT-Web. |
+| `detectProviders(...)` | Estreita a lista pedida pelo que o navegador consegue oferecer (WebGPU precisa de adapter). |
+| `Normalization` / `resolveNormalization(...)` / `isUltralyticsClassifier(...)` | Qual preprocessamento o classificador espera, lido dos metadados do modelo. |
 | `OrtSession` / `OrtSessionOptions` / `ModelSource` | Sessão de baixo nível. |
 | `OrtSession.inputShape` / `.inputShapes` | Shapes declarados pelo grafo, eixos dinâmicos como `null`. |
+| `OrtSession.providers` | Providers que este navegador pode oferecer — best-effort, o ORT-Web não reporta o efetivo. |
+| `OrtSession.requestedProviders` | Providers que foram pedidos, depois dos defaults. |
 | `OrtSession.release()` | Libera a sessão nativa (necessário ao descartar uma sessão com a página viva). |
 | `task.inputSize` | Resolução em que a tarefa realmente pré-processa. |
 | `task.warmup(runs?)` | Roda o modelo com tensor zerado para pagar a compilação de shaders adiantado. |

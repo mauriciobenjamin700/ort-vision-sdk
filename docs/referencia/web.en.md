@@ -20,7 +20,7 @@ per image. Each task exposes a `run()` alias.
 
 | Type | For |
 | --- | --- |
-| `ClassifierOptions` / `ClassifierPredictOptions` | `Classifier` construction / `predict` (`labels`, `numClasses`, `inputSize`, `applySoftmax`, `providers`; `topK` on predict) |
+| `ClassifierOptions` / `ClassifierPredictOptions` | `Classifier` construction / `predict` (`labels`, `numClasses`, `inputSize`, `normalization`, `mean`/`std`, `applySoftmax`, `providers`; `topK` on predict) |
 | `DetectorOptions` / `DetectorPredictOptions` | `Detector` (`head`, `labels`, `inputSize`, `confThreshold`, `iouThreshold`; overrides + `classes` on predict) |
 | `SegmenterOptions` / `SegmenterPredictOptions` | `Segmenter` (+ `maskThreshold`) |
 | `DetectorHead` (`"yolo"`) / `SegmenterHead` (`"yolo-seg"`) | decoder families |
@@ -61,8 +61,12 @@ Per-instance types/classes: `DetectionResult`, `SegmentationResult`,
 | `COCO_CLASSES` | The 80 classes of the COCO preset. |
 | `DEFAULT_PROVIDERS` | `["webgpu", "wasm"]`. |
 | `resolveProviders(...)` | Resolves the provider list into ORT-Web names. |
+| `detectProviders(...)` | Narrows the requested list by what the browser can offer (WebGPU needs an adapter). |
+| `Normalization` / `resolveNormalization(...)` / `isUltralyticsClassifier(...)` | Which preprocessing the classifier expects, read from the model metadata. |
 | `OrtSession` / `OrtSessionOptions` / `ModelSource` | Low-level session. |
 | `OrtSession.inputShape` / `.inputShapes` | Shapes the graph declares, dynamic axes as `null`. |
+| `OrtSession.providers` | Providers this browser can offer — best-effort; ORT-Web does not report the effective one. |
+| `OrtSession.requestedProviders` | Providers that were asked for, after defaults. |
 | `OrtSession.release()` | Frees the native session (needed when discarding a session while the page lives on). |
 | `task.inputSize` | The resolution the task actually preprocesses to. |
 | `task.warmup(runs?)` | Runs the model on a zero-filled tensor to pay shader compilation up front. |

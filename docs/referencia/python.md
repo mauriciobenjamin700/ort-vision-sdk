@@ -72,6 +72,8 @@ metadados, com os defaults antigos (224/640, preset COCO) como fallback. Ver
 | `OrtSession.input_shape` | Shape declarado da primeira entrada (eixos dinâmicos como string). |
 | `OrtSession.providers` | Providers que o ORT **registrou** — a resposta a "onde isto está rodando". |
 | `OrtSession.requested_providers` | Providers que foram **pedidos**, depois de expandir aliases e da auto-seleção. |
+| `Normalization` / `resolve_normalization(...)` / `is_ultralytics_classifier(...)` | Qual preprocessamento o classificador espera, lido dos metadados do modelo. |
+| `Classifier.normalization` | Nome da normalização em vigor (`imagenet`, `ultralytics`, `none`, `custom`). |
 
 ## Envelopes de resultado
 

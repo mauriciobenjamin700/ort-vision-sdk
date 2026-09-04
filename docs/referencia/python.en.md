@@ -70,6 +70,8 @@ fallbacks. See [The model decides](../guia/modelo.en.md).
 | `OrtSession.input_shape` | Declared shape of the first input (dynamic axes as strings). |
 | `OrtSession.providers` | Providers ORT **registered** — the answer to "where is this running". |
 | `OrtSession.requested_providers` | Providers that were **asked for**, after alias expansion and auto-selection. |
+| `Normalization` / `resolve_normalization(...)` / `is_ultralytics_classifier(...)` | Which preprocessing the classifier expects, read from the model metadata. |
+| `Classifier.normalization` | Name of the normalization in effect (`imagenet`, `ultralytics`, `none`, `custom`). |
 
 ## Result envelopes
 

@@ -47,7 +47,7 @@ from ort_vision_sdk.types import (
     SegmentationResult,
 )
 
-__version__: str = "0.8.0"
+__version__: str = "0.9.0"
 
 __all__: list[str] = [
     "COCO_CLASSES",

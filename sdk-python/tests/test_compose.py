@@ -793,3 +793,79 @@ class TestNormalizationPresets:
     def test_rejects_an_unknown_preset(self, tmp_path: Path) -> None:
         with pytest.raises(ValueError, match="normalization must be one of"):
             self._fuse_with(tmp_path, ultralytics=False, normalization="torchvision")
+
+
+class TestOriginalCropSourceGeometry:
+    """The ``"original"`` crop source under a letterbox that actually pads."""
+
+    def _fused(self, tmp_path: Path, **kwargs: object) -> Path:
+        """Fuse an edge-box detector for the full-resolution crop source.
+
+        Args:
+            tmp_path: Directory to write the three models into.
+            **kwargs: Overrides forwarded to ``fuse_detect_classify``.
+
+        Returns:
+            Path: The fused model.
+        """
+        detector = _write_edge_detector(
+            tmp_path / "orig_det.onnx", boxes=[(0.0, 20.0, 32.0, 24.0)]
+        )
+        classifier = _write_classifier(tmp_path / "orig_clf.onnx")
+        output = tmp_path / "orig_fused.onnx"
+        defaults: dict[str, object] = {
+            "mean": (0.0, 0.0, 0.0),
+            "std": (1.0, 1.0, 1.0),
+            "sampling_ratio": 1,
+            "max_detections": 3,
+            "crop_source": "original",
+        }
+        defaults.update(kwargs)
+        fuse_detect_classify(detector, classifier, output, **defaults)  # type: ignore[arg-type]
+        return output
+
+    def test_round_trips_a_padded_letterbox(self, tmp_path: Path) -> None:
+        """With a non-zero pad, the reported box is still the ROI mapped back.
+
+        The detector's box is ``[-16, 8, 16, 32]`` in letterbox space. Undoing a
+        letterbox of scale 0.5 and pad ``(8, 4)`` puts it at ``[-48, 8, 16, 56]``
+        in source pixels, the clamp pulls the left edge to 0, and mapping that
+        back through the same letterbox gives ``[8, 8, 16, 32]`` — which is
+        exactly the left edge of the padded frame, not the -16 the detector
+        proposed.
+        """
+        fused = self._fused(tmp_path)
+        source = np.zeros((1, 3, _IMAGE_SIZE * 2, _IMAGE_SIZE * 2), dtype=np.float32)
+        source[0, 0, 8:56, 0:16] = 1.0
+        boxes, _, _, count, probs = _session(fused).run(
+            None,
+            {
+                "images": _corner_image(),
+                "source_image": source,
+                "letterbox_scale": np.asarray([0.5], dtype=np.float32),
+                "letterbox_pad": np.asarray([8.0, 4.0], dtype=np.float32),
+            },
+        )
+
+        assert count[0] == 1
+        np.testing.assert_allclose(boxes[0], [8.0, 8.0, 16.0, 32.0], atol=1e-5)
+        np.testing.assert_allclose(probs[0][0], 1.0, atol=1e-5)
+
+    def test_keeps_the_padded_rows_zero(self, tmp_path: Path) -> None:
+        """Padding runs after the round trip, so surplus rows are still zero."""
+        fused = self._fused(tmp_path)
+        source = np.zeros((1, 3, _IMAGE_SIZE * 2, _IMAGE_SIZE * 2), dtype=np.float32)
+        boxes, scores, classes, count, _ = _session(fused).run(
+            None,
+            {
+                "images": _corner_image(),
+                "source_image": source,
+                "letterbox_scale": np.asarray([0.5], dtype=np.float32),
+                "letterbox_pad": np.asarray([8.0, 4.0], dtype=np.float32),
+            },
+        )
+
+        assert count[0] == 1
+        np.testing.assert_allclose(boxes[1:], 0.0)
+        np.testing.assert_allclose(scores[1:], 0.0)
+        np.testing.assert_array_equal(classes[1:], 0)

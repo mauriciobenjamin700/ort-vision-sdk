@@ -13,15 +13,9 @@ from ort_vision_sdk.core.timing import SpeedTimer
 from ort_vision_sdk.graph import model_names, resolve_input_size
 from ort_vision_sdk.io.image import ImageInput, load_image
 from ort_vision_sdk.labels import LabelSpec, resolve_labels
+from ort_vision_sdk.normalization import Normalization, resolve_normalization
 from ort_vision_sdk.postprocess.classification import softmax, topk
-from ort_vision_sdk.preprocess.image import (
-    IMAGENET_MEAN,
-    IMAGENET_STD,
-    add_batch_dim,
-    normalize,
-    resize,
-    to_chw,
-)
+from ort_vision_sdk.preprocess.image import add_batch_dim, normalize, resize, to_chw
 from ort_vision_sdk.results import ClassificationResults, Probs
 from ort_vision_sdk.tasks.base import VisionTask
 from ort_vision_sdk.types import ClassificationResult, ClassProbability, ImageArray
@@ -68,8 +62,9 @@ class Classifier(VisionTask):
         session_options: ort.SessionOptions | None = None,
         backend: InferenceBackend | None = None,
         input_size: tuple[int, int] | None = None,
-        mean: tuple[float, float, float] = IMAGENET_MEAN,
-        std: tuple[float, float, float] = IMAGENET_STD,
+        normalization: Normalization = "auto",
+        mean: tuple[float, float, float] | None = None,
+        std: tuple[float, float, float] | None = None,
         apply_softmax: bool = True,
     ) -> None:
         """Initialize the classifier.
@@ -95,11 +90,27 @@ class Classifier(VisionTask):
                 that declares a static size always wins, since that is the only
                 shape ONNX Runtime will accept. ``None`` (default) means "ask
                 the graph, fall back to ``(224, 224)``".
-            mean: Per-channel RGB mean used for normalization.
-            std: Per-channel RGB standard deviation used for normalization.
+            normalization: Which preprocessing this model expects — see
+                :data:`~ort_vision_sdk.normalization.Normalization`. ``"auto"``
+                (default) reads the model's own export metadata and picks
+                ``"ultralytics"`` (raw ``[0, 1]``) for an Ultralytics
+                classification head, ``"imagenet"`` for everything else.
+            mean: Per-channel RGB mean, overriding the preset. ``None``
+                (default) takes it from ``normalization``.
+            std: Per-channel RGB standard deviation, overriding the preset.
+                ``None`` (default) takes it from ``normalization``.
             apply_softmax: If ``True`` (default), apply softmax to the raw model
                 output before deriving probabilities. Set to ``False`` for
                 models whose final layer is already a probability distribution.
+
+        Raises:
+            ValueError: If ``normalization`` names an unknown preset, or names
+                one while ``mean``/``std`` are also given.
+
+        Warns:
+            UserWarning: If the model is an Ultralytics export and the
+                ``mean``/``std`` supplied are not the identity it was trained
+                with.
         """
         super().__init__(
             model_path,
@@ -112,16 +123,34 @@ class Classifier(VisionTask):
             requested=input_size,
             fallback=(224, 224),
         )
-        self._mean: tuple[float, float, float] = mean
-        self._std: tuple[float, float, float] = std
+        metadata = read_metadata(self._session)
+        self._normalization: str
+        self._mean: tuple[float, float, float]
+        self._std: tuple[float, float, float]
+        self._normalization, self._mean, self._std = resolve_normalization(
+            metadata, normalization=normalization, mean=mean, std=std
+        )
         self._apply_softmax: bool = apply_softmax
 
         num_classes = self._infer_num_classes()
-        spec: LabelSpec = (
-            labels if labels is not None else model_names(read_metadata(self._session))
-        )
+        spec: LabelSpec = labels if labels is not None else model_names(metadata)
         self._labels: tuple[str, ...] = resolve_labels(spec, num_classes=num_classes)
         self._names: dict[int, str] = {i: name for i, name in enumerate(self._labels)}
+
+    @property
+    def normalization(self) -> str:
+        """Which preprocessing this classifier applies to every image.
+
+        One of the :data:`~ort_vision_sdk.normalization.Normalization` preset
+        names, or ``"custom"`` when the caller supplied ``mean``/``std``
+        directly. Worth reading when a model underperforms: feeding a classifier
+        a differently prepared tensor than it was trained on degrades it without
+        raising anything, so "what does this assume" is the first question.
+
+        Returns:
+            str: The name of the normalization in effect.
+        """
+        return self._normalization
 
     @property
     def input_size(self) -> tuple[int, int]:

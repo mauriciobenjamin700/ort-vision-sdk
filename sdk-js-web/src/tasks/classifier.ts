@@ -10,6 +10,10 @@ import { type ImageInput, loadImage } from "../io/image.js";
 import { classificationNumClasses, resolveInputSize } from "../core/graph.js";
 import { modelNames } from "../core/metadata.js";
 import { type LabelSpec, resolveLabels } from "../labels.js";
+import {
+  type Normalization,
+  resolveNormalization,
+} from "../normalization.js";
 import { softmax, topK } from "../postprocess/classification.js";
 import { toFloat32Tensor } from "../preprocess/image.js";
 import { ResizePipeline, zeroTensorData } from "../preprocess/pipeline.js";
@@ -20,9 +24,6 @@ import {
   type ClassificationResult,
   type RGBImage,
 } from "../types.js";
-
-const IMAGENET_MEAN: readonly [number, number, number] = [0.485, 0.456, 0.406];
-const IMAGENET_STD: readonly [number, number, number] = [0.229, 0.224, 0.225];
 
 export interface ClassifierOptions extends OrtSessionOptions {
   /**
@@ -49,9 +50,17 @@ export interface ClassifierOptions extends OrtSessionOptions {
    * Runtime will accept. Defaults to `[224, 224]`.
    */
   readonly inputSize?: readonly [number, number];
-  /** Per-channel RGB mean used for normalization. Defaults to ImageNet. */
+  /**
+   * Which preprocessing this model expects — see {@link Normalization}.
+   *
+   * Defaults to `"auto"`, which reads the model's own export metadata and picks
+   * `"ultralytics"` (raw `[0, 1]`) for an Ultralytics classification head and
+   * `"imagenet"` for everything else.
+   */
+  readonly normalization?: Normalization;
+  /** Per-channel RGB mean, overriding the preset. Defaults to the preset's. */
   readonly mean?: readonly [number, number, number];
-  /** Per-channel RGB standard deviation. Defaults to ImageNet. */
+  /** Per-channel RGB standard deviation, overriding the preset. */
   readonly std?: readonly [number, number, number];
   /**
    * If `true` (default), apply softmax to the raw model output. Set to
@@ -100,8 +109,22 @@ export class Classifier extends VisionTask {
     private readonly _mean: readonly [number, number, number],
     private readonly _std: readonly [number, number, number],
     private readonly _applySoftmax: boolean,
+    private readonly _normalization: string,
   ) {
     super(session);
+  }
+
+  /**
+   * Which preprocessing this classifier applies to every image.
+   *
+   * One of the {@link Normalization} preset names, or `"custom"` when the caller
+   * supplied `mean`/`std` directly. Worth reading when a model underperforms:
+   * feeding a classifier a differently prepared tensor than it was trained on
+   * degrades it without throwing anything, so "what does this assume" is the
+   * first question.
+   */
+  get normalization(): string {
+    return this._normalization;
   }
 
   private _pipelineCache: ResizePipeline | null = null;
@@ -141,12 +164,24 @@ export class Classifier extends VisionTask {
     return this._pipelineCache;
   }
 
-  /** Load the model and resolve labels. */
+  /**
+   * Load the model, resolve labels, and settle the preprocessing.
+   *
+   * @param model The model source — a URL, or the bytes.
+   * @param options Labels, input size, normalization, and session options.
+   * @throws {RangeError} If `normalization` names an unknown preset, or names
+   *   one while `mean`/`std` are also given.
+   */
   static async create(
     model: ModelSource,
     options: ClassifierOptions = {},
   ): Promise<Classifier> {
     const session = await OrtSession.create(model, options);
+    const normalization = resolveNormalization(session.metadata, {
+      normalization: options.normalization,
+      mean: options.mean,
+      std: options.std,
+    });
     const numClasses =
       options.numClasses ?? classificationNumClasses(session.outputShape) ?? undefined;
     const labels = resolveLabels(options.labels ?? modelNames(session.metadata), {
@@ -165,9 +200,10 @@ export class Classifier extends VisionTask {
         requested: options.inputSize,
         fallback: [224, 224],
       }),
-      options.mean ?? IMAGENET_MEAN,
-      options.std ?? IMAGENET_STD,
+      normalization.mean,
+      normalization.std,
       options.applySoftmax ?? true,
+      normalization.name,
     );
   }
 

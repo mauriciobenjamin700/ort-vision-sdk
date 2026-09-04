@@ -60,6 +60,17 @@ export {
 export { modelNames, parseNames, readModelMetadata } from "./core/metadata.js";
 export { DEFAULT_PROVIDERS, resolveProviders } from "./core/providers.js";
 export { type Speed, SpeedTimer } from "./core/timing.js";
+export {
+  CUSTOM_NORMALIZATION,
+  IDENTITY_MEAN,
+  IDENTITY_STD,
+  IMAGENET_MEAN,
+  IMAGENET_STD,
+  type Normalization,
+  type ResolvedNormalization,
+  isUltralyticsClassifier,
+  resolveNormalization,
+} from "./normalization.js";
 
 export { type ImageInput, loadImage } from "./io/image.js";
 

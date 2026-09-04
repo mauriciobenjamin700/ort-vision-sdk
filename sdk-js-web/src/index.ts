@@ -58,7 +58,7 @@ export {
   spatialInputSize,
 } from "./core/graph.js";
 export { modelNames, parseNames, readModelMetadata } from "./core/metadata.js";
-export { DEFAULT_PROVIDERS, resolveProviders } from "./core/providers.js";
+export { DEFAULT_PROVIDERS, detectProviders, resolveProviders } from "./core/providers.js";
 export { type Speed, SpeedTimer } from "./core/timing.js";
 export {
   CUSTOM_NORMALIZATION,

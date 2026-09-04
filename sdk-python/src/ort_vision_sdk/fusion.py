@@ -81,7 +81,14 @@ INPUT_PAD = "letterbox_pad"
 """Name of the ``(2,)`` float32 ``(pad_left, pad_top)``. Only with ``crop_source == "original"``."""
 
 OUTPUT_BOXES = "boxes"
-"""Name of the ``(K, 4)`` float32 xyxy output, in **letterboxed** input pixels."""
+"""Name of the ``(K, 4)`` float32 xyxy output, in **letterboxed** input pixels.
+
+This is the box that was actually classified: clamped to the image the crop was
+taken from, exactly as RoiAlign received it. Drawing it and looking at the crop
+therefore show the same region — which they did not before 0.9.0, when a box
+that ran off the frame was reported whole and cropped clipped. Padded rows,
+which ``num_detections`` marks as not real, stay all-zero.
+"""
 
 OUTPUT_SCORES = "scores"
 """Name of the ``(K,)`` float32 detection-confidence output."""

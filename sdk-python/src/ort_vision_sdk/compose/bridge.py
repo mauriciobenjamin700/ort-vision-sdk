@@ -22,7 +22,9 @@ The op mapping is the interesting part:
   ``K``) followed by ``Pad``. This is what keeps every shape in the graph
   static, which in turn is what lets TensorRT/NNAPI/WebGPU compile it, and what
   removes the zero-detection edge case — an empty batch never reaches the
-  classifier because the batch is always ``K``.
+  classifier because the batch is always ``K``. Padding runs *after* the boxes
+  are clamped, so the reported ``boxes`` output is the very tensor RoiAlign
+  crops from and the surplus rows are still exactly zero.
 
 One deliberate behavioural difference from
 :func:`~ort_vision_sdk.postprocess.detection.decode_yolo`: the Python decoder
@@ -302,16 +304,36 @@ def build_bridge(
 
     if crop_source == "original":
         bridge.inputs.extend(_source_inputs(channels))
-        roi_xyxy = _undo_letterbox(b, boxes_xyxy, scale=INPUT_SCALE, pad=INPUT_PAD)
         source = INPUT_SOURCE
+        rois = _clamp_to_tensor(
+            b,
+            _undo_letterbox(b, boxes_xyxy, scale=INPUT_SCALE, pad=INPUT_PAD),
+            tensor=source,
+        )
+        reported = _redo_letterbox(b, rois, scale=INPUT_SCALE, pad=INPUT_PAD)
     else:
         source = detector_input
-        roi_xyxy = boxes_xyxy
+        rois = _clamp_to_tensor(b, boxes_xyxy, tensor=source)
+        reported = rois
+
+    if max_detections is not None:
+        padding = _padding(b, keep=num_detections, max_detections=max_detections)
+        padded_rois = _pad_boxes(b, rois, padding=padding, max_detections=max_detections)
+        reported = (
+            padded_rois
+            if reported == rois
+            else _pad_boxes(b, reported, padding=padding, max_detections=max_detections)
+        )
+        rois = _ensure_min_extent(b, padded_rois)
+        scores, classes = _pad_columns(
+            b, scores=scores, classes=classes, padding=padding, max_detections=max_detections
+        )
+    boxes_xyxy = reported
 
     crops = _crop_and_resize(
         b,
         source=source,
-        rois=_clamp_to_tensor(b, roi_xyxy, tensor=source),
+        rois=rois,
         crop_size=crop_size,
         sampling_ratio=sampling_ratio,
     )
@@ -358,7 +380,7 @@ def _select_boxes(
     max_boxes_per_class: int,
     max_detections: int | None,
 ) -> tuple[str, str, str, str]:
-    """Decode the YOLO head, suppress, rank by confidence and pad to ``K``.
+    """Decode the YOLO head, suppress and rank the survivors by confidence.
 
     ``NonMaxSuppression`` emits an ``(S, 3)`` selection matrix of
     ``(batch, class, box)`` triples grouped by class, not by score, so the rows
@@ -366,20 +388,26 @@ def _select_boxes(
     keep whichever classes happen to come first rather than the ``K`` most
     confident detections.
 
+    Rows come back **unpadded**, at whatever length survived. Padding happens in
+    :func:`build_bridge`, after the boxes have been clamped, so that the clamp
+    only ever touches real detections and the surplus rows stay exactly zero in
+    the reported output.
+
     Args:
         b: The node accumulator.
         detector_output: Name of the ``(1, 4 + nc, N)`` head tensor.
         conf_threshold: Score threshold for NMS.
         iou_threshold: IoU threshold for NMS.
         max_boxes_per_class: NMS per-class cap.
-        max_detections: Fixed row count, or ``None`` to keep rows dynamic.
+        max_detections: Cap on the number of ranked rows, or ``None`` to keep
+            every survivor.
 
     Returns:
         tuple[str, str, str, str]: Names of ``(boxes_xyxy, scores, classes,
-        num_detections)``. Boxes are corner-form in the detector's own
-        letterboxed pixel space — the space the SDK's Python and TypeScript
-        runtimes already know how to map back — so both crop sources report
-        boxes identically.
+        num_detections)``, the first three with ``k <= K`` rows. Boxes are
+        corner-form in the detector's own letterboxed pixel space — the space
+        the SDK's Python and TypeScript runtimes already know how to map back —
+        so both crop sources report boxes identically.
     """
     zero, four = b.const("zero", _i64(0)), b.const("four", _i64(4))
     end, axis1 = b.const("end", _i64(_INT64_MAX)), b.const("axis1", _i64(1))
@@ -425,18 +453,7 @@ def _select_boxes(
     )
     boxes_xyxy = _to_xyxy(b, b.op("Gather", [selected_boxes, ranking], axis=0))
     ranked_classes = b.op("Gather", [class_index, ranking], axis=0)
-
-    if max_detections is None:
-        return boxes_xyxy, ranked_scores, ranked_classes, keep
-
-    return _pad_to_fixed(
-        b,
-        boxes_xyxy=boxes_xyxy,
-        scores=ranked_scores,
-        classes=ranked_classes,
-        keep=keep,
-        max_detections=max_detections,
-    )
+    return boxes_xyxy, ranked_scores, ranked_classes, keep
 
 
 def _to_xyxy(b: _Builder, boxes_cxcywh: str) -> str:
@@ -484,16 +501,46 @@ def _split_columns(b: _Builder, boxes: str) -> tuple[str, str, str, str]:
     return columns[0], columns[1], columns[2], columns[3]
 
 
-def _pad_to_fixed(
-    b: _Builder,
-    *,
-    boxes_xyxy: str,
-    scores: str,
-    classes: str,
-    keep: str,
-    max_detections: int,
-) -> tuple[str, str, str, str]:
-    """Zero-pad every per-detection tensor up to exactly ``max_detections`` rows.
+@dataclass(frozen=True)
+class _Padding:
+    """The constants that zero-extend a ``k``-row tensor to ``K`` rows.
+
+    Attributes:
+        rows_2d: Name of the ``Pad`` argument for a ``(k, 4)`` tensor.
+        rows_1d: Name of the ``Pad`` argument for a ``(k,)`` tensor.
+        float_zero: Name of the float32 fill value.
+        int_zero: Name of the int64 fill value.
+    """
+
+    rows_2d: str
+    rows_1d: str
+    float_zero: str
+    int_zero: str
+
+
+def _padding(b: _Builder, *, keep: str, max_detections: int) -> _Padding:
+    """Build the padding constants for a run that kept ``keep`` of ``K`` rows.
+
+    Args:
+        b: The node accumulator.
+        keep: Name of the ``(1,)`` int64 tensor holding ``k``.
+        max_detections: The fixed row count ``K``.
+
+    Returns:
+        _Padding: The four names every ``Pad`` in the bridge shares.
+    """
+    zero = b.const("pad_zero", _i64(0))
+    missing = b.op("Sub", [b.const("target", _i64(max_detections)), keep])
+    return _Padding(
+        rows_2d=b.op("Concat", [zero, zero, missing, zero], axis=0),
+        rows_1d=b.op("Concat", [zero, missing], axis=0),
+        float_zero=b.const("pad_f32", np.asarray(0.0, dtype=np.float32)),
+        int_zero=b.const("pad_i64", np.asarray(0, dtype=np.int64)),
+    )
+
+
+def _pad_boxes(b: _Builder, boxes: str, *, padding: _Padding, max_detections: int) -> str:
+    """Zero-pad a ``(k, 4)`` box tensor up to exactly ``max_detections`` rows.
 
     Padding is what makes the classifier's batch static, and it is also what
     removes the empty-batch case: with nothing detected the graph still hands
@@ -505,45 +552,57 @@ def _pad_to_fixed(
 
     Args:
         b: The node accumulator.
-        boxes_xyxy: Name of the ``(k, 4)`` box tensor.
-        scores: Name of the ``(k,)`` confidence tensor.
-        classes: Name of the ``(k,)`` class tensor.
-        keep: Name of the ``(1,)`` int64 tensor holding ``k``.
+        boxes: Name of the ``(k, 4)`` tensor.
+        padding: The shared padding constants.
         max_detections: The fixed row count ``K``.
 
     Returns:
-        tuple[str, str, str, str]: Names of the padded ``(boxes, scores,
-        classes, num_detections)`` tensors.
+        str: Name of the ``(K, 4)`` padded tensor.
     """
-    zero = b.const("pad_zero", _i64(0))
-    missing = b.op("Sub", [b.const("target", _i64(max_detections)), keep])
-    pads_2d = b.op("Concat", [zero, zero, missing, zero], axis=0)
-    pads_1d = b.op("Concat", [zero, missing], axis=0)
-    float_zero = b.const("pad_f32", np.asarray(0.0, dtype=np.float32))
-    int_zero = b.const("pad_i64", np.asarray(0, dtype=np.int64))
-
-    padded_boxes = b.op(
+    return b.op(
         "Reshape",
         [
-            b.op("Pad", [boxes_xyxy, pads_2d, float_zero]),
+            b.op("Pad", [boxes, padding.rows_2d, padding.float_zero]),
             b.const("boxes_shape", _i64(max_detections, 4)),
         ],
     )
+
+
+def _pad_columns(
+    b: _Builder,
+    *,
+    scores: str,
+    classes: str,
+    padding: _Padding,
+    max_detections: int,
+) -> tuple[str, str]:
+    """Zero-pad the per-detection score and class vectors to ``max_detections``.
+
+    Args:
+        b: The node accumulator.
+        scores: Name of the ``(k,)`` float32 confidence tensor.
+        classes: Name of the ``(k,)`` int64 class tensor.
+        padding: The shared padding constants.
+        max_detections: The fixed row count ``K``.
+
+    Returns:
+        tuple[str, str]: Names of the padded ``(scores, classes)`` tensors.
+    """
     padded_scores = b.op(
         "Reshape",
         [
-            b.op("Pad", [scores, pads_1d, float_zero]),
+            b.op("Pad", [scores, padding.rows_1d, padding.float_zero]),
             b.const("scores_shape", _i64(max_detections)),
         ],
     )
     padded_classes = b.op(
         "Reshape",
         [
-            b.op("Pad", [classes, pads_1d, int_zero]),
+            b.op("Pad", [classes, padding.rows_1d, padding.int_zero]),
             b.const("classes_shape", _i64(max_detections)),
         ],
     )
-    return padded_boxes, padded_scores, padded_classes, keep
+    return padded_scores, padded_classes
 
 
 def _source_inputs(channels: int) -> list[onnx.ValueInfoProto]:
@@ -603,17 +662,58 @@ def _undo_letterbox(b: _Builder, boxes_xyxy: str, *, scale: str, pad: str) -> st
     )
 
 
+def _redo_letterbox(b: _Builder, boxes_xyxy: str, *, scale: str, pad: str) -> str:
+    """Map full-resolution box coordinates back into letterbox space.
+
+    The exact inverse of :func:`_undo_letterbox`, and the reason it exists is
+    the ``"original"`` crop source: the ROI handed to RoiAlign is clamped in the
+    source image's own pixels, while ``boxes`` is documented — and consumed by
+    both runtimes — in the detector's letterboxed pixels. Mapping the clamped
+    ROI forward is what lets the reported box be *the same rectangle* that was
+    classified, rather than a second, unclamped estimate of it.
+
+    Args:
+        b: The node accumulator.
+        boxes_xyxy: Name of the ``(K, 4)`` corner-form tensor in source pixels.
+        scale: Name of the ``(1,)`` letterbox scale input.
+        pad: Name of the ``(2,)`` ``(pad_left, pad_top)`` input.
+
+    Returns:
+        str: Name of the ``(K, 4)`` tensor in letterboxed pixel coordinates.
+    """
+    pad_x = b.op("Gather", [pad, b.const("repad_x_idx", _i64(0))], axis=0)
+    pad_y = b.op("Gather", [pad, b.const("repad_y_idx", _i64(1))], axis=0)
+    x1, y1, x2, y2 = _split_columns(b, boxes_xyxy)
+    return b.op(
+        "Concat",
+        [
+            b.op("Add", [b.op("Mul", [x1, scale]), pad_x]),
+            b.op("Add", [b.op("Mul", [y1, scale]), pad_y]),
+            b.op("Add", [b.op("Mul", [x2, scale]), pad_x]),
+            b.op("Add", [b.op("Mul", [y2, scale]), pad_y]),
+        ],
+        axis=1,
+    )
+
+
 def _clamp_to_tensor(b: _Builder, boxes_xyxy: str, *, tensor: str) -> str:
     """Clamp boxes into ``tensor``, keeping every ROI at least one pixel wide.
 
     Two things are enforced. Coordinates are clipped to the tensor's spatial
     extent, because a detector can place a box partly outside the image and
     RoiAlign would otherwise sample undefined territory. And the far corner is
-    pushed to at least one pixel past the near corner, so the padded rows —
-    whose boxes are all-zero — and any genuinely degenerate detection still
-    produce a resamplable region instead of a zero-area one. The near corner is
-    clipped two pixels short of the edge precisely so that pushing the far
-    corner out cannot leave the tensor.
+    pushed to at least one pixel past the near corner, so a genuinely degenerate
+    detection still produces a resamplable region instead of a zero-area one.
+    The near corner is clipped one pixel short of the edge precisely so that
+    pushing the far corner out cannot leave the tensor.
+
+    The clip runs to ``W``, not ``W - 1``. With
+    ``coordinate_transformation_mode="half_pixel"`` and ``spatial_scale=1.0``
+    RoiAlign's continuous domain is ``[0, W]`` — pixel centres sit at
+    ``0.5 … W - 0.5`` — so stopping at ``W - 1`` discarded the last full column
+    of valid image. That is a rounding error on a box in open space and a real
+    loss on one that touches the frame edge, which is the common case for a
+    subject the photographer framed tightly.
 
     Args:
         b: The node accumulator.
@@ -633,18 +733,50 @@ def _clamp_to_tensor(b: _Builder, boxes_xyxy: str, *, tensor: str) -> str:
 
     zero = b.const("clamp_zero", _f32(0.0))
     one = b.const("clamp_one", _f32(1.0))
-    two = b.const("clamp_two", _f32(2.0))
-    far_limit_x = b.op("Sub", [width, one])
-    far_limit_y = b.op("Sub", [height, one])
-    near_limit_x = b.op("Sub", [width, two])
-    near_limit_y = b.op("Sub", [height, two])
+    near_limit_x = b.op("Sub", [width, one])
+    near_limit_y = b.op("Sub", [height, one])
 
     x1, y1, x2, y2 = _split_columns(b, boxes_xyxy)
     near_x = b.op("Min", [b.op("Max", [x1, zero]), near_limit_x])
     near_y = b.op("Min", [b.op("Max", [y1, zero]), near_limit_y])
-    far_x = b.op("Max", [b.op("Min", [x2, far_limit_x]), b.op("Add", [near_x, one])])
-    far_y = b.op("Max", [b.op("Min", [y2, far_limit_y]), b.op("Add", [near_y, one])])
+    far_x = b.op("Max", [b.op("Min", [x2, width]), b.op("Add", [near_x, one])])
+    far_y = b.op("Max", [b.op("Min", [y2, height]), b.op("Add", [near_y, one])])
     return b.op("Concat", [near_x, near_y, far_x, far_y], axis=1)
+
+
+def _ensure_min_extent(b: _Builder, boxes_xyxy: str) -> str:
+    """Push each far corner at least one pixel past its near corner.
+
+    Applied to the ROI tensor *after* padding, and only there. A padded row is
+    all-zero, which is a zero-area region RoiAlign cannot resample; this turns
+    it into a degenerate but valid one-pixel box whose crop the runtime discards
+    anyway, because ``num_detections`` says the row is not real.
+
+    Rows that came through :func:`_clamp_to_tensor` are untouched: that function
+    already guarantees the same invariant, so re-applying it is a no-op on them.
+    Which is the point — the reported ``boxes`` can be padded from the very same
+    clamped tensor the crops are taken from, keeping the two exactly equal on
+    every real row while the surplus rows stay zero.
+
+    Args:
+        b: The node accumulator.
+        boxes_xyxy: Name of the ``(K, 4)`` corner-form tensor.
+
+    Returns:
+        str: Name of the ``(K, 4)`` tensor with every row at least one pixel wide.
+    """
+    one = b.const("extent_one", _f32(1.0))
+    x1, y1, x2, y2 = _split_columns(b, boxes_xyxy)
+    return b.op(
+        "Concat",
+        [
+            x1,
+            y1,
+            b.op("Max", [x2, b.op("Add", [x1, one])]),
+            b.op("Max", [y2, b.op("Add", [y1, one])]),
+        ],
+        axis=1,
+    )
 
 
 def _crop_and_resize(

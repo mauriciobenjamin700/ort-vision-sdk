@@ -56,7 +56,14 @@ export const INPUT_SCALE = "letterbox_scale";
 /** Name of the `[2]` float32 `[padLeft, padTop]`. Only with `cropSource === "original"`. */
 export const INPUT_PAD = "letterbox_pad";
 
-/** Name of the `[K, 4]` float32 xyxy output, in **letterboxed** input pixels. */
+/**
+ * Name of the `[K, 4]` float32 xyxy output, in **letterboxed** input pixels.
+ *
+ * A file fused by `ort-vision-sdk` 0.9.0 or later reports the box that was
+ * actually classified: clamped to the image the crop came from, exactly as
+ * RoiAlign received it. Older files report the raw box, so one that ran off the
+ * frame draws a rectangle wider than the region the classifier saw.
+ */
 export const OUTPUT_BOXES = "boxes";
 
 /** Name of the `[K]` float32 detection-confidence output. */

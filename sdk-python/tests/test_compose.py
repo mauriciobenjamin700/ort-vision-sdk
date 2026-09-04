@@ -79,6 +79,45 @@ def _write_detector(
     return path
 
 
+def _write_edge_detector(path: Path, *, boxes: list[tuple[float, float, float, float]]) -> Path:
+    """Write a detector whose head is exactly ``boxes``, all confident, all class 0.
+
+    Separate from :func:`_write_detector` because the interesting cases here are
+    boxes that leave the frame, which the shared fixture deliberately does not
+    have — its two boxes sit comfortably inside the image so the ranking tests
+    read cleanly.
+
+    Args:
+        path: Where to write the ``.onnx``.
+        boxes: ``(cx, cy, w, h)`` per anchor, in the detector's own pixel space.
+
+    Returns:
+        Path: ``path``, for chaining.
+    """
+    head = np.zeros((1, 5, len(boxes)), dtype=np.float32)
+    for index, box in enumerate(boxes):
+        head[0, :4, index] = box
+        head[0, 4, index] = 0.9
+
+    node = helper.make_node(
+        "Constant", [], ["head"], value=numpy_helper.from_array(head, name="head_value")
+    )
+    graph = helper.make_graph(
+        [node],
+        "edge_detector",
+        inputs=[
+            helper.make_tensor_value_info(
+                "images", TensorProto.FLOAT, [1, 3, _IMAGE_SIZE, _IMAGE_SIZE]
+            )
+        ],
+        outputs=[helper.make_tensor_value_info("head", TensorProto.FLOAT, [1, 5, len(boxes)])],
+    )
+    model = helper.make_model(graph, opset_imports=[helper.make_opsetid("", 17)])
+    model.ir_version = 9
+    onnx.save(model, str(path))
+    return path
+
+
 def _write_classifier(path: Path, *, opset: int = 17, with_softmax: bool = False) -> Path:
     """Write a classifier that reports each crop's per-channel mean.
 
@@ -117,6 +156,19 @@ def _write_classifier(path: Path, *, opset: int = 17, with_softmax: bool = False
     model.metadata_props.add(key="names", value=_CLASSIFIER_NAMES)
     onnx.save(model, str(path))
     return path
+
+
+def _corner_image() -> np.ndarray:
+    """Build an NCHW image whose top-left 16x16 corner is pure red.
+
+    Used by the clamping tests: a box that runs off the top-left corner clamps
+    to exactly this region, so a crop taken from the clamped box averages 1.0
+    while a crop taken from the raw box — which reaches into territory outside
+    the image — cannot.
+    """
+    image = np.zeros((1, 3, _IMAGE_SIZE, _IMAGE_SIZE), dtype=np.float32)
+    image[0, 0, 0:16, 0:16] = 1.0
+    return image
 
 
 def _marked_tensor() -> np.ndarray:
@@ -252,9 +304,7 @@ class TestFusedGraph:
 class TestOriginalCropSource:
     """Cropping from the full-resolution image instead of the letterboxed copy."""
 
-    def test_declares_the_letterbox_inputs(
-        self, models: tuple[Path, Path], tmp_path: Path
-    ) -> None:
+    def test_declares_the_letterbox_inputs(self, models: tuple[Path, Path], tmp_path: Path) -> None:
         session = _session(_fuse(models, tmp_path, crop_source="original"))
         assert [i.name for i in session.get_inputs()] == [
             "images",
@@ -403,9 +453,7 @@ class TestMetadata:
         self, models: tuple[Path, Path], tmp_path: Path
     ) -> None:
         fused = _fuse(models, tmp_path, detector_labels=["sheep", "goat"])
-        spec = FusionSpec.from_metadata(
-            dict(_session(fused).get_modelmeta().custom_metadata_map)
-        )
+        spec = FusionSpec.from_metadata(dict(_session(fused).get_modelmeta().custom_metadata_map))
         assert spec is not None
         assert spec.detector_names == {0: "sheep", 1: "goat"}
 
@@ -467,9 +515,7 @@ class TestRejections:
         classifier = tmp_path / "clf.onnx"
         _write_classifier(classifier)
         model = onnx.load(str(classifier))
-        model.graph.input.append(
-            helper.make_tensor_value_info("extra", TensorProto.FLOAT, [1, 3])
-        )
+        model.graph.input.append(helper.make_tensor_value_info("extra", TensorProto.FLOAT, [1, 3]))
         onnx.save(model, str(classifier))
 
         with pytest.raises(FusionError, match="exactly one input"):
@@ -558,3 +604,90 @@ class TestRuntimeIntegration:
     ) -> None:
         with pytest.raises(FusionError, match="no fused-pipeline metadata"):
             DetectClassify(models[0], providers=["cpu"])
+
+
+class TestBoxClamping:
+    """What the pipeline reports versus what it actually cropped."""
+
+    def _fused_edge(
+        self,
+        tmp_path: Path,
+        *,
+        boxes: list[tuple[float, float, float, float]],
+        **kwargs: object,
+    ) -> Path:
+        """Fuse an edge-box detector with the identity classifier.
+
+        Args:
+            tmp_path: Directory to write the three models into.
+            boxes: ``(cx, cy, w, h)`` anchors for the detector head.
+            **kwargs: Overrides forwarded to ``fuse_detect_classify``.
+
+        Returns:
+            Path: The fused model.
+        """
+        detector = _write_edge_detector(tmp_path / "edge_det.onnx", boxes=boxes)
+        classifier = _write_classifier(tmp_path / "edge_clf.onnx")
+        output = tmp_path / "edge_fused.onnx"
+        defaults: dict[str, object] = {
+            "mean": (0.0, 0.0, 0.0),
+            "std": (1.0, 1.0, 1.0),
+            "sampling_ratio": 1,
+            "max_detections": 2,
+        }
+        defaults.update(kwargs)
+        fuse_detect_classify(detector, classifier, output, **defaults)  # type: ignore[arg-type]
+        return output
+
+    def test_reports_the_clamped_box_that_was_cropped(self, tmp_path: Path) -> None:
+        """A box running off the top-left corner is reported as the region cropped."""
+        fused = self._fused_edge(tmp_path, boxes=[(0.0, 0.0, 32.0, 32.0)])
+        boxes, _, _, count, probs = _session(fused).run(None, {"images": _corner_image()})
+
+        assert count[0] == 1
+        np.testing.assert_allclose(boxes[0], [0.0, 0.0, 16.0, 16.0])
+        np.testing.assert_allclose(probs[0][0], 1.0, atol=1e-5)
+
+    def test_clamps_the_far_corner_to_the_full_extent(self, tmp_path: Path) -> None:
+        """The far edge clips to ``W``, not ``W - 1``: the last column is valid image."""
+        fused = self._fused_edge(tmp_path, boxes=[(56.0, 56.0, 32.0, 32.0)])
+        boxes, _, _, _, _ = _session(fused).run(None, {"images": _corner_image()})
+
+        np.testing.assert_allclose(boxes[0], [40.0, 40.0, 64.0, 64.0])
+
+    def test_leaves_a_box_inside_the_frame_untouched(self, tmp_path: Path) -> None:
+        fused = self._fused_edge(tmp_path, boxes=[(16.0, 16.0, 16.0, 16.0)])
+        boxes, _, _, _, _ = _session(fused).run(None, {"images": _corner_image()})
+
+        np.testing.assert_allclose(boxes[0], [8.0, 8.0, 24.0, 24.0])
+
+    def test_keeps_the_padded_rows_zero(self, tmp_path: Path) -> None:
+        """Clamping runs before padding, so surplus rows are still all-zero."""
+        fused = self._fused_edge(tmp_path, boxes=[(0.0, 0.0, 32.0, 32.0)], max_detections=4)
+        boxes, scores, classes, count, _ = _session(fused).run(None, {"images": _corner_image()})
+
+        assert count[0] == 1
+        np.testing.assert_allclose(boxes[1:], 0.0)
+        np.testing.assert_allclose(scores[1:], 0.0)
+        np.testing.assert_array_equal(classes[1:], 0)
+
+    def test_reports_letterbox_coordinates_for_the_original_crop_source(
+        self, tmp_path: Path
+    ) -> None:
+        """With ``crop_source="original"`` the reported box is the ROI, mapped back."""
+        fused = self._fused_edge(tmp_path, boxes=[(0.0, 0.0, 32.0, 32.0)], crop_source="original")
+        source = np.zeros((1, 3, _IMAGE_SIZE * 2, _IMAGE_SIZE * 2), dtype=np.float32)
+        source[0, 0, 0:32, 0:32] = 1.0
+        boxes, _, _, _, probs = _session(fused).run(
+            None,
+            {
+                "images": _corner_image(),
+                "source_image": source,
+                "letterbox_scale": np.asarray([0.5], dtype=np.float32),
+                "letterbox_pad": np.asarray([0.0, 0.0], dtype=np.float32),
+            },
+        )
+
+        np.testing.assert_allclose(boxes[0], [0.0, 0.0, 16.0, 16.0])
+        np.testing.assert_allclose(probs[0][0], 1.0, atol=1e-5)
+

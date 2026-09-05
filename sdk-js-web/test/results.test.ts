@@ -68,6 +68,29 @@ describe("Boxes", () => {
   });
 });
 
+/**
+ * The full-sort selection `Probs` used before partial selection replaced it.
+ *
+ * Kept here as the oracle: the fast path has to agree with it on every input,
+ * ties included, or the optimisation changed an answer instead of the cost.
+ * It is also what the Python SDK still does (`np.argsort(-data, kind="stable")`),
+ * so agreement here is agreement across the two SDKs.
+ *
+ * @param data - Per-class probabilities.
+ * @param k - How many classes to select.
+ * @returns Indices and values, descending by value.
+ */
+function fullSortTopK(data: Float32Array, k: number): { indices: number[]; values: number[] } {
+  const n = Math.min(k, data.length);
+  const order: number[] = [];
+  for (let i = 0; i < data.length; i++) order.push(i);
+  order.sort((a, b) => (data[b] as number) - (data[a] as number));
+  return {
+    indices: order.slice(0, n),
+    values: order.slice(0, n).map((index) => data[index] as number),
+  };
+}
+
 describe("Probs", () => {
   it("computes top1 / top1conf", () => {
     const p = new Probs(new Float32Array([0.1, 0.6, 0.2, 0.1]));
@@ -93,6 +116,28 @@ describe("Probs", () => {
     expect(p.top1).toBe(0);
     expect(p.top1conf).toBe(0);
     expect(p.top5.length).toBe(0);
+  });
+
+  it("keeps the lower class index first on a tie", () => {
+    const p = new Probs(Float32Array.from([0.5, 0.5, 0.5, 0.1]));
+    expect(Array.from(p.top5)).toEqual([0, 1, 2, 3]);
+    expect(p.top1).toBe(0);
+  });
+
+  it("agrees with a full sort across random vectors", () => {
+    for (let round = 0; round < 40; round += 1) {
+      const data = Float32Array.from({ length: 200 }, () => Math.round(Math.random() * 20));
+      const p = new Probs(data);
+      const oracle = fullSortTopK(data, 5);
+      expect(Array.from(p.top5)).toEqual(oracle.indices);
+      expect(Array.from(p.top5conf)).toEqual(oracle.values);
+    }
+  });
+
+  it("computes each selection once and hands back the same arrays", () => {
+    const p = new Probs(Float32Array.from([0.1, 0.9, 0.5]));
+    expect(p.top5).toBe(p.top5);
+    expect(p.top5conf).toBe(p.top5conf);
   });
 });
 

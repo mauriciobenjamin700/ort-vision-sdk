@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-09-04
+
+### Performance
+
+- **`Probs.top5` selects five classes instead of ordering a thousand.** `_topK`
+  allocated one index per class, sorted the whole array with a JS comparator,
+  then kept five entries and discarded the rest — and `top5` and `top5conf` are
+  separate getters over the same selection, so a caller reading both paid for it
+  twice, once per frame in a camera loop.
+
+  Partial selection keeps `k` slots ordered by insertion and scans the vector
+  once: O(n·k), no allocation beyond the result. Measured on 1000 classes over
+  2000 iterations, 134.5 µs became 1.5 µs for identical output. Each `k` is now
+  computed once per instance and cached, which is what makes reading both
+  getters cost one selection rather than two — the arrays handed back are the
+  cached ones, so treat them as read-only.
+
+  Ties still keep the lower class index first, matching the stable sort this
+  replaced and therefore the Python SDK's `np.argsort(-data, kind="stable")`.
+  `test/results.test.ts` pins that against the old full sort as an oracle over
+  40 random vectors of integer-valued probabilities — integers so ties are
+  common rather than theoretical.
+
+  Web-only by design: the Python side sorts in C inside numpy, where this cost
+  does not arise.
+
 ## [0.8.0] - 2026-09-04
 
 ### Changed
@@ -620,7 +646,8 @@ console.log(r.boxes.xyxy, r.boxes.cls, r.boxes.conf, r.names);
 - Execution-provider resolution defaulting to `["webgpu", "wasm"]`.
 - Public types mirroring the Python SDK: `BoundingBox`, `ClassProbability`, `ClassificationResult`, `DetectionResult`, `RGBImage`.
 
-[Unreleased]: https://github.com/mauriciobenjamin700/ort-vision-sdk/compare/web-v0.8.0...HEAD
+[Unreleased]: https://github.com/mauriciobenjamin700/ort-vision-sdk/compare/web-v0.8.1...HEAD
+[0.8.1]: https://github.com/mauriciobenjamin700/ort-vision-sdk/compare/web-v0.8.0...web-v0.8.1
 [0.8.0]: https://github.com/mauriciobenjamin700/ort-vision-sdk/compare/web-v0.7.1...web-v0.8.0
 [0.7.1]: https://github.com/mauriciobenjamin700/ort-vision-sdk/compare/web-v0.7.0...web-v0.7.1
 [0.7.0]: https://github.com/mauriciobenjamin700/ort-vision-sdk/compare/web-v0.6.1...web-v0.7.0

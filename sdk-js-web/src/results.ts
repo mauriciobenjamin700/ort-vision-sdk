@@ -219,8 +219,8 @@ export class Probs {
    * A full sort to read five entries out of a thousand-class vector costs
    * O(n log n) plus an index array the size of the vector; keeping `k` slots
    * ordered by insertion and scanning once costs O(n·k) with no allocation
-   * beyond the result. Measured on 1000 classes over 2000 iterations, 123.7 µs
-   * against 1.9 µs for the same output.
+   * beyond the result. Measured on 1000 classes over 2000 iterations, 134.5 µs
+   * against 1.5 µs for the same output.
    *
    * Ties keep the lower class index first, matching the stable sort this
    * replaced: a candidate only displaces an entry it is strictly greater

@@ -23,6 +23,7 @@ _Gerado automaticamente por `make releases-md` a partir das git tags._
 
 | Tag | Data | Commit |
 | --- | ---- | ------ |
+| web-v0.9.0 | 2026-09-13 | d63977a |
 | web-v0.8.1 | 2026-09-04 | bbdbf26 |
 | web-v0.8.0 | 2026-09-04 | 7a7d739 |
 | web-v0.7.1 | 2026-08-14 | aa7d5bc |

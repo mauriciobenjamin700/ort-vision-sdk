@@ -27,6 +27,7 @@ from ort_vision_sdk.graph import parse_names
 
 __all__ = [
     "FUSION_KIND_DETECT_CLASSIFY",
+    "FUSION_KIND_DETECT_SEGMENT_CLASSIFY",
     "INPUT_IMAGE",
     "INPUT_PAD",
     "INPUT_SCALE",
@@ -34,6 +35,7 @@ __all__ = [
     "METADATA_PREFIX",
     "OUTPUT_BOXES",
     "OUTPUT_CLASSES",
+    "OUTPUT_MASKS",
     "OUTPUT_NUM_DETECTIONS",
     "OUTPUT_PROBS",
     "OUTPUT_SCORES",
@@ -56,6 +58,17 @@ CropSource = Literal["detector_input", "original"]
 
 FUSION_KIND_DETECT_CLASSIFY = "detect_classify"
 """Value of the ``ovs.kind`` metadata key for a detector→classifier pipeline."""
+
+FUSION_KIND_DETECT_SEGMENT_CLASSIFY = "detect_segment_classify"
+"""Value of ``ovs.kind`` for a detector→segmenter→classifier pipeline.
+
+The segmenter runs **inside each crop**, not over the whole frame: the detector
+finds the boxes, RoiAlign cuts them out, and the segmenter turns each crop into
+a foreground mask that gates the pixels the classifier then sees. A YOLO-seg
+export does detection and segmentation in one model and does not need this — it
+is for the case where the second stage is a plain segmentation network (U-Net
+and relatives) that takes an image and returns a mask.
+"""
 
 METADATA_PREFIX = "ovs."
 """Namespace for every metadata key the fusion writes.
@@ -99,6 +112,20 @@ OUTPUT_CLASSES = "classes"
 OUTPUT_NUM_DETECTIONS = "num_detections"
 """Name of the ``(1,)`` int64 output holding how many of the ``K`` rows are real."""
 
+OUTPUT_MASKS = "masks"
+"""Name of the ``(K, 1, crop_h, crop_w)`` float32 mask output. Only with a
+``detect_segment_classify`` pipeline.
+
+The mask lives in the **crop's** coordinate space, not the original image's,
+because that is where the segmenter computed it. Mapping it back would mean one
+resize per instance at a geometry that differs per box, which the graph would
+have to do with dynamic shapes — and the caller can do it exactly, from the
+``boxes`` row that accompanies each mask, with the interpolation it prefers.
+
+Values are 0.0 or 1.0 after thresholding, so the mask multiplies cleanly. Padded
+rows are all-zero, like every other output.
+"""
+
 OUTPUT_PROBS = "probs"
 """Name of the ``(K, num_classifier_classes)`` float32 classifier output, one row per box."""
 
@@ -113,6 +140,9 @@ _KEY_IOU_THRESHOLD = "iou_threshold"
 _KEY_APPLY_SOFTMAX = "apply_softmax"
 _KEY_DETECTOR_NAMES = "detector_names"
 _KEY_CLASSIFIER_NAMES = "classifier_names"
+_KEY_SEGMENTER_NAMES = "segmenter_names"
+_KEY_MASK_THRESHOLD = "mask_threshold"
+_KEY_MASK_APPLIED = "mask_applied"
 
 _DYNAMIC = "dynamic"
 
@@ -172,6 +202,15 @@ class FusionSpec:
             when the source model carried none.
         classifier_names: Class id → name for the classifier stage, or ``None``.
         sdk_version: Version of ``ort-vision-sdk`` that produced the file.
+        segmenter_names: Class id → name for the segmenter stage, or ``None``.
+            Only meaningful for a ``detect_segment_classify`` pipeline.
+        mask_threshold: Probability above which a segmenter pixel counts as
+            foreground. Baked into the graph; recorded so a caller can read back
+            what the masks mean.
+        mask_applied: Whether the mask multiplies the crop before the classifier
+            sees it. ``False`` reports masks without gating the classifier,
+            which is the arrangement to use when the classifier was trained on
+            un-masked crops.
     """
 
     input_size: tuple[int, int]
@@ -185,6 +224,18 @@ class FusionSpec:
     classifier_names: dict[int, str] | None
     sdk_version: str
     kind: str = FUSION_KIND_DETECT_CLASSIFY
+    segmenter_names: dict[int, str] | None = None
+    mask_threshold: float = 0.5
+    mask_applied: bool = True
+
+    @property
+    def has_masks(self) -> bool:
+        """Whether this pipeline emits a :data:`OUTPUT_MASKS` tensor.
+
+        Returns:
+            bool: ``True`` for a ``detect_segment_classify`` pipeline.
+        """
+        return self.kind == FUSION_KIND_DETECT_SEGMENT_CLASSIFY
 
     @property
     def needs_source_image(self) -> bool:
@@ -224,6 +275,11 @@ class FusionSpec:
             entries[_KEY_DETECTOR_NAMES] = repr(self.detector_names)
         if self.classifier_names is not None:
             entries[_KEY_CLASSIFIER_NAMES] = repr(self.classifier_names)
+        if self.has_masks:
+            entries[_KEY_MASK_THRESHOLD] = repr(self.mask_threshold)
+            entries[_KEY_MASK_APPLIED] = "1" if self.mask_applied else "0"
+            if self.segmenter_names is not None:
+                entries[_KEY_SEGMENTER_NAMES] = repr(self.segmenter_names)
         return {f"{METADATA_PREFIX}{key}": value for key, value in entries.items()}
 
     @classmethod
@@ -251,7 +307,8 @@ class FusionSpec:
             for key, value in metadata.items()
             if key.startswith(METADATA_PREFIX)
         }
-        if read.get(_KEY_KIND) != FUSION_KIND_DETECT_CLASSIFY:
+        kind = read.get(_KEY_KIND)
+        if kind not in (FUSION_KIND_DETECT_CLASSIFY, FUSION_KIND_DETECT_SEGMENT_CLASSIFY):
             return None
 
         input_size = _decode_size(read.get(_KEY_INPUT_SIZE))
@@ -284,5 +341,8 @@ class FusionSpec:
             detector_names=parse_names(read.get(_KEY_DETECTOR_NAMES)),
             classifier_names=parse_names(read.get(_KEY_CLASSIFIER_NAMES)),
             sdk_version=read.get(_KEY_SDK_VERSION, ""),
-            kind=FUSION_KIND_DETECT_CLASSIFY,
+            kind=kind,
+            segmenter_names=parse_names(read.get(_KEY_SEGMENTER_NAMES)),
+            mask_threshold=_decode_float(read.get(_KEY_MASK_THRESHOLD), 0.5),
+            mask_applied=read.get(_KEY_MASK_APPLIED, "1") != "0",
         )

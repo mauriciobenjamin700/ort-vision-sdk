@@ -36,7 +36,7 @@ threshold for two classes therefore yields two rows here and one row there.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal
 
 import numpy as np
 import onnx
@@ -48,12 +48,21 @@ from ort_vision_sdk.fusion import (
     INPUT_SOURCE,
     OUTPUT_BOXES,
     OUTPUT_CLASSES,
+    OUTPUT_MASKS,
     OUTPUT_NUM_DETECTIONS,
     OUTPUT_SCORES,
     CropSource,
 )
 
-__all__ = ["MIN_OPSET", "BridgeGraph", "build_bridge"]
+__all__ = ["MIN_OPSET", "BridgeGraph", "MaskActivation", "build_bridge", "build_mask_bridge"]
+
+MaskActivation = Literal["sigmoid", "softmax"]
+"""How a segmenter's logits become per-pixel foreground probabilities.
+
+``"sigmoid"`` suits a single-channel head, where each pixel carries one
+foreground logit. ``"softmax"`` suits a multi-class head, where the channels
+compete and one of them is the class of interest.
+"""
 
 MIN_OPSET = 16
 """Lowest ONNX opset the bridge can be emitted at.
@@ -227,6 +236,7 @@ def build_bridge(
     std: tuple[float, float, float],
     input_scale: float,
     sampling_ratio: int,
+    crops_output: str | None = None,
     prefix: str = "ovs_bridge_",
 ) -> BridgeGraph:
     """Build the subgraph that joins a detector's output to a classifier's input.
@@ -268,6 +278,10 @@ def build_bridge(
         sampling_ratio: RoiAlign samples per output bin. ``0`` adapts the count
             to the box size, which anti-aliases when a large box is downscaled
             into a small crop; ``1`` is a plain bilinear resample.
+        crops_output: When given, the **un-normalized** crop batch is also bound
+            to this name. A three-stage pipeline needs it: the segmenter and the
+            classifier normalize differently, and the mask has to multiply the
+            crop before either normalization is applied.
         prefix: Name prefix for every tensor and node the bridge mints.
 
     Returns:
@@ -342,6 +356,8 @@ def build_bridge(
             "Reshape",
             [crops, b.const("crop_shape", _i64(max_detections, channels, crop_height, crop_width))],
         )
+    if crops_output is not None:
+        b.op("Identity", [crops], outputs=[crops_output])
     _normalize(
         b,
         crops,
@@ -365,6 +381,110 @@ def build_bridge(
             helper.make_tensor_value_info(OUTPUT_CLASSES, TensorProto.INT64, [rows]),
             helper.make_tensor_value_info(OUTPUT_NUM_DETECTIONS, TensorProto.INT64, [1]),
         ]
+    )
+    bridge.nodes.extend(b.nodes)
+    bridge.initializers.extend(b.initializers)
+    return bridge
+
+
+def build_mask_bridge(
+    *,
+    segmenter_output: str,
+    crops: str,
+    classifier_input: str,
+    crop_size: tuple[int, int],
+    channels: int,
+    max_detections: int | None,
+    mask_channel: int,
+    mask_activation: MaskActivation,
+    mask_threshold: float,
+    apply_mask: bool,
+    mean: tuple[float, float, float],
+    std: tuple[float, float, float],
+    input_scale: float,
+    prefix: str = "ovs_mask_",
+) -> BridgeGraph:
+    """Build the subgraph that turns a segmenter's logits into a mask and applies it.
+
+    This is the second half of a three-stage pipeline. The first half
+    (:func:`build_bridge`) has already produced a batch of crops and fed them to
+    the segmenter; this half reads what the segmenter said about each crop,
+    reduces it to a binary foreground mask, optionally multiplies the crop by it,
+    and normalizes the result for the classifier.
+
+    The mask is emitted as :data:`~ort_vision_sdk.fusion.OUTPUT_MASKS` whether or
+    not it gates the classifier, because a caller wants to see it either way.
+
+    Args:
+        segmenter_output: Name of the segmenter's raw output, ``(K, S, H, W)``
+            logits over the crop.
+        crops: Name of the un-normalized crop batch, ``(K, C, H, W)``.
+        classifier_input: Name the classifier graph expects its input under.
+        crop_size: ``(width, height)`` of a crop — the spatial size of both the
+            crops and the masks.
+        channels: Channel count of the crop batch.
+        max_detections: Fixed row count ``K``, or ``None`` when rows are dynamic.
+        mask_channel: Which channel of the segmenter output carries the
+            foreground. ``0`` for a single-channel head.
+        mask_activation: How logits become probabilities — see
+            :data:`MaskActivation`.
+        mask_threshold: Probability above which a pixel counts as foreground.
+        apply_mask: Whether the mask multiplies the crop before the classifier
+            sees it. ``False`` emits the mask and leaves the crop untouched.
+        mean: Per-channel mean for the classifier's normalization.
+        std: Per-channel standard deviation for the classifier's normalization.
+        input_scale: Multiplier applied to the crop before ``mean``/``std``.
+        prefix: Name prefix for every tensor and node this subgraph mints.
+
+    Returns:
+        BridgeGraph: Nodes, initializers and the ``masks`` output.
+
+    Raises:
+        ValueError: If ``mask_channel`` is negative, if ``mask_threshold`` is
+            not in ``(0, 1)``, or if any entry of ``std`` is zero.
+    """
+    if mask_channel < 0:
+        raise ValueError(f"mask_channel must be >= 0, got {mask_channel}.")
+    if not 0.0 < mask_threshold < 1.0:
+        raise ValueError(f"mask_threshold must be strictly between 0 and 1, got {mask_threshold}.")
+    if any(value == 0.0 for value in std):
+        raise ValueError(f"std entries must be non-zero, got {std}.")
+
+    b = _Builder(prefix)
+    bridge = BridgeGraph()
+    crop_width, crop_height = crop_size
+
+    if mask_activation == "softmax":
+        probabilities = b.op("Softmax", [segmenter_output], axis=1)
+    else:
+        probabilities = b.op("Sigmoid", [segmenter_output])
+
+    foreground = b.op(
+        "Gather",
+        [probabilities, b.const("mask_channel", _i64(mask_channel))],
+        axis=1,
+    )
+    above = b.op("Greater", [foreground, b.const("mask_threshold", _f32(mask_threshold))])
+    mask = b.op("Cast", [above], to=TensorProto.FLOAT)
+
+    b.op("Identity", [mask], outputs=[OUTPUT_MASKS])
+
+    gated = b.op("Mul", [crops, mask]) if apply_mask else crops
+    _normalize(
+        b,
+        gated,
+        output=classifier_input,
+        channels=channels,
+        mean=mean,
+        std=std,
+        input_scale=input_scale,
+    )
+
+    rows: int | str = max_detections if max_detections is not None else "num_detections"
+    bridge.outputs.append(
+        helper.make_tensor_value_info(
+            OUTPUT_MASKS, TensorProto.FLOAT, [rows, 1, crop_height, crop_width]
+        )
     )
     bridge.nodes.extend(b.nodes)
     bridge.initializers.extend(b.initializers)

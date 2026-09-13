@@ -12,7 +12,11 @@ from __future__ import annotations
 
 import pytest
 
-from ort_vision_sdk.fusion import METADATA_PREFIX, FusionSpec
+from ort_vision_sdk.fusion import (
+    FUSION_KIND_DETECT_SEGMENT_CLASSIFY,
+    METADATA_PREFIX,
+    FusionSpec,
+)
 
 
 def _spec(**overrides: object) -> FusionSpec:
@@ -93,10 +97,26 @@ class TestRejection:
         assert FusionSpec.from_metadata({"names": "{0: 'cat'}", "task": "detect"}) is None
 
     def test_an_unknown_pipeline_kind(self) -> None:
+        """A kind this version cannot drive is refused rather than half-read.
+
+        The value here has to stay one the SDK does not know. It used to be
+        ``detect_segment_classify``, which shipped — so a future kind takes its
+        place, and the recognised one is pinned by the test below.
+        """
         entries = dict(_spec().to_metadata())
-        entries[f"{METADATA_PREFIX}kind"] = "detect_segment_classify"
+        entries[f"{METADATA_PREFIX}kind"] = "detect_track_classify"
 
         assert FusionSpec.from_metadata(entries) is None
+
+    def test_a_recognised_pipeline_kind_is_read_back(self) -> None:
+        entries = dict(_spec().to_metadata())
+        entries[f"{METADATA_PREFIX}kind"] = FUSION_KIND_DETECT_SEGMENT_CLASSIFY
+
+        spec = FusionSpec.from_metadata(entries)
+
+        assert spec is not None
+        assert spec.kind == FUSION_KIND_DETECT_SEGMENT_CLASSIFY
+        assert spec.has_masks is True
 
     @pytest.mark.parametrize("key", ["input_size", "crop_size"])
     def test_an_unusable_resolution(self, key: str) -> None:

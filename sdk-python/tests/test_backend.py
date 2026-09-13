@@ -66,6 +66,16 @@ class FakeBackend:
         return (1, 3, 640, 640)
 
     @property
+    def input_dtypes(self) -> list[str]:
+        """One float32 input."""
+        return ["tensor(float)"]
+
+    @property
+    def input_dtype(self) -> str:
+        """Element type of the first input."""
+        return "tensor(float)"
+
+    @property
     def output_names(self) -> list[str]:
         """Single output named ``output0``."""
         return ["output0"]
@@ -119,6 +129,8 @@ def test_ort_session_class_exposes_the_backend_surface() -> None:
         "input_name",
         "input_shapes",
         "input_shape",
+        "input_dtypes",
+        "input_dtype",
         "output_names",
         "output_shapes",
         "run",

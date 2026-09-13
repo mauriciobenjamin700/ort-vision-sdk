@@ -32,15 +32,17 @@ class _Meta:
 class _Value:
     """An input/output descriptor, reduced to what the wrapper reads."""
 
-    def __init__(self, name: str, shape: list[int]) -> None:
-        """Store the declared name and shape.
+    def __init__(self, name: str, shape: list[int], type_: str = "tensor(float)") -> None:
+        """Store the declared name, shape and element type.
 
         Args:
             name: Tensor name.
             shape: Declared dimensions.
+            type_: Element type as ONNX Runtime spells it.
         """
         self.name = name
         self.shape = shape
+        self.type = type_
 
 
 class _FallbackSession:

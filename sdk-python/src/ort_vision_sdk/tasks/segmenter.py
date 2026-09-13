@@ -245,7 +245,9 @@ class Segmenter(VisionTask):
         timer.stage("load")
         tensor, scale, pad = self._preprocess(original)
         timer.stage("preprocess")
-        outputs = self._session.run({self._session.input_name: tensor})
+        outputs = self._as_float32_outputs(
+            self._session.run(self._as_feeds({self._session.input_name: tensor}))
+        )
         timer.stage("inference")
         return self._build_results(
             outputs,
@@ -310,7 +312,9 @@ class Segmenter(VisionTask):
         timer.stage("load")
         tensor, scale, pad = self._preprocess(original)
         timer.stage("preprocess")
-        outputs = await self._session.ort_async_run({self._session.input_name: tensor})
+        outputs = self._as_float32_outputs(
+            await self._session.ort_async_run(self._as_feeds({self._session.input_name: tensor}))
+        )
         timer.stage("inference")
         return self._build_results(
             outputs,

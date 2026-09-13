@@ -50,6 +50,16 @@ class MetadataFakeBackend(FakeBackend):
         return self._input_shape
 
     @property
+    def input_dtypes(self) -> list[str]:
+        """Every input declared as float32."""
+        return ["tensor(float)"] * len(self.input_shapes)
+
+    @property
+    def input_dtype(self) -> str:
+        """Element type of the first input."""
+        return "tensor(float)"
+
+    @property
     def metadata(self) -> dict[str, str]:
         """Custom metadata map the fake export carries."""
         return self._metadata

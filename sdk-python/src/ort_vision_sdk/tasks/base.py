@@ -13,9 +13,12 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import numpy as np
+
 from ort_vision_sdk.core.backend import InferenceBackend
 from ort_vision_sdk.core.exceptions import NoDetectionsError
 from ort_vision_sdk.core.session import OrtSession
+from ort_vision_sdk.dtypes import as_float32, numpy_dtype_for
 
 if TYPE_CHECKING:
     # Only used in type annotations; imported lazily by OrtSession at runtime so
@@ -77,6 +80,12 @@ class VisionTask:
                 session_options=session_options,
             )
         )
+        self._feed_dtypes: dict[str, np.dtype] = {
+            name: numpy_dtype_for(declared)
+            for name, declared in zip(
+                self._session.input_names, self._session.input_dtypes, strict=True
+            )
+        }
 
     @property
     def session(self) -> InferenceBackend:
@@ -86,6 +95,61 @@ class VisionTask:
         or the default :class:`OrtSession` when none was provided.
         """
         return self._session
+
+    @property
+    def input_dtype(self) -> np.dtype:
+        """NumPy dtype the graph's first input is fed with.
+
+        ``float32`` for a normal export, ``float16`` for one exported with
+        ``half=True``. Preprocessing always runs in ``float32``; this is the
+        type the tensor is cast to at the feed boundary.
+        """
+        return self._feed_dtypes[self._session.input_name]
+
+    def _as_feeds(self, feeds: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
+        """Cast each feed to the element type its input declares.
+
+        ONNX Runtime matches feed dtypes against the graph exactly — a
+        ``float32`` tensor against a ``half=True`` export fails the run with
+        ``Unexpected input data type``. Preprocessing stays in ``float32``
+        because that is where the normalization arithmetic belongs, so the
+        conversion happens here, once, at the boundary.
+
+        Args:
+            feeds (dict[str, np.ndarray]): Preprocessed tensors keyed by input
+                name.
+
+        Returns:
+            dict[str, np.ndarray]: The same mapping with each array cast to the
+            declared dtype. Arrays already carrying it are passed through
+            untouched.
+        """
+        return {
+            name: array.astype(self._feed_dtypes[name], copy=False)
+            if name in self._feed_dtypes
+            else array
+            for name, array in feeds.items()
+        }
+
+    @staticmethod
+    def _as_float32_outputs(outputs: list[np.ndarray]) -> list[np.ndarray]:
+        """Bring half-precision outputs back to ``float32`` before decoding.
+
+        Float16 resolves to 0.5 px around coordinate 640 and to 1.0 px around
+        1280, so decoding boxes in that type quantises every coordinate to the
+        grid before NMS and the scale-back to original-image pixels ever run.
+        Widening once here keeps the decoders working at the precision they
+        were written for; integer outputs (class ids, detection counts) pass
+        through unchanged.
+
+        Args:
+            outputs (list[np.ndarray]): Raw arrays as the backend returned them.
+
+        Returns:
+            list[np.ndarray]: The same arrays with floating-point ones in
+            ``float32``.
+        """
+        return [as_float32(output) for output in outputs]
 
 
 def _format_threshold(value: float) -> str:

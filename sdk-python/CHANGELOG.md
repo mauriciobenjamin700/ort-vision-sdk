@@ -7,6 +7,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **A model exported with `half=True` now runs.** The tasks built every feed in
+  `float32` and nothing read the element type the graph declares, so a
+  half-precision export loaded fine and died on the first `predict()` with
+  `Unexpected input data type. Actual: (tensor(float)) , expected:
+  (tensor(float16))`. This is the Python half of the same gap reported against
+  the web SDK in #50; neither suite could see it, because both fed fixtures
+  they had exported themselves in float32.
+
+  Preprocessing still runs in `float32` — `(value / 255 - mean) / std` in half
+  precision loses exactly the small differences normalization exists to
+  preserve — and the cast happens once, at the feed boundary, against the type
+  each input declares. Outputs travel the other way: every floating-point
+  output is widened back to `float32` before the decoders touch it, because
+  float16 resolves to 0.5 px around coordinate 640 and 1.0 px around 1280
+  (measured with `np.spacing`), which would quantise every box before NMS and
+  the scale-back to original-image pixels ever ran. Integer outputs — class
+  ids, detection counts — pass through untouched.
+
+  `tests/fixtures/models/tiny_classifier_fp16.onnx` is the guard: it declares
+  half precision, and `tests/test_e2e_onnx.py` asserts both that ONNX Runtime
+  still rejects a float32 feed against it and that the task predicts correctly
+  through it.
+
+### Changed
+
+- **`InferenceBackend` gained `input_dtypes` and `input_dtype`.** A backend has
+  to report the element types its graph declares, because that is what the
+  tasks now cast their feeds to. This is a breaking change for anyone who
+  implemented the protocol against a non-ORT runtime (Pyodide, an Android
+  bridge): add the two properties, returning `["tensor(float)"]` and
+  `"tensor(float)"` if the bridged model is float32. `OrtSession` reads them
+  from `get_inputs()`, so the default path needs nothing.
+
+  No fallback is offered on purpose. Treating a missing declaration as float32
+  would silently reintroduce the bug above on exactly the backends least able
+  to report it.
+
+- **`VisionTask.input_dtype`** exposes the NumPy dtype the task feeds, next to
+  the `input_size` it already reported.
+
 ### Added
 
 - **Every public symbol is now importable from `ort_vision_sdk`.** The root

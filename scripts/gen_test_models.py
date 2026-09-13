@@ -51,6 +51,8 @@ def build_constant_model(
     input_shape: tuple[int, ...],
     outputs: list[tuple[str, np.ndarray]],
     metadata: dict[str, str],
+    *,
+    half: bool = False,
 ) -> onnx.ModelProto:
     """Build a model whose outputs are fixed tensors, ignoring its input.
 
@@ -65,14 +67,20 @@ def build_constant_model(
         outputs: ``(name, values)`` pairs. Values are cast to ``float32``.
         metadata: Custom metadata map to bake in — ``names``, ``task``, ``imgsz``
             for an Ultralytics-style export.
+        half: Declare the input and every output as ``float16`` instead of
+            ``float32``, the way ``ultralytics.export(half=True)`` does. ONNX
+            Runtime rejects a float32 feed against such a graph, which is what
+            makes this the fixture for the dtype-casting path.
 
     Returns:
         The assembled model, already validated by ``onnx.checker``.
     """
+    dtype = np.float16 if half else np.float32
+    elem_type = TensorProto.FLOAT16 if half else TensorProto.FLOAT
     nodes = []
     graph_outputs = []
     for name, values in outputs:
-        array = np.ascontiguousarray(values, dtype=np.float32)
+        array = np.ascontiguousarray(values, dtype=dtype)
         nodes.append(
             helper.make_node(
                 "Constant",
@@ -83,13 +91,13 @@ def build_constant_model(
         )
         nodes.append(helper.make_node("Identity", inputs=[f"{name}_const"], outputs=[name]))
         graph_outputs.append(
-            helper.make_tensor_value_info(name, TensorProto.FLOAT, list(array.shape))
+            helper.make_tensor_value_info(name, elem_type, list(array.shape))
         )
 
     graph = helper.make_graph(
         nodes,
         graph_name,
-        [helper.make_tensor_value_info("images", TensorProto.FLOAT, list(input_shape))],
+        [helper.make_tensor_value_info("images", elem_type, list(input_shape))],
         graph_outputs,
     )
     model = helper.make_model(
@@ -236,6 +244,16 @@ def main() -> None:
                 "names": repr({0: "ant", 1: "bee", 2: "cow", 3: "doe"}),
                 "task": "classify",
             },
+        ),
+        "tiny_classifier_fp16.onnx": build_constant_model(
+            "tiny_classifier_fp16",
+            (1, 3, 32, 32),
+            [("logits", np.array([[1.0, 3.0, 0.5, 2.0]], dtype=np.float16))],
+            {
+                "names": repr({0: "ant", 1: "bee", 2: "cow", 3: "doe"}),
+                "task": "classify",
+            },
+            half=True,
         ),
         "tiny_segmenter.onnx": build_constant_model(
             "tiny_segmenter",

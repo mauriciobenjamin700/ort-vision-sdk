@@ -66,6 +66,21 @@ class InferenceBackend(Protocol):
         ...
 
     @property
+    def input_dtypes(self) -> list[str]:
+        """Declared element types of the inputs, as ONNX Runtime spells them.
+
+        ``"tensor(float)"`` for a normal export, ``"tensor(float16)"`` for one
+        exported with ``half=True``. Tasks preprocess in ``float32`` and cast
+        the feed to this, because ORT rejects a mismatched type outright.
+        """
+        ...
+
+    @property
+    def input_dtype(self) -> str:
+        """Declared element type of the first input."""
+        ...
+
+    @property
     def output_names(self) -> list[str]:
         """Names of the model's outputs, in declaration order."""
         ...

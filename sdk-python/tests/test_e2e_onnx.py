@@ -353,3 +353,68 @@ class TestOrtSessionRoundTrip:
 
         assert len(outputs) == 1
         np.testing.assert_array_equal(outputs[0], tensor)
+
+
+class TestHalfPrecisionEndToEnd:
+    """A model exported with ``half=True`` must load *and* run.
+
+    ``tiny_classifier_fp16.onnx`` declares its input and output as
+    ``float16``, the way ``ultralytics.export(half=True)`` does. Before the
+    feed was cast at the boundary, the session opened fine and the first
+    ``predict()`` died inside ONNX Runtime with ``Unexpected input data type.
+    Actual: (tensor(float)) , expected: (tensor(float16))`` — so the failure
+    landed on the caller's first frame, not on construction.
+    """
+
+    def test_the_fixture_really_declares_half_precision(self) -> None:
+        """Guard the fixture itself: a float32 export would make the rest vacuous."""
+        session = OrtSession(MODELS / "tiny_classifier_fp16.onnx", providers=CPU)
+
+        assert session.input_dtype == "tensor(float16)"
+        assert session.input_dtypes == ["tensor(float16)"]
+
+    def test_ort_still_rejects_a_float32_feed(self) -> None:
+        """The runtime constraint this cast exists for is still in force."""
+        session = OrtSession(MODELS / "tiny_classifier_fp16.onnx", providers=CPU)
+
+        with pytest.raises(Exception, match="Unexpected input data type"):
+            session.run({session.input_name: np.zeros((1, 3, 32, 32), dtype=np.float32)})
+
+    def test_classifier_predicts_against_a_half_precision_model(self) -> None:
+        """Same logits as the float32 fixture, so the expected softmax is the same."""
+        classifier = Classifier(MODELS / "tiny_classifier_fp16.onnx", providers=CPU)
+
+        result = classifier.predict(np.zeros((32, 32, 3), dtype=np.uint8))[0]
+
+        np.testing.assert_allclose(
+            result.probs.data,
+            [0.08536889, 0.63079554, 0.05177886, 0.23205669],
+            rtol=1e-3,
+        )
+        assert result.cls == 1
+        assert result.name == "bee"
+
+    def test_the_task_reports_the_dtype_it_feeds(self) -> None:
+        classifier = Classifier(MODELS / "tiny_classifier_fp16.onnx", providers=CPU)
+
+        assert classifier.input_dtype == np.dtype(np.float16)
+
+    def test_outputs_are_widened_before_they_reach_the_caller(self) -> None:
+        """Decoding runs in float32 even though the graph emits half."""
+        classifier = Classifier(
+            MODELS / "tiny_classifier_fp16.onnx", providers=CPU, apply_softmax=False
+        )
+
+        result = classifier.predict(np.zeros((32, 32, 3), dtype=np.uint8))[0]
+
+        np.testing.assert_allclose(result.probs.data, [1.0, 3.0, 0.5, 2.0])
+
+    async def test_async_paths_also_feed_the_declared_dtype(self) -> None:
+        classifier = Classifier(MODELS / "tiny_classifier_fp16.onnx", providers=CPU)
+
+        expected = classifier.predict(np.zeros((32, 32, 3), dtype=np.uint8))[0]
+        threaded = (await classifier.async_predict(np.zeros((32, 32, 3), dtype=np.uint8)))[0]
+        native = (await classifier.ort_async_predict(np.zeros((32, 32, 3), dtype=np.uint8)))[0]
+
+        np.testing.assert_allclose(threaded.probs.data, expected.probs.data)
+        np.testing.assert_allclose(native.probs.data, expected.probs.data)

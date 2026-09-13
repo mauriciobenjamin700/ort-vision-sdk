@@ -242,7 +242,9 @@ class DetectClassify(VisionTask):
         timer.stage("load")
         feeds, scale, pad = self._preprocess(original)
         timer.stage("preprocess")
-        outputs = self._session.run(feeds, output_names=_OUTPUTS)
+        outputs = self._as_float32_outputs(
+            self._session.run(self._as_feeds(feeds), output_names=_OUTPUTS)
+        )
         timer.stage("inference")
         return self._build_results(
             outputs,
@@ -307,7 +309,9 @@ class DetectClassify(VisionTask):
         timer.stage("load")
         feeds, scale, pad = self._preprocess(original)
         timer.stage("preprocess")
-        outputs = await self._session.ort_async_run(feeds, output_names=_OUTPUTS)
+        outputs = self._as_float32_outputs(
+            await self._session.ort_async_run(self._as_feeds(feeds), output_names=_OUTPUTS)
+        )
         timer.stage("inference")
         return self._build_results(
             outputs,

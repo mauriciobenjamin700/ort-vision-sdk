@@ -68,6 +68,16 @@ class RecordingBackend:
         return (1, 3, 224, 224)
 
     @property
+    def input_dtypes(self) -> list[str]:
+        """Every input declared as float32."""
+        return ["tensor(float)"] * len(self.input_shapes)
+
+    @property
+    def input_dtype(self) -> str:
+        """Element type of the first input."""
+        return "tensor(float)"
+
+    @property
     def output_names(self) -> list[str]:
         """Single output named ``output0``."""
         return ["output0"]

@@ -138,6 +138,7 @@ class OrtSession:
         self._output_shapes: list[tuple[int | str, ...]] = [
             tuple(o.shape) for o in self._session.get_outputs()
         ]
+        self._input_dtypes: list[str] = [i.type for i in self._session.get_inputs()]
 
     @property
     def input_names(self) -> list[str]:
@@ -148,6 +149,22 @@ class OrtSession:
     def input_name(self) -> str:
         """Name of the first (and usually only) input."""
         return self._input_names[0]
+
+    @property
+    def input_dtypes(self) -> list[str]:
+        """Declared element types of the inputs, as ONNX Runtime spells them.
+
+        ``"tensor(float)"`` for a normal export, ``"tensor(float16)"`` for one
+        exported with ``half=True``. A feed whose dtype does not match makes
+        ``run()`` fail with ``Unexpected input data type``, so tasks read this
+        and cast at the feed boundary.
+        """
+        return list(self._input_dtypes)
+
+    @property
+    def input_dtype(self) -> str:
+        """Declared element type of the first input."""
+        return self._input_dtypes[0]
 
     @property
     def output_names(self) -> list[str]:

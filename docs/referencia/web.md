@@ -72,6 +72,10 @@ Tipos/classes por instância: `DetectionResult`, `SegmentationResult`,
 | `task.warmup(runs?)` | Roda o modelo com tensor zerado para pagar a compilação de shaders adiantado. |
 | `spatialInputSize` / `resolveInputSize` / `declaredShapesFrom` | Helpers puros da precedência grafo → chamador → fallback. |
 | `DeclaredShape` / `DeclaredDim` | Shape declarado e uma dimensão (`number`, ou `null` quando simbólica). |
+| `session.inputDtype` / `.inputDtypes` | Tipo de tensor que cada entrada declara — `"float16"` num export `half=True`. Lido do arquivo, porque o ORT-Web não expõe. |
+| `readModelInputTypes(bytes)` / `tensorTypeFor(elemType)` | O parser do tipo declarado e o nome do tipo correspondente. |
+| `asFloat32Array(data)` | Alarga uma saída de meia precisão antes de decodificar; devolve um `Float32Array` inalterado. |
+| `hasFloat16Array()` | Se este navegador consegue montar tensor half. `create()` recusa o modelo quando não. |
 
 ## Erros
 

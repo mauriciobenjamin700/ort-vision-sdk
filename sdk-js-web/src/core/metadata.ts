@@ -17,6 +17,22 @@
 /** Field number of `metadata_props` in `ModelProto` (repeated StringStringEntryProto). */
 const MODEL_METADATA_PROPS_FIELD = 14;
 
+/** Field number of `graph` in `ModelProto` (GraphProto). */
+const MODEL_GRAPH_FIELD = 7;
+
+/** Field number of `input` in `GraphProto` (repeated ValueInfoProto). */
+const GRAPH_INPUT_FIELD = 11;
+
+/** Field numbers of `name` and `type` in `ValueInfoProto`. */
+const VALUE_INFO_NAME_FIELD = 1;
+const VALUE_INFO_TYPE_FIELD = 2;
+
+/** Field number of `tensor_type` in `TypeProto` (TypeProto.Tensor). */
+const TYPE_TENSOR_FIELD = 1;
+
+/** Field number of `elem_type` in `TypeProto.Tensor` (a `TensorProto.DataType`). */
+const TENSOR_ELEM_TYPE_FIELD = 1;
+
 /** Field numbers of `key` and `value` in `StringStringEntryProto`. */
 const ENTRY_KEY_FIELD = 1;
 const ENTRY_VALUE_FIELD = 2;
@@ -180,6 +196,147 @@ export function readModelMetadata(
   }
 
   return metadata;
+}
+
+/**
+ * Read the element type of a `TypeProto.Tensor` message.
+ *
+ * @param bytes The whole model buffer.
+ * @param start Offset of the message's first byte.
+ * @param end Offset one past its last byte.
+ * @returns The `TensorProto.DataType` value, or `null` when the message
+ *   carries none or cannot be walked.
+ */
+function readTensorElemType(bytes: Uint8Array, start: number, end: number): number | null {
+  const cursor: Cursor = { bytes, end, pos: start };
+  while (cursor.pos < cursor.end) {
+    const tag = readVarint(cursor);
+    if (tag === null) return null;
+    const field = tag >>> 3;
+    const wireType = tag & 0x07;
+    if (field === TENSOR_ELEM_TYPE_FIELD && wireType === WIRE_VARINT) {
+      return readVarint(cursor);
+    }
+    if (!skipField(cursor, wireType)) return null;
+  }
+  return null;
+}
+
+/**
+ * Read the element type out of a `TypeProto`, which wraps the tensor type.
+ *
+ * @param bytes The whole model buffer.
+ * @param start Offset of the message's first byte.
+ * @param end Offset one past its last byte.
+ * @returns The `TensorProto.DataType` value, or `null` for a non-tensor type
+ *   (sequence, map, optional) or an unreadable message.
+ */
+function readTypeElemType(bytes: Uint8Array, start: number, end: number): number | null {
+  const cursor: Cursor = { bytes, end, pos: start };
+  while (cursor.pos < cursor.end) {
+    const tag = readVarint(cursor);
+    if (tag === null) return null;
+    const field = tag >>> 3;
+    const wireType = tag & 0x07;
+    if (field === TYPE_TENSOR_FIELD && wireType === WIRE_LENGTH_DELIMITED) {
+      const range = readLengthDelimited(cursor);
+      if (range === null) return null;
+      return readTensorElemType(bytes, range.start, range.end);
+    }
+    if (!skipField(cursor, wireType)) return null;
+  }
+  return null;
+}
+
+/**
+ * Read one `ValueInfoProto` into a name/element-type pair.
+ *
+ * @param bytes The whole model buffer.
+ * @param start Offset of the message's first byte.
+ * @param end Offset one past its last byte.
+ * @returns The pair, or `null` when either half is missing or unreadable.
+ */
+function readValueInfo(
+  bytes: Uint8Array,
+  start: number,
+  end: number,
+): readonly [string, number] | null {
+  const cursor: Cursor = { bytes, end, pos: start };
+  let name: string | null = null;
+  let elemType: number | null = null;
+  while (cursor.pos < cursor.end) {
+    const tag = readVarint(cursor);
+    if (tag === null) return null;
+    const field = tag >>> 3;
+    const wireType = tag & 0x07;
+    if (wireType === WIRE_LENGTH_DELIMITED) {
+      const range = readLengthDelimited(cursor);
+      if (range === null) return null;
+      if (field === VALUE_INFO_NAME_FIELD) {
+        name = new TextDecoder("utf-8", { fatal: false }).decode(
+          bytes.subarray(range.start, range.end),
+        );
+      } else if (field === VALUE_INFO_TYPE_FIELD) {
+        elemType = readTypeElemType(bytes, range.start, range.end);
+      }
+      continue;
+    }
+    if (!skipField(cursor, wireType)) return null;
+  }
+  if (name === null || elemType === null) return null;
+  return [name, elemType];
+}
+
+/**
+ * Read the element type each graph input declares.
+ *
+ * `onnxruntime-web` does not expose this. `session.inputMetadata` is
+ * `undefined` on 1.20.1 — the same version where `declaredShapesFrom` comes
+ * back empty — so the declared types have to come from the file, which the SDK
+ * already downloads and walks for {@link readModelMetadata}. Same bytes, one
+ * more pass, no extra request.
+ *
+ * @param model The `.onnx` file contents.
+ * @returns Input name → `TensorProto.DataType` value. An empty object when the
+ *   file carries no readable graph, which every caller treats as "assume
+ *   float32" — the behaviour before any of this existed.
+ */
+export function readModelInputTypes(
+  model: Uint8Array | ArrayBufferLike,
+): Readonly<Record<string, number>> {
+  const bytes = model instanceof Uint8Array ? model : new Uint8Array(model);
+  const cursor: Cursor = { bytes, end: bytes.length, pos: 0 };
+  const types: Record<string, number> = {};
+
+  while (cursor.pos < cursor.end) {
+    const tag = readVarint(cursor);
+    if (tag === null) break;
+    const field = tag >>> 3;
+    const wireType = tag & 0x07;
+    if (field === MODEL_GRAPH_FIELD && wireType === WIRE_LENGTH_DELIMITED) {
+      const graph = readLengthDelimited(cursor);
+      if (graph === null) break;
+      const inner: Cursor = { bytes, end: graph.end, pos: graph.start };
+      while (inner.pos < inner.end) {
+        const innerTag = readVarint(inner);
+        if (innerTag === null) break;
+        const innerField = innerTag >>> 3;
+        const innerWire = innerTag & 0x07;
+        if (innerField === GRAPH_INPUT_FIELD && innerWire === WIRE_LENGTH_DELIMITED) {
+          const range = readLengthDelimited(inner);
+          if (range === null) break;
+          const info = readValueInfo(bytes, range.start, range.end);
+          if (info) types[info[0]] = info[1];
+          continue;
+        }
+        if (!skipField(inner, innerWire)) break;
+      }
+      continue;
+    }
+    if (!skipField(cursor, wireType)) break;
+  }
+
+  return types;
 }
 
 /**

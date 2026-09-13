@@ -5,9 +5,15 @@
 import type * as ort from "onnxruntime-web";
 import * as ortRuntime from "onnxruntime-web";
 
+import {
+  DEFAULT_TENSOR_TYPE,
+  hasFloat16Array,
+  tensorTypeFor,
+  toFeedData,
+} from "./dtypes.js";
 import { InferenceError, ModelLoadError } from "./exceptions.js";
 import { type DeclaredShape, declaredShapesFrom } from "./graph.js";
-import { readModelMetadata } from "./metadata.js";
+import { readModelInputTypes, readModelMetadata } from "./metadata.js";
 import { FALLBACK_PROVIDER, detectProviders, resolveProviders } from "./providers.js";
 
 /** Anything `InferenceSession.create` accepts. */
@@ -115,6 +121,47 @@ function warnOnDroppedProviders(
 }
 
 /**
+ * Name the tensor type of every graph input, straight from the model bytes.
+ *
+ * @param model The `.onnx` file contents.
+ * @returns Input name → tensor type name. Empty when the file carries no
+ *   readable graph, which callers read as "assume float32".
+ */
+function declaredInputTypes(
+  model: Uint8Array | ArrayBufferLike,
+): Readonly<Record<string, string>> {
+  const declared = readModelInputTypes(model);
+  const named: Record<string, string> = {};
+  for (const [name, elemType] of Object.entries(declared)) {
+    named[name] = tensorTypeFor(elemType);
+  }
+  return named;
+}
+
+/**
+ * Refuse a half-precision model in an environment that cannot feed one.
+ *
+ * ORT requires a real `Float16Array` for a `float16` tensor — the same bits in
+ * a `Uint16Array` are rejected — and not every browser has one yet. Without
+ * this check the session builds happily and the first `predict()` throws from
+ * inside the preprocessing, which is both later and further from the cause.
+ *
+ * @param inputTypes Tensor type per input name.
+ * @throws {@link ModelLoadError} when the graph wants half precision and the
+ *   runtime has no `Float16Array`.
+ */
+function assertFeedableTypes(inputTypes: Readonly<Record<string, string>>): void {
+  const half = Object.entries(inputTypes).filter(([, type]) => type === "float16");
+  if (half.length === 0 || hasFloat16Array()) return;
+  const names = half.map(([name]) => name).join(", ");
+  throw new ModelLoadError(
+    `This model declares half-precision input(s) [${names}], but this environment has no ` +
+      "Float16Array, which ONNX Runtime requires for a float16 tensor. Use a float32 export " +
+      "of the model, or run in a browser that supports Float16Array.",
+  );
+}
+
+/**
  * Wrap an ONNX Runtime Web `InferenceSession` with convenient metadata access.
  *
  * The wrapper exposes input/output names and the shapes the graph declares,
@@ -150,6 +197,15 @@ export class OrtSession {
      * `webgpu` on a device without it runs on WASM and is told nothing.
      */
     public readonly requestedProviders: readonly string[],
+    /**
+     * Tensor type each input declares, keyed by input name.
+     *
+     * Read from the model file, not from the session: `inputMetadata` is
+     * `undefined` on `onnxruntime-web` 1.20.1. Empty when the bytes were never
+     * in hand — a URL loaded with `readMetadata: false` — in which case every
+     * feed is built as float32, the behaviour before this existed.
+     */
+    private readonly _inputTypes: Readonly<Record<string, string>> = {},
   ) {}
 
   /**
@@ -189,6 +245,9 @@ export class OrtSession {
       typeof model === "string" && wantsMetadata ? await fetchModel(model) : model;
     const metadata =
       wantsMetadata && typeof source !== "string" ? readModelMetadata(source) : {};
+    const inputTypes =
+      typeof source !== "string" ? declaredInputTypes(source) : {};
+    assertFeedableTypes(inputTypes);
 
     let session: ort.InferenceSession;
     try {
@@ -209,7 +268,23 @@ export class OrtSession {
       );
     }
 
-    return new OrtSession(session, providers, metadata, requested);
+    return new OrtSession(session, providers, metadata, requested, inputTypes);
+  }
+
+  /**
+   * Tensor type each input declares, in declaration order.
+   *
+   * `"float32"` for a normal export, `"float16"` for one exported with
+   * `half=True`. ORT matches a feed's type against this exactly, so the tasks
+   * read it and convert at the feed boundary.
+   */
+  get inputDtypes(): readonly string[] {
+    return this.inputNames.map((name) => this._inputTypes[name] ?? DEFAULT_TENSOR_TYPE);
+  }
+
+  /** Tensor type the first input declares. */
+  get inputDtype(): string {
+    return this._inputTypes[this.inputName] ?? DEFAULT_TENSOR_TYPE;
   }
 
   /** Names of the model's inputs, in declaration order. */
@@ -317,7 +392,7 @@ export class OrtSession {
     feeds: Record<string, ort.Tensor>,
   ): Promise<Record<string, ort.Tensor>> {
     try {
-      const result = await this._session.run(feeds);
+      const result = await this._session.run(this._asDeclaredTypes(feeds));
       return result as Record<string, ort.Tensor>;
     } catch (err) {
       throw new InferenceError(
@@ -325,5 +400,39 @@ export class OrtSession {
         { cause: err },
       );
     }
+  }
+
+  /**
+   * Rebuild any feed whose type does not match what its input declares.
+   *
+   * ORT matches feed types against the graph exactly: a float32 tensor against
+   * a `half=True` export fails the run with `Unexpected input data type`. Every
+   * preprocessing path in this SDK produces `Float32Array`, on purpose — the
+   * normalization arithmetic belongs in single precision — so the conversion
+   * happens here, once, at the only boundary all of them pass through. A feed
+   * that already carries the declared type is handed on untouched, so a caller
+   * building its own half tensor pays nothing.
+   *
+   * @param feeds The tensors to run with.
+   * @returns The same mapping, with mismatched float32 feeds converted.
+   */
+  private _asDeclaredTypes(
+    feeds: Record<string, ort.Tensor>,
+  ): Record<string, ort.Tensor> {
+    let converted: Record<string, ort.Tensor> | null = null;
+    for (const [name, tensor] of Object.entries(feeds)) {
+      const declared = this._inputTypes[name];
+      if (declared === undefined || declared === tensor.type) continue;
+      if (!(tensor.data instanceof Float32Array)) continue;
+      const data = toFeedData(tensor.data, declared);
+      if (data === tensor.data) continue;
+      converted ??= { ...feeds };
+      converted[name] = new ortRuntime.Tensor(
+        declared as "float16",
+        data as unknown as Float32Array,
+        tensor.dims as number[],
+      );
+    }
+    return converted ?? feeds;
   }
 }

@@ -12,6 +12,7 @@ import { detectionNumClasses, resolveInputSize } from "../core/graph.js";
 import { modelNames } from "../core/metadata.js";
 import { type LabelSpec, defaultLabels, resolveLabels } from "../labels.js";
 import { decodeYolo } from "../postprocess/detection.js";
+import { asFloat32Array } from "../core/dtypes.js";
 import { toFloat32Tensor } from "../preprocess/image.js";
 import { LetterboxPipeline, zeroTensorData } from "../preprocess/pipeline.js";
 import { Boxes, DetectionResults } from "../results.js";
@@ -264,7 +265,7 @@ export class Detector extends VisionTask {
     }
 
     const threshold = options.confThreshold ?? this._confThreshold;
-    const decodedAll = decodeYolo(raw.data as Float32Array, raw.dims, {
+    const decodedAll = decodeYolo(asFloat32Array(raw.data), raw.dims, {
       originalWidth: original.width,
       originalHeight: original.height,
       padLeft,

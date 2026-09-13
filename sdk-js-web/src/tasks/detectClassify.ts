@@ -31,6 +31,7 @@ import {
 import { type ImageInput, loadImage } from "../io/image.js";
 import { type LabelSpec, resolveLabels } from "../labels.js";
 import { softmax, topK } from "../postprocess/classification.js";
+import { asFloat32Array } from "../core/dtypes.js";
 import { toCHW, toFloat32, toFloat32Tensor } from "../preprocess/image.js";
 import { LetterboxPipeline, zeroTensorData } from "../preprocess/pipeline.js";
 import { Boxes, DetectClassifyResults } from "../results.js";
@@ -264,7 +265,7 @@ export class DetectClassify extends VisionTask {
     const boxes = floats(outputs, OUTPUT_BOXES);
     const scores = floats(outputs, OUTPUT_SCORES);
     const classes = integers(outputs, OUTPUT_CLASSES);
-    const probs = probsTensor.data as Float32Array;
+    const probs = asFloat32Array(probsTensor.data);
     const reported = integers(outputs, OUTPUT_NUM_DETECTIONS)[0] ?? 0;
     const rows = Math.min(reported, Math.floor(boxes.length / 4));
     const classCount = probsTensor.dims[probsTensor.dims.length - 1] ?? 0;
@@ -484,7 +485,7 @@ function output(outputs: Record<string, ort.Tensor>, name: string): ort.Tensor {
  * @throws {@link FusionError} when the graph does not carry that output.
  */
 function floats(outputs: Record<string, ort.Tensor>, name: string): Float32Array {
-  return output(outputs, name).data as Float32Array;
+  return asFloat32Array(output(outputs, name).data);
 }
 
 /**

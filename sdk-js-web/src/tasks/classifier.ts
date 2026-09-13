@@ -16,6 +16,7 @@ import {
   resolveNormalization,
 } from "../normalization.js";
 import { softmax, topK } from "../postprocess/classification.js";
+import { asFloat32Array } from "../core/dtypes.js";
 import { toFloat32Tensor } from "../preprocess/image.js";
 import { ResizePipeline, zeroTensorData } from "../preprocess/pipeline.js";
 import { ClassificationResults, Probs } from "../results.js";
@@ -281,7 +282,7 @@ export class Classifier extends VisionTask {
     if (raw === undefined) {
       throw new Error(`Classifier model output ${firstOutputName} missing from run() result.`);
     }
-    const fullProbs = this._postprocess(raw.data as Float32Array);
+    const fullProbs = this._postprocess(asFloat32Array(raw.data));
 
     const { indices, values } = topK(fullProbs, options.topK ?? null);
     const probabilities: ClassProbability[] = [];

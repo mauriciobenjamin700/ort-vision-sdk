@@ -7,6 +7,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **A model exported with `half=True` now runs (#50).** Every task built its
+  feed as `Float32Array` and nothing read the element type the graph declares,
+  so a half-precision export loaded fine and threw on the first `predict()`:
+  `Unexpected input data type. Actual: (tensor(float)) , expected:
+  (tensor(float16))`. FP16 halves the artifact — 5.11 MB against 10.11 MB on a
+  detector, 10.41 against 20.78 on a classifier — which in a browser is the
+  difference between the page opening and not.
+
+  The declared type now comes out of the model file itself, in the same pass
+  the SDK already makes for `names`: `session.inputMetadata` is `undefined` on
+  `onnxruntime-web` 1.20.1, so the session cannot answer this. `OrtSession`
+  exposes it as `inputDtype`/`inputDtypes`, and `run()` converts any float32
+  feed whose input declares `float16` — one boundary, rather than the fourteen
+  `toFloat32Tensor` call sites the tasks are built from. Preprocessing stays in
+  `Float32Array` on purpose: `(value / 255 - mean) / std` in half precision
+  loses exactly the small differences normalization exists to preserve.
+
+  Outputs are widened back before decoding. Float16 resolves to 0.5 px around
+  coordinate 640 and 1.0 px around 1280, so decoding boxes in that type would
+  quantise every coordinate before NMS and the scale-back to original-image
+  pixels ever ran.
+
+- **A browser without `Float16Array` is refused at `create()`, not at the first
+  frame.** ORT requires a real `Float16Array` for a half tensor — the same bits
+  in a `Uint16Array` are rejected — and not every browser has one. Loading a
+  half-precision model there now fails immediately with a message naming the
+  inputs and the missing global, instead of throwing from inside preprocessing
+  one frame later.
+
+### Added
+
+- **`readModelInputTypes`, `tensorTypeFor`, `asFloat32Array`,
+  `hasFloat16Array`** and the `DEFAULT_TENSOR_TYPE` constant, for callers
+  driving `OrtSession` directly. `asFloat32Array` is the one to reach for when
+  reading a raw output: it passes a `Float32Array` through and widens anything
+  else.
+
+
 ## [0.8.1] - 2026-09-04
 
 ### Performance

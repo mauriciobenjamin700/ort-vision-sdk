@@ -16,6 +16,7 @@ import { detectionNumClasses, resolveInputSize } from "../core/graph.js";
 import { modelNames } from "../core/metadata.js";
 import { type LabelSpec, defaultLabels, resolveLabels } from "../labels.js";
 import { decodeYoloSeg } from "../postprocess/segmentation.js";
+import { asFloat32Array } from "../core/dtypes.js";
 import { toFloat32Tensor } from "../preprocess/image.js";
 import { LetterboxPipeline, zeroTensorData } from "../preprocess/pipeline.js";
 import { Boxes, Masks, SegmentationResults } from "../results.js";
@@ -260,9 +261,9 @@ export class Segmenter extends VisionTask {
 
     const threshold = options.confThreshold ?? this._confThreshold;
     const decodedAll = decodeYoloSeg(
-      perAnchor.data as Float32Array,
+      asFloat32Array(perAnchor.data),
       perAnchor.dims,
-      prototypes.data as Float32Array,
+      asFloat32Array(prototypes.data),
       prototypes.dims,
       {
         numClasses: this._labels.length,

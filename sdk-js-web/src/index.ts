@@ -57,7 +57,19 @@ export {
   resolveInputSize,
   spatialInputSize,
 } from "./core/graph.js";
-export { modelNames, parseNames, readModelMetadata } from "./core/metadata.js";
+export {
+  DEFAULT_TENSOR_TYPE,
+  type Float16ArrayLike,
+  asFloat32Array,
+  hasFloat16Array,
+  tensorTypeFor,
+} from "./core/dtypes.js";
+export {
+  modelNames,
+  parseNames,
+  readModelInputTypes,
+  readModelMetadata,
+} from "./core/metadata.js";
 export { DEFAULT_PROVIDERS, detectProviders, resolveProviders } from "./core/providers.js";
 export { type Speed, SpeedTimer } from "./core/timing.js";
 export {

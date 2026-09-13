@@ -35,6 +35,8 @@ from ort_vision_sdk.core import Stage as Stage
 from ort_vision_sdk.core import available_providers as available_providers
 from ort_vision_sdk.core import read_metadata as read_metadata
 from ort_vision_sdk.core import resolve_providers as resolve_providers
+from ort_vision_sdk.dtypes import as_float32 as as_float32
+from ort_vision_sdk.dtypes import numpy_dtype_for as numpy_dtype_for
 from ort_vision_sdk.fusion import FUSION_KIND_DETECT_CLASSIFY as FUSION_KIND_DETECT_CLASSIFY
 from ort_vision_sdk.fusion import INPUT_IMAGE as INPUT_IMAGE
 from ort_vision_sdk.fusion import INPUT_PAD as INPUT_PAD
@@ -169,6 +171,7 @@ __all__: list[str] = [
     "VisionTask",
     "__version__",
     "add_batch_dim",
+    "as_float32",
     "available_providers",
     "batched_nms",
     "decode_yolo",
@@ -182,6 +185,7 @@ __all__: list[str] = [
     "model_names",
     "nms",
     "normalize",
+    "numpy_dtype_for",
     "parse_names",
     "read_metadata",
     "reduction_factor",

@@ -78,6 +78,7 @@ EQUIVALENTS: dict[str, str] = {
     "SpeedTimer": "SpeedTimer",
     "VERSION": "__version__",
     "VisionTask": "VisionTask",
+    "asFloat32Array": "as_float32",
     "batchedNms": "batched_nms",
     "decodeYolo": "decode_yolo",
     "decodeYoloAnchors": "decode_yolo_anchors",
@@ -101,6 +102,7 @@ EQUIVALENTS: dict[str, str] = {
     "resolveProviders": "resolve_providers",
     "softmax": "softmax",
     "spatialInputSize": "spatial_input_size",
+    "tensorTypeFor": "numpy_dtype_for",
     "toCHW": "to_chw",
     "toCv2": "to_cv2",
     "toTensor": "to_tensor",
@@ -108,6 +110,11 @@ EQUIVALENTS: dict[str, str] = {
 }
 
 WEB_ONLY: dict[str, str] = {
+    "DEFAULT_TENSOR_TYPE": "Names the fallback tensor type; Python spells it as a numpy dtype.",
+    "Float16ArrayLike": "Structural stand-in for Float16Array; NumPy has float16 natively.",
+    "hasFloat16Array": "Asks whether the browser can build a half tensor at all; NumPy always can.",
+    "readModelInputTypes": "Reads declared types out of the .onnx bytes; ORT-Web hides "
+    "them, while Python reads them off the session.",
     "ClassifierOptions": "Named options object; Python takes keyword arguments.",
     "ClassifierPredictOptions": "Named options object; Python takes keyword arguments.",
     "DetectClassifyOptions": "Named options object; Python takes keyword arguments.",

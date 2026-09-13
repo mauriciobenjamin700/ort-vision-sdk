@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-09-13
+
 ### Added
 
 - **`detect_segment_classify` pipelines load and run.** `readFusionSpec`
@@ -744,7 +746,8 @@ console.log(r.boxes.xyxy, r.boxes.cls, r.boxes.conf, r.names);
 - Execution-provider resolution defaulting to `["webgpu", "wasm"]`.
 - Public types mirroring the Python SDK: `BoundingBox`, `ClassProbability`, `ClassificationResult`, `DetectionResult`, `RGBImage`.
 
-[Unreleased]: https://github.com/mauriciobenjamin700/ort-vision-sdk/compare/web-v0.9.1...HEAD
+[Unreleased]: https://github.com/mauriciobenjamin700/ort-vision-sdk/compare/web-v0.10.0...HEAD
+[0.10.0]: https://github.com/mauriciobenjamin700/ort-vision-sdk/compare/web-v0.9.1...web-v0.10.0
 [0.9.1]: https://github.com/mauriciobenjamin700/ort-vision-sdk/compare/web-v0.9.0...web-v0.9.1
 [0.9.0]: https://github.com/mauriciobenjamin700/ort-vision-sdk/compare/web-v0.8.1...web-v0.9.0
 [0.8.1]: https://github.com/mauriciobenjamin700/ort-vision-sdk/compare/web-v0.8.0...web-v0.8.1

@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Every public symbol is now importable from `ort_vision_sdk`.** The root
+  exported 45 names while the web SDK exported the same API plus 34 more from
+  its own root — the exception hierarchy among them, so `except ModelLoadError`
+  needed `from ort_vision_sdk.core import ...` on one side and nothing on the
+  other. `docs/referencia/python.md` claimed "tudo importável diretamente de
+  `ort_vision_sdk`" at the top and pointed at `ort_vision_sdk.core` further
+  down, which is the contradiction the drift produced.
+
+  The root now re-exports the eight exceptions (`OrtVisionError`,
+  `ModelLoadError`, `InferenceError`, `ProviderNotAvailableError`,
+  `ImageLoadError`, `LabelMapError`, `NoDetectionsError`, `FusionError`), the
+  provider and timing helpers (`available_providers`, `resolve_providers`,
+  `SpeedTimer`, `STAGES`, `Stage`), the fused-graph names (`INPUT_*`,
+  `OUTPUT_*`, `METADATA_PREFIX`, `FUSION_KIND_DETECT_CLASSIFY`), the
+  preprocessing primitives (`letterbox`, `resize`, `normalize`, `to_chw`,
+  `to_tensor`, `add_batch_dim`, `reduction_factor`, `from_cv2`, `to_cv2`), the
+  postprocessing decoders (`softmax`, `topk`, `nms`, `batched_nms`,
+  `decode_yolo`, `decode_yolo_anchors`, `decode_yolo_seg`,
+  `DecodedSegmentation`) and the remaining normalization constants
+  (`CUSTOM_NORMALIZATION`, `NORMALIZATION_PRESETS`). Nothing was removed or
+  renamed: every submodule path that worked before still works.
+
+- **`tests/test_public_surface.py` pins the two roots against each other.** It
+  parses `sdk-js-web/src/index.ts` and pairs every export with a Python name,
+  so adding an export to one SDK and not the other fails the suite instead of
+  surviving until a consumer ports code between them. A name that is
+  legitimately one-sided is listed with its reason in `WEB_ONLY` or
+  `PYTHON_ONLY` — browser buffer pipelines on one side, NumPy layout helpers on
+  the other — which makes each asymmetry a decision on the record.
+
+  Re-exports are written as `from x import Y as Y` alongside `__all__`, the
+  form strict type checkers need to treat a package-root import as public.
+
 ## [0.9.0] - 2026-09-04
 
 ### Added

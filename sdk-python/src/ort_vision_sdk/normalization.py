@@ -24,6 +24,7 @@ import warnings
 from typing import Literal
 
 __all__ = [
+    "CUSTOM_NORMALIZATION",
     "IDENTITY_MEAN",
     "IDENTITY_STD",
     "IMAGENET_MEAN",

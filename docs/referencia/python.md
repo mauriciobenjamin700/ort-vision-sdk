@@ -107,6 +107,25 @@ Todo envelope expõe também `names`, `orig_img`, `orig_shape`, `path` e
 | `ClassProbability` | `class_id`, `class_name`, `probability` | `cls`, `name` |
 | `BoundingBox` | `x1`, `y1`, `x2`, `y2` + `xyxy` | — |
 
+## Erros
+
+Hierarquia de exceções exportada: `OrtVisionError` (base), `ImageLoadError`,
+`InferenceError`, `LabelMapError`, `ModelLoadError`,
+`ProviderNotAvailableError`, `FusionError`, `NoDetectionsError`.
+
+Todas vêm da raiz do pacote, como no SDK web:
+
+```python
+from ort_vision_sdk import Detector, ModelLoadError, OrtVisionError
+
+try:
+    det = Detector("yolov8n.onnx", labels="coco")
+except ModelLoadError as exc:
+    print("modelo não carregou:", exc)
+except OrtVisionError as exc:
+    print("qualquer outra falha do SDK:", exc)
+```
+
 ## Resultado vazio
 
 `Detector`, `Segmenter` e `DetectClassify` aceitam `raise_on_empty` no construtor
@@ -118,7 +137,7 @@ envelope vazio, não um erro. Com `True`, levanta
 | Símbolo | Descrição |
 | --- | --- |
 | `raise_on_empty` | Argumento de construtor e de `predict()`; o valor por chamada vence o do construtor. |
-| `NoDetectionsError` | Levantado quando nada sobra e o flag está ativo. Exportado em `ort_vision_sdk.core`. |
+| `NoDetectionsError` | Levantado quando nada sobra e o flag está ativo. |
 | `require_detections(count, ...)` | O helper compartilhado pelas três tarefas, exportado para quem constrói a própria tarefa. |
 
 ## Compondo pipelines (extra `[compose]`)
@@ -157,6 +176,36 @@ dele. Ver [Pipelines fundidos](../guia/pipeline.md).
 | `FusionSpec` | O que um pipeline fundido declara sobre si mesmo; `FusionSpec.from_metadata(...)` o lê de volta. |
 | `CropSource` | `"detector_input"` ou `"original"` — de onde a ponte recorta as caixas. |
 | `task.input_size` | Resolução em que a tarefa realmente pré-processa. |
+
+## Providers e tempo
+
+| Símbolo | Descrição |
+| --- | --- |
+| `available_providers()` | Providers que esta build do ONNX Runtime registrou. |
+| `resolve_providers(requested)` | Normaliza apelidos (`"cuda"`, `"gpu"`) para nomes do ORT e aplica a ordem de preferência. |
+| `OrtSession.providers` | Providers que o ORT **de fato** registrou para a sessão. |
+| `OrtSession.requested_providers` | O que foi pedido, depois dos defaults. Um pedido que o ORT descarta emite `UserWarning`. |
+| `SpeedTimer` / `STAGES` / `Stage` | O cronômetro por estágio que preenche o `speed` de cada `Results`, os nomes dos estágios e o tipo deles. |
+
+## Pipelines fundidos — nomes do grafo
+
+| Símbolo | Descrição |
+| --- | --- |
+| `FusionSpec.from_metadata(metadata)` | Lê o que um pipeline fundido declara sobre si mesmo; `None` quando o modelo não é um pipeline. |
+| `INPUT_IMAGE` / `INPUT_SOURCE` / `INPUT_SCALE` / `INPUT_PAD` | Nomes das entradas do grafo fundido. |
+| `OUTPUT_BOXES` / `OUTPUT_SCORES` / `OUTPUT_CLASSES` / `OUTPUT_NUM_DETECTIONS` / `OUTPUT_PROBS` | Nomes das saídas. |
+| `METADATA_PREFIX` / `FUSION_KIND_DETECT_CLASSIFY` | Namespace `ovs.` e a família de pipeline. |
+
+## Utilitários de pré/pós-processamento
+
+Para quem constrói o próprio pipeline, a raiz exporta os primitivos que as
+tarefas usam: `letterbox`, `resize`, `normalize`, `to_chw`, `to_tensor`,
+`add_batch_dim`, `reduction_factor`, `from_cv2`/`to_cv2`, `softmax`, `topk`,
+`nms`, `batched_nms`, `decode_yolo`, `decode_yolo_anchors` e `decode_yolo_seg`.
+
+As constantes de normalização acompanham: `IMAGENET_MEAN`, `IMAGENET_STD`,
+`IDENTITY_MEAN`, `IDENTITY_STD`, `CUSTOM_NORMALIZATION` e a tabela
+`NORMALIZATION_PRESETS`.
 
 !!! note "Fonte da verdade"
     As assinaturas completas, com tipos e docstrings, vivem no código-fonte em

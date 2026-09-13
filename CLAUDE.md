@@ -137,6 +137,28 @@ confirme pelo índice simples.
 
   Vale para qualquer script auxiliar, inclusive um `python3 - <<EOF` de uma
   linha. Rode da raiz do repo com caminho absoluto/relativo.
+- **`Float16Array` não existe no Node do CI.** Chegou no V8 no Node 24; a matriz
+  do CI roda 18, 20 e 22. Teste que constrói tensor half passa na sua máquina e
+  **quebra no CI** — aconteceu no release do `web-v0.9.0`, que só não publicou
+  errado porque o workflow roda os testes antes do `npm publish`. Teste de
+  caminho half stuba o construtor; teste de recusa remove o global. Para
+  conferir localmente antes de empurrar, rode a suíte com ele apagado:
+
+  ```bash
+  printf 'delete (globalThis as Record<string, unknown>)["Float16Array"];\n' > no-fp16.setup.ts
+  printf 'import { defineConfig } from "vitest/config";\nexport default defineConfig({ test: { setupFiles: ["./no-fp16.setup.ts"] } });\n' > vitest.nofp16.config.ts
+  npx vitest run --config vitest.nofp16.config.ts && rm no-fp16.setup.ts vitest.nofp16.config.ts
+  ```
+
+  (`vitest run --setupFiles` não existe no vitest 2 — só via config.)
+- **O `npm view` mente logo depois de publicar**, do mesmo jeito que a API JSON
+  da PyPI. `npm install <pkg>@<versão>` responde `notarget` por metadata em
+  cache. Confirme pelo registry e instale com `--prefer-online`:
+
+  ```bash
+  curl -s https://registry.npmjs.org/@mauriciobenjamin700/ort-vision-sdk-web | grep -o '"latest":"[^"]*"'
+  npm install --prefer-online "@mauriciobenjamin700/ort-vision-sdk-web@<versão>"
+  ```
 - **O gate linta só `src/`.** `ruff check src`, `ruff format --check src`,
   `mypy src` — `tests/` fica de fora de propósito (a suíte usa fakes com
   assinaturas que as regras `D`/`ANN` reprovariam). Rodar `ruff check tests` por

@@ -22,6 +22,7 @@ from onnx import TensorProto, helper, numpy_helper
 
 from ort_vision_sdk import DetectClassify
 from ort_vision_sdk.compose import build_bridge, fuse_detect_classify
+from ort_vision_sdk.compose.detect_classify import _likely_cause
 from ort_vision_sdk.core.exceptions import FusionError
 from ort_vision_sdk.fusion import FusionSpec
 
@@ -37,6 +38,7 @@ def _write_detector(
     opset: int = 17,
     output_rank: int = 3,
     size: int = _IMAGE_SIZE,
+    half: bool = False,
 ) -> Path:
     """Write a detector whose head is a constant with two confident boxes.
 
@@ -50,10 +52,14 @@ def _write_detector(
         output_rank: Rank of the declared output. Anything but 3 makes the
             model an invalid detector, which the fusion must reject.
         size: Spatial size of the declared input.
+        half: Declare the stage in ``float16``, the way
+            ``YOLO(...).export(half=True)`` does.
 
     Returns:
         Path: ``path``, for chaining.
     """
+    dtype = np.float16 if half else np.float32
+    elem_type = TensorProto.FLOAT16 if half else TensorProto.FLOAT
     head = np.zeros((1, 6, 4), dtype=np.float32)
     head[0, :4, 0] = [16, 16, 16, 16]
     head[0, 4, 0], head[0, 5, 0] = 0.9, 0.1
@@ -64,13 +70,16 @@ def _write_detector(
 
     shape = [1, 6, 4] if output_rank == 3 else [1, 6, 4, 1][:output_rank]
     node = helper.make_node(
-        "Constant", [], ["head"], value=numpy_helper.from_array(head, name="head_value")
+        "Constant",
+        [],
+        ["head"],
+        value=numpy_helper.from_array(head.astype(dtype), name="head_value"),
     )
     graph = helper.make_graph(
         [node],
         "synthetic_detector",
-        inputs=[helper.make_tensor_value_info("images", TensorProto.FLOAT, [1, 3, size, size])],
-        outputs=[helper.make_tensor_value_info("head", TensorProto.FLOAT, shape)],
+        inputs=[helper.make_tensor_value_info("images", elem_type, [1, 3, size, size])],
+        outputs=[helper.make_tensor_value_info("head", elem_type, shape)],
     )
     model = helper.make_model(graph, opset_imports=[helper.make_opsetid("", opset)])
     model.ir_version = 9
@@ -124,6 +133,7 @@ def _write_classifier(
     opset: int = 17,
     with_softmax: bool = False,
     ultralytics: bool = False,
+    half: bool = False,
 ) -> Path:
     """Write a classifier that reports each crop's per-channel mean.
 
@@ -138,10 +148,13 @@ def _write_classifier(
         ultralytics: Stamp the ``author``/``task`` metadata a
             ``YOLO(...).export(format="onnx")`` classification run writes, so
             the normalization auto-detection has something to detect.
+        half: Declare the stage in ``float16``, the way
+            ``YOLO(...).export(half=True)`` does.
 
     Returns:
         Path: ``path``, for chaining.
     """
+    elem_type = TensorProto.FLOAT16 if half else TensorProto.FLOAT
     nodes = [
         helper.make_node("GlobalAveragePool", ["input"], ["pooled"]),
         helper.make_node("Flatten", ["pooled"], ["flat"], axis=1),
@@ -154,11 +167,9 @@ def _write_classifier(
         nodes,
         "synthetic_classifier",
         inputs=[
-            helper.make_tensor_value_info(
-                "input", TensorProto.FLOAT, [1, 3, _CROP_SIZE, _CROP_SIZE]
-            )
+            helper.make_tensor_value_info("input", elem_type, [1, 3, _CROP_SIZE, _CROP_SIZE])
         ],
-        outputs=[helper.make_tensor_value_info(final, TensorProto.FLOAT, [1, 3])],
+        outputs=[helper.make_tensor_value_info(final, elem_type, [1, 3])],
     )
     model = helper.make_model(graph, opset_imports=[helper.make_opsetid("", opset)])
     model.ir_version = 9
@@ -869,3 +880,159 @@ class TestOriginalCropSourceGeometry:
         np.testing.assert_allclose(boxes[1:], 0.0)
         np.testing.assert_allclose(scores[1:], 0.0)
         np.testing.assert_array_equal(classes[1:], 0)
+
+
+def _seam_casts(model: onnx.ModelProto) -> list[str]:
+    """Names of the ``Cast`` nodes the fusion emitted at its own seams.
+
+    The bridge carries casts of its own (int64 box indices, the normalization
+    it applies), so counting every ``Cast`` in the graph would not answer the
+    question this asks.
+
+    Args:
+        model: A fused pipeline.
+
+    Returns:
+        list[str]: Seam node names, in graph order.
+    """
+    seams = ("ovs_bind_", "ovs_cast_")
+    return [
+        node.name
+        for node in model.graph.node
+        if node.op_type == "Cast" and node.name.startswith(seams)
+    ]
+
+
+class TestHalfPrecisionStages:
+    """Stages exported with ``half=True`` must fuse into a graph that loads and runs.
+
+    Before the seams were cast, fusing two FP16 exports produced a mixed-type
+    graph that ONNX Runtime refused at load::
+
+        Type Error: Type parameter (T) of Optype (Conv) bound to different types
+        (tensor(float) and tensor(float16)) in node (det_/model.0/conv/Conv)
+
+    The bridge itself stays float32 and is not free to do otherwise: ONNX's
+    ``NonMaxSuppression`` is defined for ``tensor(float)`` only. So the fused
+    graph is half precision in the two stages, float32 between them, and float32
+    at its public boundary — which is what every preprocessing pipeline feeds.
+    """
+
+    @pytest.fixture
+    def half_models(self, tmp_path: Path) -> tuple[Path, Path]:
+        """A synthetic detector/classifier pair, both declared in float16."""
+        return (
+            _write_detector(tmp_path / "det_fp16.onnx", half=True),
+            _write_classifier(tmp_path / "clf_fp16.onnx", half=True),
+        )
+
+    def test_the_fixtures_really_declare_half_precision(
+        self, half_models: tuple[Path, Path]
+    ) -> None:
+        """Guard the fixtures: float32 stages would make every assertion below vacuous."""
+        detector, classifier = (onnx.load(str(path)) for path in half_models)
+
+        assert detector.graph.input[0].type.tensor_type.elem_type == TensorProto.FLOAT16
+        assert detector.graph.output[0].type.tensor_type.elem_type == TensorProto.FLOAT16
+        assert classifier.graph.input[0].type.tensor_type.elem_type == TensorProto.FLOAT16
+        assert classifier.graph.output[0].type.tensor_type.elem_type == TensorProto.FLOAT16
+
+    def test_fuses_loads_and_runs(self, half_models: tuple[Path, Path], tmp_path: Path) -> None:
+        session = _session(_fuse(half_models, tmp_path))
+
+        outputs = session.run(None, {"images": _marked_tensor()})
+
+        assert [o.name for o in session.get_outputs()] == [
+            "boxes",
+            "scores",
+            "classes",
+            "num_detections",
+            "probs",
+        ]
+        assert int(outputs[3][0]) == 2
+
+    def test_the_public_boundary_stays_float32(
+        self, half_models: tuple[Path, Path], tmp_path: Path
+    ) -> None:
+        """The caller feeds and reads float32, whatever precision the stages are in."""
+        session = _session(_fuse(half_models, tmp_path))
+
+        assert session.get_inputs()[0].type == "tensor(float)"
+        types = {o.name: o.type for o in session.get_outputs()}
+        assert types["boxes"] == "tensor(float)"
+        assert types["scores"] == "tensor(float)"
+        assert types["probs"] == "tensor(float)"
+
+    def test_finds_the_same_boxes_as_the_float32_pipeline(
+        self, half_models: tuple[Path, Path], models: tuple[Path, Path], tmp_path: Path
+    ) -> None:
+        """Precision changes the digits, not the geometry."""
+        half_dir = tmp_path / "half"
+        single_dir = tmp_path / "single"
+        half_dir.mkdir()
+        single_dir.mkdir()
+        half = _session(_fuse(half_models, half_dir))
+        single = _session(_fuse(models, single_dir))
+        image = _marked_tensor()
+
+        half_outputs = half.run(None, {"images": image})
+        single_outputs = single.run(None, {"images": image})
+
+        np.testing.assert_allclose(half_outputs[0], single_outputs[0], rtol=1e-2, atol=1e-2)
+        np.testing.assert_array_equal(half_outputs[2], single_outputs[2])
+
+    def test_casts_only_where_a_seam_needs_one(
+        self, half_models: tuple[Path, Path], models: tuple[Path, Path], tmp_path: Path
+    ) -> None:
+        """A float32 fusion keeps its plain Identity binds; a half one grows four casts."""
+        half_dir = tmp_path / "half"
+        single_dir = tmp_path / "single"
+        half_dir.mkdir()
+        single_dir.mkdir()
+        half = onnx.load(str(_fuse(half_models, half_dir)))
+        single = onnx.load(str(_fuse(models, single_dir)))
+
+        assert sorted(_seam_casts(half)) == [
+            "ovs_bind_input",
+            "ovs_bind_probs",
+            "ovs_cast_crops",
+            "ovs_cast_detector_output",
+        ]
+        assert _seam_casts(single) == []
+
+    def test_the_bridge_reads_the_float32_public_input(
+        self, half_models: tuple[Path, Path], tmp_path: Path
+    ) -> None:
+        """RoiAlign crops from the untouched float32 image, not from the cast one."""
+        fused = onnx.load(str(_fuse(half_models, tmp_path)))
+
+        roi_align = [n for n in fused.graph.node if n.op_type == "RoiAlign"]
+        assert len(roi_align) == 1
+        assert roi_align[0].input[0] == "images"
+
+
+class TestFailureDiagnosis:
+    """The post-build failure message must name the cause the runtime reported.
+
+    One sentence used to be appended to every failure, blaming a classifier
+    exported with a fixed batch size. A load-time type error reads nothing like
+    a batch mismatch, and that message sent whoever hit the FP16 splice off to
+    re-export a model whose batch axis was fine.
+    """
+
+    def test_a_type_error_is_reported_as_a_type_error(self) -> None:
+        cause = _likely_cause(
+            RuntimeError(
+                "Type Error: Type parameter (T) of Optype (Conv) bound to different types "
+                "(tensor(float) and tensor(float16)) in node (det_/model.0/conv/Conv)"
+            )
+        )
+
+        assert "element type" in cause
+        assert "batch size" not in cause
+        assert "dynamic batch axis" not in cause
+
+    def test_anything_else_still_points_at_the_batch_axis(self) -> None:
+        cause = _likely_cause(RuntimeError("Got invalid dimensions for input: input index: 0"))
+
+        assert "batch size" in cause

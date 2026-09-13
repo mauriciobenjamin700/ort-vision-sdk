@@ -9,6 +9,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`fuse_detect_classify` splices half-precision stages (#49).** Fusing two
+  FP16 exports produced a graph ONNX Runtime refused to load, at the *second*
+  node: `Type Error: Type parameter (T) of Optype (Conv) bound to different
+  types (tensor(float) and tensor(float16)) in node
+  (det_/model.0/conv/Conv)`. The fusion declared the public input `FLOAT` and
+  bound it straight into the detector, deciding every dtype from a float32
+  assumption without looking at the stages it was handed.
+
+  The four seams — public input into the detector, detector head into the
+  bridge, crop batch into the classifier, classifier output into `probs` — now
+  carry a `Cast` when the stage on the other side is half precision, and the
+  crop batch is declared twice (float32 as the bridge writes it, float16 as the
+  classifier reads it) because the checker reads declarations, not nodes.
+  Missing that second declaration is what made an otherwise correct set of
+  casts still fail to load.
+
+  The bridge itself stays float32 and cannot be anything else: ONNX's
+  `NonMaxSuppression` is defined for `tensor(float)` only. `RoiAlign` therefore
+  crops from the untouched public input rather than from the cast detector
+  input, so the geometry never passes through half precision. A float32 fusion
+  emits exactly the `Identity` binds it always did — `tests/test_compose.py`
+  pins that the seam casts appear only in the half-precision layout.
+
+- **The post-build failure message names the cause the runtime reported.** One
+  sentence used to be appended to every failure, blaming a classifier exported
+  with a fixed batch size. That is a common cause but reads nothing like a
+  load-time type error, and it sent whoever hit the FP16 splice off to re-export
+  a model whose batch axis was fine.
+
 - **A model exported with `half=True` now runs.** The tasks built every feed in
   `float32` and nothing read the element type the graph declares, so a
   half-precision export loaded fine and died on the first `predict()` with

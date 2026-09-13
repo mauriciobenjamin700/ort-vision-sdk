@@ -52,6 +52,15 @@ _METADATA_KEY_NORMALIZATION = f"{METADATA_PREFIX}classifier_normalization"
 _DETECTOR_PREFIX = "det_"
 _CLASSIFIER_PREFIX = "clf_"
 _CROP_BATCH_DIM = OUTPUT_NUM_DETECTIONS
+
+_FLOAT32_SUFFIX = "_ovs_fp32"
+"""Suffix for the float32 tensor a seam produces next to a half-precision one.
+
+The bridge is float32 throughout and cannot be anything else: ONNX's
+``NonMaxSuppression`` is defined for ``tensor(float)`` only — there is no
+float16 variant — so a half-precision pipeline is float16 in the two stages and
+float32 between them, with a ``Cast`` at each seam.
+"""
 """Symbol the dynamic-row mode gives the crop-batch axis.
 
 Deliberately the same symbol the bridge gives the detection outputs: the two
@@ -559,6 +568,34 @@ def _resolve_per_class_cap(requested: int | None, max_detections: int | None) ->
     return 300 if max_detections is None else max_detections * 4
 
 
+def _input_elem_type(model: onnx.ModelProto) -> int:
+    """Read the element type a stage declares for its image input.
+
+    Args:
+        model: A detector or classifier export.
+
+    Returns:
+        int: The ``TensorProto.DataType`` value, or ``TensorProto.FLOAT`` when
+        the graph declares none.
+    """
+    declared = model.graph.input[0].type.tensor_type.elem_type
+    return int(declared) if declared else int(TensorProto.FLOAT)
+
+
+def _output_elem_type(model: onnx.ModelProto) -> int:
+    """Read the element type a stage declares for its first output.
+
+    Args:
+        model: A detector or classifier export.
+
+    Returns:
+        int: The ``TensorProto.DataType`` value, or ``TensorProto.FLOAT`` when
+        the graph declares none.
+    """
+    declared = model.graph.output[0].type.tensor_type.elem_type
+    return int(declared) if declared else int(TensorProto.FLOAT)
+
+
 def _assemble(
     *,
     detector_model: onnx.ModelProto,
@@ -608,10 +645,27 @@ def _assemble(
     classifier_input = classifier_model.graph.input[0].name
     classifier_output = classifier_model.graph.output[0].name
 
+    detector_in_type = _input_elem_type(detector_model)
+    detector_out_type = _output_elem_type(detector_model)
+    classifier_in_type = _input_elem_type(classifier_model)
+    classifier_out_type = _output_elem_type(classifier_model)
+
+    bridge_source = INPUT_IMAGE if detector_in_type != TensorProto.FLOAT else detector_input
+    bridge_detector_output = (
+        f"{detector_output}{_FLOAT32_SUFFIX}"
+        if detector_out_type != TensorProto.FLOAT
+        else detector_output
+    )
+    bridge_classifier_input = (
+        f"{classifier_input}{_FLOAT32_SUFFIX}"
+        if classifier_in_type != TensorProto.FLOAT
+        else classifier_input
+    )
+
     bridge = build_bridge(
-        detector_output=detector_output,
-        detector_input=detector_input,
-        classifier_input=classifier_input,
+        detector_output=bridge_detector_output,
+        detector_input=bridge_source,
+        classifier_input=bridge_classifier_input,
         crop_size=spec.crop_size,
         channels=channels,
         crop_source=spec.crop_source,
@@ -632,11 +686,37 @@ def _assemble(
     probs_output = _probs_value_info(classifier_model, rows=spec.max_detections)
 
     nodes = [
-        helper.make_node("Identity", [INPUT_IMAGE], [detector_input], name="ovs_bind_input"),
+        *_bind(
+            "ovs_bind_input",
+            INPUT_IMAGE,
+            detector_input,
+            source_type=int(TensorProto.FLOAT),
+            target_type=detector_in_type,
+        ),
         *detector_model.graph.node,
+        *_bind(
+            "ovs_cast_detector_output",
+            detector_output,
+            bridge_detector_output,
+            source_type=detector_out_type,
+            target_type=int(TensorProto.FLOAT),
+        ),
         *bridge.nodes,
+        *_bind(
+            "ovs_cast_crops",
+            bridge_classifier_input,
+            classifier_input,
+            source_type=int(TensorProto.FLOAT),
+            target_type=classifier_in_type,
+        ),
         *classifier_model.graph.node,
-        helper.make_node("Identity", [classifier_output], [OUTPUT_PROBS], name="ovs_bind_probs"),
+        *_bind(
+            "ovs_bind_probs",
+            classifier_output,
+            OUTPUT_PROBS,
+            source_type=classifier_out_type,
+            target_type=int(TensorProto.FLOAT),
+        ),
     ]
     graph = helper.make_graph(
         nodes=nodes,
@@ -651,7 +731,13 @@ def _assemble(
         value_info=[
             *detector_model.graph.value_info,
             *classifier_model.graph.value_info,
-            _crop_value_info(classifier_input, spec=spec, channels=channels),
+            *_crop_value_infos(
+                bridge_classifier_input,
+                classifier_input,
+                spec=spec,
+                channels=channels,
+                elem_type=classifier_in_type,
+            ),
         ],
     )
 
@@ -670,6 +756,43 @@ def _assemble(
     except Exception as exc:
         raise FusionError(f"The fused graph is not a valid ONNX model: {exc}") from exc
     return model
+
+
+def _bind(
+    name: str,
+    source: str,
+    target: str,
+    *,
+    source_type: int,
+    target_type: int,
+) -> list[onnx.NodeProto]:
+    """Wire one tensor into another across a seam, converting when types differ.
+
+    The fused graph has four seams: the public input into the detector, the
+    detector's head into the bridge, the bridge's crops into the classifier, and
+    the classifier's output into the public ``probs``. With single-precision
+    stages all four are plain ``Identity`` binds, which is what the fusion always
+    emitted. With a half-precision stage, the two that cross the boundary become
+    ``Cast`` nodes — the bridge itself stays float32, because ONNX's
+    ``NonMaxSuppression`` is defined for ``tensor(float)`` only.
+
+    Args:
+        name: Node name recorded in the graph.
+        source: Tensor to read.
+        target: Tensor to produce.
+        source_type: Element type ``source`` carries.
+        target_type: Element type ``target`` must carry.
+
+    Returns:
+        list[onnx.NodeProto]: Empty when source and target are the same tensor
+        (a seam that only exists in the half-precision layout), one ``Identity``
+        when the types already agree, one ``Cast`` otherwise.
+    """
+    if source == target:
+        return []
+    if source_type == target_type:
+        return [helper.make_node("Identity", [source], [target], name=name)]
+    return [helper.make_node("Cast", [source], [target], name=name, to=target_type)]
 
 
 def _probs_value_info(
@@ -692,9 +815,14 @@ def _probs_value_info(
     return helper.make_tensor_value_info(OUTPUT_PROBS, TensorProto.FLOAT, [first, second])
 
 
-def _crop_value_info(
-    classifier_input: str, *, spec: FusionSpec, channels: int
-) -> onnx.ValueInfoProto:
+def _crop_value_infos(
+    bridge_output: str,
+    classifier_input: str,
+    *,
+    spec: FusionSpec,
+    channels: int,
+    elem_type: int,
+) -> list[onnx.ValueInfoProto]:
     """Declare the crop batch the bridge hands to the classifier.
 
     The classifier's input stops being a graph input once it is spliced, so its
@@ -702,19 +830,29 @@ def _crop_value_info(
     which is now the pipeline's detection count rather than whatever the
     standalone export declared.
 
+    With a half-precision classifier there are two tensors to declare, not one:
+    the float32 batch the bridge emits and the float16 batch the cast produces.
+    Declaring only the first is what made an otherwise correct set of casts
+    still fail to load — the checker reads the declaration, not the node.
+
     Args:
+        bridge_output: Name of the float32 crop batch the bridge writes.
         classifier_input: Prefixed name of the classifier's input tensor.
         spec: The pipeline configuration.
         channels: Image channel count.
+        elem_type: Element type the classifier declares for its input.
 
     Returns:
-        onnx.ValueInfoProto: The crop batch's shape and type.
+        list[onnx.ValueInfoProto]: One entry for a float32 classifier, two when
+        a cast sits between the bridge and the classifier.
     """
     crop_width, crop_height = spec.crop_size
     batch: int | str = spec.max_detections if spec.max_detections is not None else _CROP_BATCH_DIM
-    return helper.make_tensor_value_info(
-        classifier_input, TensorProto.FLOAT, [batch, channels, crop_height, crop_width]
-    )
+    shape = [batch, channels, crop_height, crop_width]
+    declared = [helper.make_tensor_value_info(bridge_output, TensorProto.FLOAT, shape)]
+    if bridge_output != classifier_input:
+        declared.append(helper.make_tensor_value_info(classifier_input, elem_type, shape))
+    return declared
 
 
 def _merged_opsets(
@@ -822,7 +960,35 @@ def _validate(
     except Exception as exc:
         raise FusionError(
             f"The fused pipeline was built but ONNX Runtime could not run it: {exc}. "
-            "The usual cause is a classifier whose graph only accepts the batch size it was "
-            "exported with; re-export it with a dynamic batch axis, or set "
-            f"max_detections to match it."
+            f"{_likely_cause(exc)}"
         ) from exc
+
+
+def _likely_cause(exc: Exception) -> str:
+    """Name the cause that fits the runtime's own complaint.
+
+    A single sentence used to be appended to every failure here, blaming a
+    classifier exported with a fixed batch size. That is the common cause, but
+    it is not the only one, and a load-time type error reads nothing like a
+    batch mismatch — pointing at the batch axis there sends the reader to
+    re-export a model whose batch axis was never the problem.
+
+    Args:
+        exc: Whatever ONNX Runtime raised.
+
+    Returns:
+        str: A sentence naming the cause the message actually indicates.
+    """
+    complaint = str(exc)
+    if "bound to different types" in complaint or "Type Error" in complaint:
+        return (
+            "The stages disagree on element type — this is what a float16 export spliced "
+            "against a float32 one looks like. The fusion casts at the four seams it owns "
+            "(public input, detector head, crop batch, probs), so a type error surviving that "
+            "means a stage carries a type path the splice did not bridge."
+        )
+    return (
+        "The usual cause is a classifier whose graph only accepts the batch size it was "
+        "exported with; re-export it with a dynamic batch axis, or set max_detections to "
+        "match it."
+    )

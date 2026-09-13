@@ -38,6 +38,9 @@ from ort_vision_sdk.core import resolve_providers as resolve_providers
 from ort_vision_sdk.dtypes import as_float32 as as_float32
 from ort_vision_sdk.dtypes import numpy_dtype_for as numpy_dtype_for
 from ort_vision_sdk.fusion import FUSION_KIND_DETECT_CLASSIFY as FUSION_KIND_DETECT_CLASSIFY
+from ort_vision_sdk.fusion import (
+    FUSION_KIND_DETECT_SEGMENT_CLASSIFY as FUSION_KIND_DETECT_SEGMENT_CLASSIFY,
+)
 from ort_vision_sdk.fusion import INPUT_IMAGE as INPUT_IMAGE
 from ort_vision_sdk.fusion import INPUT_PAD as INPUT_PAD
 from ort_vision_sdk.fusion import INPUT_SCALE as INPUT_SCALE
@@ -45,6 +48,7 @@ from ort_vision_sdk.fusion import INPUT_SOURCE as INPUT_SOURCE
 from ort_vision_sdk.fusion import METADATA_PREFIX as METADATA_PREFIX
 from ort_vision_sdk.fusion import OUTPUT_BOXES as OUTPUT_BOXES
 from ort_vision_sdk.fusion import OUTPUT_CLASSES as OUTPUT_CLASSES
+from ort_vision_sdk.fusion import OUTPUT_MASKS as OUTPUT_MASKS
 from ort_vision_sdk.fusion import OUTPUT_NUM_DETECTIONS as OUTPUT_NUM_DETECTIONS
 from ort_vision_sdk.fusion import OUTPUT_PROBS as OUTPUT_PROBS
 from ort_vision_sdk.fusion import OUTPUT_SCORES as OUTPUT_SCORES
@@ -114,6 +118,7 @@ __all__: list[str] = [
     "COCO_CLASSES",
     "CUSTOM_NORMALIZATION",
     "FUSION_KIND_DETECT_CLASSIFY",
+    "FUSION_KIND_DETECT_SEGMENT_CLASSIFY",
     "IDENTITY_MEAN",
     "IDENTITY_STD",
     "IMAGENET_MEAN",
@@ -126,6 +131,7 @@ __all__: list[str] = [
     "NORMALIZATION_PRESETS",
     "OUTPUT_BOXES",
     "OUTPUT_CLASSES",
+    "OUTPUT_MASKS",
     "OUTPUT_NUM_DETECTIONS",
     "OUTPUT_PROBS",
     "OUTPUT_SCORES",

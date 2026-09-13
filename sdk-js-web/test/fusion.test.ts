@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { METADATA_PREFIX, readFusionSpec } from "../src/fusion.js";
+import {
+  FUSION_KIND_DETECT_SEGMENT_CLASSIFY,
+  METADATA_PREFIX,
+  readFusionSpec,
+} from "../src/fusion.js";
 
 /**
  * Tests for the metadata contract a fused pipeline carries inside its own file.
@@ -85,6 +89,31 @@ describe("readFusionSpec", () => {
 
     expect(spec?.detectorNames).toEqual(["sheep"]);
   });
+
+  it("reads back a detect_segment_classify pipeline", () => {
+    const spec = readFusionSpec(
+      metadata({
+        kind: FUSION_KIND_DETECT_SEGMENT_CLASSIFY,
+        mask_threshold: "0.7",
+        mask_applied: "0",
+        segmenter_names: "{0: 'lesion'}",
+      }),
+    );
+
+    expect(spec).not.toBeNull();
+    expect(spec?.kind).toBe(FUSION_KIND_DETECT_SEGMENT_CLASSIFY);
+    expect(spec?.hasMasks).toBe(true);
+    expect(spec?.maskThreshold).toBeCloseTo(0.7);
+    expect(spec?.maskApplied).toBe(false);
+    expect(spec?.segmenterNames).toEqual(["lesion"]);
+  });
+
+  it("reports no masks for a two-stage pipeline", () => {
+    const spec = readFusionSpec(metadata());
+
+    expect(spec?.hasMasks).toBe(false);
+    expect(spec?.segmenterNames).toBeNull();
+  });
 });
 
 describe("readFusionSpec rejection", () => {
@@ -97,8 +126,8 @@ describe("readFusionSpec rejection", () => {
     expect(readFusionSpec({ names: "{0: 'cat'}", task: "detect" })).toBeNull();
   });
 
-  it("returns null for a pipeline kind this version cannot drive", () => {
-    expect(readFusionSpec(metadata({ kind: "detect_segment_classify" }))).toBeNull();
+  it("returns null for a kind no released version ever wrote", () => {
+    expect(readFusionSpec(metadata({ kind: "detect_track_classify" }))).toBeNull();
   });
 
   it.each(["input_size", "crop_size"])(

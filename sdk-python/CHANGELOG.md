@@ -7,6 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`fuse_detect_segment_classify` — a third stage between detection and
+  classification.** The detector finds boxes, RoiAlign cuts them out, a
+  segmentation model turns each crop into a foreground mask, and the classifier
+  reads the crops that mask gates. One `.onnx`, one session. The fused graph
+  emits `masks` alongside `boxes`, `scores`, `classes`, `num_detections` and
+  `probs`.
+
+  It is for a segmenter with no detector of its own — U-Net and relatives. A
+  YOLO-seg export already detects and segments in one pass and does not want
+  this arrangement.
+
+  Most of the graph is the existing bridge. `build_bridge` gained
+  `crops_output`, which binds the un-normalized crop batch to a name, because
+  the segmenter and the classifier normalize differently and the mask has to
+  multiply the crop before either normalization runs. `build_mask_bridge` turns
+  the segmenter's logits into a binary mask — sigmoid for a single-channel head,
+  softmax for a competing one, then a threshold — and optionally applies it.
+
+  Two constraints are structural. The segmenter and the classifier must share a
+  crop size, and a mismatch is refused with a message naming both rather than
+  resampled behind the caller's back. And `masks` are reported in the crop's
+  coordinate space, since mapping back is one resize per instance at a per-box
+  geometry.
+
+- **`DetectionResult.mask`.** A three-stage pipeline fills it with a binary
+  (0/255) `uint8` mask shaped to the box — the same contract
+  `SegmentationResult.mask` already uses, so code that handles one handles the
+  other. `None` for every other pipeline. The task does the crop-space →
+  box-space resampling, nearest-neighbour, the values being binary.
+
+- **`FusionSpec` learns the new kind**, plus `mask_threshold`, `mask_applied`,
+  `segmenter_names` and the `has_masks` property. `from_metadata` accepts both
+  kinds; an unknown one is still refused whole.
+
+
 ## [0.10.0] - 2026-09-13
 
 ### Fixed

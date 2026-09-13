@@ -204,6 +204,11 @@ class DetectionResult:
         bbox: Bounding box in original-image pixel coordinates.
         cropped_image: The original image cropped to ``bbox``, as a HWC uint8
             RGB array. Empty boxes (zero area) yield a zero-sized array.
+        mask: Binary (0/255) ``uint8`` foreground mask for this object, shaped
+            to ``bbox`` in original-image pixels — the same contract
+            :pyattr:`SegmentationResult.mask` uses. Populated only by a
+            ``detect_segment_classify`` pipeline, where a segmentation stage ran
+            inside the crop; ``None`` everywhere else.
         classification: What a second, classification stage predicted **for
             this crop** — populated only by
             :class:`~ort_vision_sdk.tasks.pipeline.DetectClassify`, and ``None``
@@ -220,6 +225,7 @@ class DetectionResult:
     bbox: BoundingBox
     cropped_image: ImageArray
     classification: ClassificationResult | None = None
+    mask: NDArray[np.uint8] | None = None
 
     @property
     def cls(self) -> int:

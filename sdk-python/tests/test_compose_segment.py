@@ -21,7 +21,8 @@ import onnxruntime as ort
 import pytest
 from onnx import TensorProto, helper, numpy_helper
 
-from ort_vision_sdk.compose import fuse_detect_segment_classify
+from ort_vision_sdk import DetectClassify
+from ort_vision_sdk.compose import fuse_detect_classify, fuse_detect_segment_classify
 from ort_vision_sdk.core.exceptions import FusionError
 from ort_vision_sdk.fusion import FUSION_KIND_DETECT_SEGMENT_CLASSIFY, FusionSpec
 
@@ -178,6 +179,14 @@ def _marked_tensor() -> np.ndarray:
     image = np.zeros((1, 3, _IMAGE_SIZE, _IMAGE_SIZE), dtype=np.float32)
     image[0, 0, 8:24, 8:24] = 1.0
     image[0, 1, 40:56, 40:56] = 1.0
+    return image
+
+
+def _marked_image() -> np.ndarray:
+    """The same marked scene as an HWC uint8 image, for the runtime tests."""
+    image = np.zeros((_IMAGE_SIZE, _IMAGE_SIZE, 3), dtype=np.uint8)
+    image[8:24, 8:24, 0] = 255
+    image[40:56, 40:56, 1] = 255
     return image
 
 
@@ -352,3 +361,81 @@ class TestRejection:
     ) -> None:
         with pytest.raises(ValueError, match="mask_threshold"):
             _fuse(stages, tmp_path, mask_threshold=1.0)
+
+
+class TestRuntime:
+    """Driving the fused three-stage graph through `DetectClassify`.
+
+    The graph tests above read ORT's raw outputs. These prove the task does the
+    remaining work: pick the real rows out of the padding, map each mask off the
+    crop grid and onto the box it belongs to, and hand it over under the same
+    contract `Segmenter` already uses.
+    """
+
+    def test_every_detection_carries_a_mask(
+        self, stages: tuple[Path, Path, Path], tmp_path: Path
+    ) -> None:
+        pipeline = DetectClassify(_fuse(stages, tmp_path), providers=["cpu"])
+
+        result = pipeline.predict(_marked_image())[0]
+
+        assert len(result.detections) == 2
+        for detection in result.detections:
+            assert detection.mask is not None
+
+    def test_the_mask_is_shaped_to_its_own_box(
+        self, stages: tuple[Path, Path, Path], tmp_path: Path
+    ) -> None:
+        """Crop-space masks are resampled onto each box's own pixel grid."""
+        pipeline = DetectClassify(_fuse(stages, tmp_path), providers=["cpu"])
+
+        result = pipeline.predict(_marked_image())[0]
+
+        for detection in result.detections:
+            assert detection.mask is not None
+            assert detection.mask.shape == detection.cropped_image.shape[:2]
+
+    def test_the_mask_is_binary_uint8_like_the_segmenters(
+        self, stages: tuple[Path, Path, Path], tmp_path: Path
+    ) -> None:
+        """Same contract as `SegmentationResult.mask`: 0 or 255, `uint8`."""
+        pipeline = DetectClassify(_fuse(stages, tmp_path), providers=["cpu"])
+
+        mask = pipeline.predict(_marked_image())[0].detections[0].mask
+
+        assert mask is not None
+        assert mask.dtype == np.uint8
+        assert set(np.unique(mask)) <= {0, 255}
+
+    def test_the_mask_marks_the_half_the_segmenter_chose(
+        self, stages: tuple[Path, Path, Path], tmp_path: Path
+    ) -> None:
+        """The synthetic segmenter keeps the top half of every crop."""
+        pipeline = DetectClassify(_fuse(stages, tmp_path), providers=["cpu"])
+
+        mask = pipeline.predict(_marked_image())[0].detections[0].mask
+
+        assert mask is not None
+        half = mask.shape[0] // 2
+        assert (mask[:half, :] == 255).all()
+        assert (mask[half:, :] == 0).all()
+
+    def test_a_two_stage_pipeline_still_reports_no_masks(self, tmp_path: Path) -> None:
+        """A detect_classify model has no mask stage, and must not grow one."""
+        detector = _write_detector(tmp_path / "det.onnx")
+        classifier = _write_classifier(tmp_path / "clf.onnx")
+        output = tmp_path / "two_stage.onnx"
+        fuse_detect_classify(
+            detector,
+            classifier,
+            output,
+            mean=(0.0, 0.0, 0.0),
+            std=(1.0, 1.0, 1.0),
+            sampling_ratio=1,
+            max_detections=2,
+        )
+
+        result = DetectClassify(output, providers=["cpu"]).predict(_marked_image())[0]
+
+        assert result.detections
+        assert all(detection.mask is None for detection in result.detections)

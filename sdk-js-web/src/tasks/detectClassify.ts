@@ -23,6 +23,7 @@ import {
   OUTPUT_BOXES,
   OUTPUT_CLASSES,
   OUTPUT_NUM_DETECTIONS,
+  OUTPUT_MASKS,
   OUTPUT_PROBS,
   OUTPUT_SCORES,
   type FusionSpec,
@@ -37,6 +38,7 @@ import { LetterboxPipeline, zeroTensorData } from "../preprocess/pipeline.js";
 import { Boxes, DetectClassifyResults } from "../results.js";
 import {
   BoundingBox,
+  Mask,
   RGBImage,
   type ClassProbability,
   type ClassificationResult,
@@ -267,6 +269,8 @@ export class DetectClassify extends VisionTask {
     const classes = integers(outputs, OUTPUT_CLASSES);
     const probs = asFloat32Array(probsTensor.data);
     const reported = integers(outputs, OUTPUT_NUM_DETECTIONS)[0] ?? 0;
+    const masks = this._spec.hasMasks ? floats(outputs, OUTPUT_MASKS) : null;
+    const [cropWidth, cropHeight] = this._spec.cropSize;
     const rows = Math.min(reported, Math.floor(boxes.length / 4));
     const classCount = probsTensor.dims[probsTensor.dims.length - 1] ?? 0;
 
@@ -288,6 +292,7 @@ export class DetectClassify extends VisionTask {
           bbox,
           cropped,
           this._classify(probs.subarray(row * classCount, (row + 1) * classCount), cropped, options.topK),
+          masks === null ? null : maskToBox(masks, row, cropWidth, cropHeight, cropped),
         ),
       );
     }
@@ -562,6 +567,7 @@ function detection(
   bbox: BoundingBox,
   croppedImage: RGBImage,
   classification: ClassificationResult,
+  mask: Mask | null,
 ): DetectionResult {
   return {
     classId,
@@ -574,7 +580,52 @@ function detection(
     box: bbox,
     croppedImage,
     classification,
+    mask,
   };
+}
+
+/**
+ * Resample a crop-space mask onto the cropped image's own pixel grid.
+ *
+ * Exported for the test suite rather than for callers: it is not re-exported
+ * from the package root, and a mask reaches user code already resampled, on
+ * {@link DetectionResult.mask}.
+ *
+ * The graph computes masks at the resolution the segmenter was exported at,
+ * which is rarely the size of the box in the original image. Resampling here is
+ * what lets {@link DetectionResult.mask} carry the contract `Segmenter` already
+ * produces, so a caller that handles one handles the other.
+ *
+ * Nearest-neighbour on purpose: the values are already thresholded, and
+ * interpolating between them would invent edge pixels that are neither.
+ *
+ * @param masks The graph's `masks` output.
+ * @param row Which detection row to read.
+ * @param cropWidth Width of one mask in the graph's output.
+ * @param cropHeight Height of one mask in the graph's output.
+ * @param target The cropped image the mask must line up with.
+ * @returns The mask on the crop's grid, or `null` when the box has no area.
+ */
+export function maskToBox(
+  masks: Float32Array,
+  row: number,
+  cropWidth: number,
+  cropHeight: number,
+  target: RGBImage,
+): Mask | null {
+  const { width, height } = target;
+  if (width < 1 || height < 1) return null;
+  const stride = cropWidth * cropHeight;
+  const source = masks.subarray(row * stride, (row + 1) * stride);
+  const data = new Uint8Array(width * height);
+  for (let y = 0; y < height; y++) {
+    const sourceRow = Math.min(Math.floor((y * cropHeight) / height), cropHeight - 1);
+    for (let x = 0; x < width; x++) {
+      const sourceColumn = Math.min(Math.floor((x * cropWidth) / width), cropWidth - 1);
+      data[y * width + x] = (source[sourceRow * cropWidth + sourceColumn] ?? 0) > 0.5 ? 255 : 0;
+    }
+  }
+  return new Mask(data, width, height);
 }
 
 /**

@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`detect_segment_classify` pipelines load and run.** `readFusionSpec`
+  previously refused the kind outright, so a three-stage `.onnx` fused on the
+  Python side could not be opened in the browser at all. The spec now reports
+  `hasMasks`, `maskThreshold`, `maskApplied` and `segmenterNames`, and
+  `DetectClassify` reads the graph's `masks` output when the model carries one.
+
+- **`DetectionResult.mask`.** Filled with a `Mask` shaped to the box — the same
+  contract `Segmenter` produces — and `null` for a two-stage pipeline. The
+  crop-space → box-space resampling is nearest-neighbour, matching
+  `_mask_to_box` in the Python SDK so both describe an instance identically.
+
+- **`FUSION_KIND_DETECT_SEGMENT_CLASSIFY` and `OUTPUT_MASKS`** are exported from
+  the package root, paired with the Python SDK's own.
+
+### Fixed
+
+- **`readFusionSpec` reported `kind: "detect_classify"` whatever the file
+  said.** The field was written as a constant rather than from the metadata it
+  had just read. Harmless while one kind existed; wrong the moment a second one
+  did.
+
+
 ## [0.9.1] - 2026-09-13
 
 ### Fixed

@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import numpy as np
+from numpy.typing import NDArray
 
 from ort_vision_sdk.core.backend import read_metadata
 from ort_vision_sdk.core.exceptions import FusionError
@@ -18,6 +19,7 @@ from ort_vision_sdk.fusion import (
     INPUT_SOURCE,
     OUTPUT_BOXES,
     OUTPUT_CLASSES,
+    OUTPUT_MASKS,
     OUTPUT_NUM_DETECTIONS,
     OUTPUT_PROBS,
     OUTPUT_SCORES,
@@ -50,6 +52,22 @@ _OUTPUTS = [
     OUTPUT_NUM_DETECTIONS,
     OUTPUT_PROBS,
 ]
+"""Outputs every fused pipeline declares, in the order the runtime reads them."""
+
+
+def _required_outputs(spec: FusionSpec) -> list[str]:
+    """List the outputs a pipeline of this kind must declare.
+
+    Args:
+        spec (FusionSpec): The configuration read out of the model.
+
+    Returns:
+        list[str]: :data:`_OUTPUTS`, plus
+        :data:`~ort_vision_sdk.fusion.OUTPUT_MASKS` for a three-stage pipeline.
+        ``masks`` comes last so the five-output unpacking stays positional for
+        the pipelines that have no masks.
+    """
+    return [*_OUTPUTS, OUTPUT_MASKS] if spec.has_masks else list(_OUTPUTS)
 
 
 class DetectClassify(VisionTask):
@@ -138,7 +156,8 @@ class DetectClassify(VisionTask):
                 "how to drive it. Build one with ort_vision_sdk.compose.fuse_detect_classify, "
                 "or load a plain model with Detector/Classifier instead."
             )
-        missing = [name for name in _OUTPUTS if name not in self._session.output_names]
+        required = _required_outputs(spec)
+        missing = [name for name in required if name not in self._session.output_names]
         if missing:
             raise FusionError(
                 f"This model claims to be a fused pipeline but does not declare "
@@ -146,6 +165,7 @@ class DetectClassify(VisionTask):
                 f"version of ort_vision_sdk.compose; re-fuse it with this one."
             )
         self._spec: FusionSpec = spec
+        self._outputs: list[str] = required
         self._raise_on_empty: bool = raise_on_empty
         self._labels: tuple[str, ...] = resolve_labels(
             labels if labels is not None else spec.detector_names or default_labels(None)
@@ -243,7 +263,7 @@ class DetectClassify(VisionTask):
         feeds, scale, pad = self._preprocess(original)
         timer.stage("preprocess")
         outputs = self._as_float32_outputs(
-            self._session.run(self._as_feeds(feeds), output_names=_OUTPUTS)
+            self._session.run(self._as_feeds(feeds), output_names=self._outputs)
         )
         timer.stage("inference")
         return self._build_results(
@@ -310,7 +330,7 @@ class DetectClassify(VisionTask):
         feeds, scale, pad = self._preprocess(original)
         timer.stage("preprocess")
         outputs = self._as_float32_outputs(
-            await self._session.ort_async_run(self._as_feeds(feeds), output_names=_OUTPUTS)
+            await self._session.ort_async_run(self._as_feeds(feeds), output_names=self._outputs)
         )
         timer.stage("inference")
         return self._build_results(
@@ -375,7 +395,8 @@ class DetectClassify(VisionTask):
 
         Args:
             outputs: The graph's ``boxes``, ``scores``, ``classes``,
-                ``num_detections`` and ``probs``, in that order.
+                ``num_detections`` and ``probs``, in that order, plus ``masks``
+                when the pipeline carries a segmentation stage.
             timer: The stage timer to close out.
             original: The source image.
             path: Source path, when the input was one.
@@ -393,7 +414,8 @@ class DetectClassify(VisionTask):
             NoDetectionsError: If nothing survives and ``raise_on_empty`` is in
                 effect for this call.
         """
-        boxes_raw, scores_raw, classes_raw, count_raw, probs_raw = outputs
+        boxes_raw, scores_raw, classes_raw, count_raw, probs_raw = outputs[:5]
+        masks_raw = outputs[5] if len(outputs) > 5 else None
         valid = min(int(count_raw.reshape(-1)[0]), boxes_raw.shape[0])
         allowed = set(classes) if classes is not None else None
         minimum = conf_threshold if conf_threshold is not None else 0.0
@@ -415,6 +437,7 @@ class DetectClassify(VisionTask):
                     bbox=bbox,
                     cropped_image=crop,
                     classification=self._to_classification(probs_raw[row], crop, top_k=top_k),
+                    mask=None if masks_raw is None else _mask_to_box(masks_raw[row], crop.shape),
                 )
             )
 
@@ -534,6 +557,39 @@ class DetectClassify(VisionTask):
             return None
         last = shape[-1]
         return int(last) if isinstance(last, int) else None
+
+
+def _mask_to_box(mask: np.ndarray, crop_shape: tuple[int, ...]) -> NDArray[np.uint8] | None:
+    """Resample a crop-space mask onto the cropped image's own pixel grid.
+
+    The graph computes masks at the crop resolution the segmenter was exported
+    at, which is rarely the size of the box in the original image. Resampling
+    here is what lets :pyattr:`~ort_vision_sdk.types.DetectionResult.mask` carry
+    the same contract ``Segmenter`` already produces — a binary ``uint8`` array
+    shaped to the box — so a caller that handles one handles the other.
+
+    Nearest-neighbour on purpose: the values are already thresholded to 0 or 1,
+    and interpolating between them would invent edge pixels that are neither.
+
+    Args:
+        mask (np.ndarray): One row of the graph's ``masks`` output, ``(1, h, w)``
+            or ``(h, w)``, valued 0.0 or 1.0.
+        crop_shape (tuple[int, ...]): Shape of the cropped image this mask
+            belongs to, as ``(height, width, channels)``.
+
+    Returns:
+        NDArray[np.uint8] | None: A ``(height, width)`` array of 0 and 255, or
+        ``None`` when the box has no area — which happens for a box clamped
+        away at the frame's edge, where there is no crop to mask.
+    """
+    height, width = int(crop_shape[0]), int(crop_shape[1])
+    if height < 1 or width < 1:
+        return None
+    flat = mask[0] if mask.ndim == 3 else mask
+    rows = (np.arange(height) * flat.shape[0] // height).clip(0, flat.shape[0] - 1)
+    columns = (np.arange(width) * flat.shape[1] // width).clip(0, flat.shape[1] - 1)
+    resampled = flat[np.ix_(rows, columns)]
+    return (resampled > 0.5).astype(np.uint8) * 255
 
 
 def _crop(image: ImageArray, bbox: BoundingBox) -> ImageArray:

@@ -36,6 +36,17 @@ export type CropSource = "detector_input" | "original";
 export const FUSION_KIND_DETECT_CLASSIFY = "detect_classify";
 
 /**
+ * Value of `ovs.kind` for a detector→segmenter→classifier pipeline.
+ *
+ * The segmenter runs inside each crop rather than over the whole frame: the
+ * detector finds the boxes, the bridge cuts them out, and the segmenter turns
+ * each crop into a foreground mask that gates the pixels the classifier sees.
+ * Fusing one is a build step on the Python side; the browser only loads the
+ * result.
+ */
+export const FUSION_KIND_DETECT_SEGMENT_CLASSIFY = "detect_segment_classify";
+
+/**
  * Namespace for every metadata key the fusion writes.
  *
  * Namespaced on purpose: the detector's own Ultralytics metadata (`names`,
@@ -76,11 +87,21 @@ export const OUTPUT_CLASSES = "classes";
 export const OUTPUT_NUM_DETECTIONS = "num_detections";
 
 /** Name of the `[K, numClassifierClasses]` float32 classifier output, one row per box. */
+/**
+ * Name of the `(K, 1, cropH, cropW)` float32 mask output. Only on a
+ * `detect_segment_classify` pipeline.
+ *
+ * The mask lives in the **crop's** coordinate space, not the original image's,
+ * because that is where the segmenter computed it. Values are 0 or 1 after
+ * thresholding; padded rows are all-zero, like every other output.
+ */
+export const OUTPUT_MASKS = "masks";
+
 export const OUTPUT_PROBS = "probs";
 
 /** Everything a fused pipeline declares about how it must be driven. */
 export interface FusionSpec {
-  /** Pipeline family. Only `"detect_classify"` exists today. */
+  /** Pipeline family — {@link FUSION_KIND_DETECT_CLASSIFY} or {@link FUSION_KIND_DETECT_SEGMENT_CLASSIFY}. */
   readonly kind: string;
   /** `[width, height]` the detector stage expects — the resolution to letterbox to. */
   readonly inputSize: readonly [number, number];
@@ -108,6 +129,19 @@ export interface FusionSpec {
   readonly sdkVersion: string;
   /** Whether driving this pipeline requires feeding the full-resolution input. */
   readonly needsSourceImage: boolean;
+  /** Whether this pipeline emits a {@link OUTPUT_MASKS} tensor. */
+  readonly hasMasks: boolean;
+  /** Class id → name for the segmenter's channels, or `null`. */
+  readonly segmenterNames: readonly string[] | null;
+  /**
+   * Probability above which a segmenter pixel counted as foreground.
+   *
+   * Baked into the graph at fusion time; reported so a caller can say what the
+   * masks mean.
+   */
+  readonly maskThreshold: number;
+  /** Whether the mask gated the crop before the classifier saw it. */
+  readonly maskApplied: boolean;
 }
 
 const KEY_KIND = "kind";
@@ -121,6 +155,9 @@ const KEY_IOU_THRESHOLD = "iou_threshold";
 const KEY_APPLY_SOFTMAX = "apply_softmax";
 const KEY_DETECTOR_NAMES = "detector_names";
 const KEY_CLASSIFIER_NAMES = "classifier_names";
+const KEY_SEGMENTER_NAMES = "segmenter_names";
+const KEY_MASK_THRESHOLD = "mask_threshold";
+const KEY_MASK_APPLIED = "mask_applied";
 
 const DYNAMIC = "dynamic";
 
@@ -177,7 +214,10 @@ export function readFusionSpec(
   for (const [key, value] of Object.entries(metadata)) {
     if (key.startsWith(METADATA_PREFIX)) read[key.slice(METADATA_PREFIX.length)] = value;
   }
-  if (read[KEY_KIND] !== FUSION_KIND_DETECT_CLASSIFY) return null;
+  const kind = read[KEY_KIND];
+  if (kind !== FUSION_KIND_DETECT_CLASSIFY && kind !== FUSION_KIND_DETECT_SEGMENT_CLASSIFY) {
+    return null;
+  }
 
   const inputSize = decodeSize(read[KEY_INPUT_SIZE]);
   const cropSize = decodeSize(read[KEY_CROP_SIZE]);
@@ -192,7 +232,7 @@ export function readFusionSpec(
     read[KEY_CROP_SOURCE] === "original" ? "original" : "detector_input";
 
   return {
-    kind: FUSION_KIND_DETECT_CLASSIFY,
+    kind,
     inputSize,
     cropSize,
     cropSource,
@@ -204,5 +244,9 @@ export function readFusionSpec(
     classifierNames: parseNames(read[KEY_CLASSIFIER_NAMES]),
     sdkVersion: read[KEY_SDK_VERSION] ?? "",
     needsSourceImage: cropSource === "original",
+    hasMasks: kind === FUSION_KIND_DETECT_SEGMENT_CLASSIFY,
+    segmenterNames: parseNames(read[KEY_SEGMENTER_NAMES]),
+    maskThreshold: decodeFloat(read[KEY_MASK_THRESHOLD], 0.5),
+    maskApplied: (read[KEY_MASK_APPLIED] ?? "1") !== "0",
   };
 }

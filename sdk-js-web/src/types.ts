@@ -210,6 +210,14 @@ export interface DetectionResult {
    * belongs to*, and collapsing them would lose one of the two.
    */
   readonly classification?: ClassificationResult | null;
+  /**
+   * Binary foreground mask for this object, shaped to `bbox` in original-image
+   * pixels — the same contract {@link SegmentationResult.mask} uses.
+   *
+   * Populated only by a `detect_segment_classify` pipeline, where a
+   * segmentation stage ran inside the crop. `null` everywhere else.
+   */
+  readonly mask?: Mask | null;
 }
 
 /**

@@ -274,6 +274,93 @@ Steps that would be no-ops (zero mean, unit deviation, unit scale) are not
 emitted as nodes — a classifier that wants the raw `[0, 1]` crop pays for no
 arithmetic at all.
 
+## Three stages: segmenting inside the crop
+
+Sometimes the crop is not enough: you want to classify **the object only**,
+without the background a box inevitably drags along. That is what a third stage
+is for.
+
+```python
+from ort_vision_sdk.compose import fuse_detect_segment_classify
+
+fuse_detect_segment_classify(
+    "yolov8n.onnx",
+    "unet.onnx",
+    "resnet18.onnx",
+    "pipeline.onnx",
+    max_detections=10,
+)
+```
+
+The resulting graph does all of this in one file: detect → crop → **segment each
+crop** → multiply the crop by the mask → classify.
+
+```mermaid
+flowchart LR
+    A["images"] --> B["detector"]
+    B --> C["NMS + RoiAlign"]
+    C --> D["crops"]
+    D --> E["segmenter"]
+    E --> F["binary mask"]
+    D --> G["Mul"]
+    F --> G
+    G --> H["classifier"]
+    F --> I["masks"]
+    H --> J["probs"]
+```
+
+!!! warning "This is not for a YOLO-seg"
+    A YOLO-seg export **already** detects and segments in one model. Putting a
+    separate detector in front of it duplicates the work. Three stages are for
+    when the segmenter is a plain image-to-mask network (U-Net and relatives)
+    with no detector of its own, which does better on a tight crop than on a
+    full frame.
+
+### Reading the masks
+
+```python
+from ort_vision_sdk import DetectClassify
+
+pipeline = DetectClassify("pipeline.onnx")
+result = pipeline.predict("photo.jpg")[0]
+
+for d in result.detections:
+    print(d.name, d.conf, d.mask.shape)   # (box_height, box_width)
+```
+
+`d.mask` arrives already shaped to the box, binary (0/255) `uint8` — the **same
+contract** `Segmenter` produces. Code that already handles a segmenter's mask
+handles this one unchanged.
+
+!!! info "Inside the graph, the mask lives in the crop's space"
+    The `.onnx`'s `masks` output is shaped `(K, 1, crop_h, crop_w)`, because
+    that is where the segmenter computed it. Mapping it back to the original
+    image is one resize per instance at a per-box geometry — the task does that
+    for you (nearest-neighbour, the values being binary), and anyone driving the
+    graph by hand does it from the matching `boxes` row.
+
+### What you can tune
+
+| Parameter | For |
+| --- | --- |
+| `mask_threshold` | Probability above which a pixel is foreground (default `0.5`). |
+| `mask_channel` | Which segmenter channel is the foreground. `0` for a single-channel head. |
+| `mask_activation` | `"sigmoid"` (one channel) or `"softmax"` (competing channels). `None` decides from the graph. |
+| `apply_mask` | `False` reports masks **without** gating the classifier — use it when the classifier was trained on un-masked crops. |
+| `segmenter_mean` / `segmenter_std` | The segmenter's normalization, independent of the classifier's. |
+
+!!! danger "The last two stages share `crop_size`"
+    The mask is computed in the crop's space and multiplies that crop directly.
+    If the segmenter and the classifier declare different resolutions, the
+    fusion **refuses** and names both, rather than resampling behind your back
+    and handing you a mask that no longer lines up with what it describes.
+
+!!! check "Checking that the mask reached the classifier"
+    The test the SDK uses for this doubles as a recipe: fix a uniformly coloured
+    crop and compare the probabilities with `apply_mask=True` and `False`.
+    Masking half of a pure-red crop takes the channel mean from 1.0 to 0.5 — a
+    number that can only appear if the mask actually multiplied.
+
 ## When finding nothing is an error
 
 A pipeline that finds nothing returns an empty envelope — the classifier never

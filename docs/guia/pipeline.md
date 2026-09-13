@@ -274,6 +274,92 @@ Passos que seriam identidade (`mean` zero, `std` unitário, escala 1.0) não vir
 nós — um classificador que quer o recorte cru em `[0, 1]` não paga aritmética
 nenhuma.
 
+## Três estágios: segmentando dentro do recorte
+
+Às vezes o recorte não basta: você quer classificar **só o objeto**, sem o fundo
+que a caixa inevitavelmente traz junto. Para isso existe um terceiro estágio.
+
+```python
+from ort_vision_sdk.compose import fuse_detect_segment_classify
+
+fuse_detect_segment_classify(
+    "yolov8n.onnx",
+    "unet.onnx",
+    "resnet18.onnx",
+    "pipeline.onnx",
+    max_detections=10,
+)
+```
+
+O grafo resultante faz, num arquivo só: detecta → recorta → **segmenta cada
+recorte** → multiplica o recorte pela máscara → classifica.
+
+```mermaid
+flowchart LR
+    A["images"] --> B["detector"]
+    B --> C["NMS + RoiAlign"]
+    C --> D["recortes"]
+    D --> E["segmentador"]
+    E --> F["máscara binária"]
+    D --> G["Mul"]
+    F --> G
+    G --> H["classificador"]
+    F --> I["masks"]
+    H --> J["probs"]
+```
+
+!!! warning "Isto não é para um YOLO-seg"
+    Um export YOLO-seg **já** detecta e segmenta num modelo só. Colocar um
+    detector separado na frente dele duplica trabalho. Os três estágios são para
+    quando o segmentador é uma rede imagem→máscara comum (U-Net e parentes), que
+    não tem detector próprio e trabalha melhor num recorte apertado do que no
+    quadro inteiro.
+
+### Lendo as máscaras
+
+```python
+from ort_vision_sdk import DetectClassify
+
+pipeline = DetectClassify("pipeline.onnx")
+result = pipeline.predict("foto.jpg")[0]
+
+for d in result.detections:
+    print(d.name, d.conf, d.mask.shape)   # (altura_da_caixa, largura_da_caixa)
+```
+
+`d.mask` chega já no formato da caixa, binária (0/255) `uint8` — o **mesmo
+contrato** que o `Segmenter` entrega. Quem já trata a máscara de um segmentador
+trata esta sem mudar nada.
+
+!!! info "No grafo, a máscara vive no espaço do recorte"
+    A saída `masks` do `.onnx` tem forma `(K, 1, crop_h, crop_w)`, porque é onde
+    o segmentador a calculou. Remapear para a imagem original é um resize por
+    instância, com geometria diferente a cada caixa — a task faz isso para você
+    (vizinho mais próximo, já que os valores são binários), e quem dirige o
+    grafo na mão faz a partir da linha de `boxes` correspondente.
+
+### O que dá para ajustar
+
+| Parâmetro | Para quê |
+| --- | --- |
+| `mask_threshold` | Probabilidade a partir da qual um pixel é primeiro plano (default `0.5`). |
+| `mask_channel` | Qual canal do segmentador é o primeiro plano. `0` para cabeça de um canal. |
+| `mask_activation` | `"sigmoid"` (um canal) ou `"softmax"` (canais competindo). `None` decide pelo grafo. |
+| `apply_mask` | `False` reporta as máscaras **sem** gatear o classificador — use quando ele foi treinado em recortes sem máscara. |
+| `segmenter_mean` / `segmenter_std` | Normalização do segmentador, independente da do classificador. |
+
+!!! danger "Os dois últimos estágios compartilham o `crop_size`"
+    A máscara é calculada no espaço do recorte e multiplica esse recorte
+    diretamente. Se o segmentador e o classificador declararem resoluções
+    diferentes, a fusão **recusa** e diz quais são as duas, em vez de
+    reamostrar por trás e entregar uma máscara desalinhada do que ela descreve.
+
+!!! check "Verificando que a máscara chegou ao classificador"
+    O teste que o SDK usa para isso vale como receita: fixe um recorte de cor
+    uniforme e compare as probabilidades com `apply_mask=True` e `False`.
+    Mascarar metade de um recorte vermelho puro leva a média do canal de 1,0
+    para 0,5 — um número que só aparece se a máscara realmente multiplicou.
+
 ## Quando não detectar nada é um erro
 
 Um pipeline que não acha nada devolve um envelope vazio — o classificador nem

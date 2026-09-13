@@ -139,6 +139,25 @@ function declaredInputTypes(
 }
 
 /**
+ * Warn when the model's bytes were in hand but no input type came back.
+ *
+ * Every ONNX graph declares at least one input, so an empty result from bytes
+ * means the reader failed, not that the model said nothing. Without this the
+ * failure is invisible: the session falls back to float32, which is right for
+ * most models and wrong for exactly the half-precision ones this reader exists
+ * to support — so it looks like nothing is broken until a `predict()` throws
+ * `Unexpected input data type`. That is how a 1 MB ceiling on the graph
+ * descent shipped in 0.9.0 and reached a consumer.
+ */
+function warnOnUnreadableTypes(): void {
+  console.warn(
+    "Could not read any input type from this model's bytes; feeds will be built as float32. " +
+      "A half-precision model will fail at inference with 'Unexpected input data type'. " +
+      "Please report this with the model that produced it.",
+  );
+}
+
+/**
  * Refuse a half-precision model in an environment that cannot feed one.
  *
  * ORT requires a real `Float16Array` for a `float16` tensor — the same bits in
@@ -247,6 +266,9 @@ export class OrtSession {
       wantsMetadata && typeof source !== "string" ? readModelMetadata(source) : {};
     const inputTypes =
       typeof source !== "string" ? declaredInputTypes(source) : {};
+    if (typeof source !== "string" && Object.keys(inputTypes).length === 0) {
+      warnOnUnreadableTypes();
+    }
     assertFeedableTypes(inputTypes);
 
     let session: ort.InferenceSession;

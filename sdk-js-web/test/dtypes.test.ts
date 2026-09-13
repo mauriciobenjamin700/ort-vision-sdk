@@ -90,6 +90,65 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+/** Protobuf wire types, for the hand-built model below. */
+const WIRE_VARINT = 0;
+const WIRE_LENGTH_DELIMITED = 2;
+
+/**
+ * Encode a base-128 varint.
+ *
+ * @param value The number to encode.
+ * @returns Its bytes.
+ */
+function varint(value: number): number[] {
+  const bytes: number[] = [];
+  let rest = value;
+  while (rest > 0x7f) {
+    bytes.push((rest & 0x7f) | 0x80);
+    rest = Math.floor(rest / 128);
+  }
+  bytes.push(rest);
+  return bytes;
+}
+
+/**
+ * Encode a length-delimited field: tag, length, payload.
+ *
+ * @param field Field number.
+ * @param payload The field's bytes.
+ * @returns The encoded field.
+ */
+function delimited(field: number, payload: readonly number[]): number[] {
+  return [
+    ...varint(field * 8 + WIRE_LENGTH_DELIMITED),
+    ...varint(payload.length),
+    ...payload,
+  ];
+}
+
+/**
+ * Build a `ModelProto` whose graph is larger than the reader's leaf-field ceiling.
+ *
+ * Hand-encoded rather than committed as a fixture: the case is "the graph is
+ * megabytes", and a multi-megabyte `.onnx` in the repository to prove it would
+ * cost far more than the thirty lines above. The padding is an oversized
+ * `initializer`, which is what makes a real export big in the first place.
+ *
+ * @param elemType `TensorProto.DataType` the single input declares.
+ * @param graphBytes Roughly how large the graph should be.
+ * @returns The encoded model.
+ */
+function modelWithLargeGraph(elemType: number, graphBytes: number): Uint8Array {
+  const tensorType = delimited(1, [...varint(1 * 8 + WIRE_VARINT), ...varint(elemType)]);
+  const valueInfo = [
+    ...delimited(1, [...new TextEncoder().encode("images")]),
+    ...delimited(2, tensorType),
+  ];
+  const padding = new Array<number>(graphBytes).fill(0);
+  const graph = [...delimited(11, valueInfo), ...delimited(5, padding)];
+  return new Uint8Array(delimited(7, graph));
+}
+
 describe("readModelInputTypes", () => {
   it("reads FLOAT16 off a half-precision export", () => {
     expect(readModelInputTypes(model("tiny_classifier_fp16.onnx"))).toEqual({ images: 10 });
@@ -107,6 +166,19 @@ describe("readModelInputTypes", () => {
 
   it("returns nothing for bytes that are not a model", () => {
     expect(readModelInputTypes(new Uint8Array([0, 1, 2, 3]))).toEqual({});
+  });
+
+  it("reads a graph larger than the reader's leaf-field ceiling", () => {
+    const model = modelWithLargeGraph(10, 2 * 1024 * 1024);
+
+    expect(model.length).toBeGreaterThan(1 << 20);
+    expect(readModelInputTypes(model)).toEqual({ images: 10 });
+  });
+
+  it("reads a large float32 graph too, rather than guessing right by luck", () => {
+    const model = modelWithLargeGraph(1, 2 * 1024 * 1024);
+
+    expect(readModelInputTypes(model)).toEqual({ images: 1 });
   });
 });
 
@@ -290,6 +362,27 @@ describe("OrtSession with a half-precision graph", () => {
 
     await expect(attempt).rejects.toThrow(ModelLoadError);
     await expect(attempt).rejects.toThrow(/no Float16Array/);
+  });
+
+  it("warns when the bytes yielded no input type at all", async () => {
+    const { OrtSession } = await withStubbedOrt();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+
+    await OrtSession.create(new Uint8Array([0, 1, 2, 3]));
+
+    expect(warn).toHaveBeenCalledOnce();
+    expect(warn.mock.calls[0]![0]).toMatch(/Could not read any input type/);
+    warn.mockRestore();
+  });
+
+  it("stays quiet when the types were read", async () => {
+    const { OrtSession } = await withStubbedOrt();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+
+    await OrtSession.create(model("tiny_classifier_fp16.onnx"));
+
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
   });
 
   it("still loads a float32 model where Float16Array is missing", async () => {

@@ -144,6 +144,21 @@ cada coordenada antes do NMS e do retorno às coordenadas da imagem original —
 por isso o SDK alarga a saída na fronteira, e você nunca vê meia precisão numa
 `BoundingBox`.
 
+!!! warning "No WASM, FP16 compra bytes — não tempo"
+    Não existe kernel de meia precisão no backend WASM: o cast é trabalho a
+    mais. Medido num pipeline fundido real (2 baterias × 30 repetições, máquina
+    ociosa, medianas reproduzindo entre 0,4 % e 1,1 %):
+
+    | Variante | Mediana | Arquivo |
+    | --- | --- | --- |
+    | fp32 fundido | 63,2 / 62,7 ms | 30,92 MB |
+    | fp16 fundido | 87,5 / 88,2 ms | 15,54 MB |
+
+    **+39 % de latência para 1,99× menos bytes.** Isso inverte a expectativa
+    que FP16 cria em servidor. Escolha FP16 no navegador quando o gargalo é
+    download/memória, não quando é tempo de inferência. Com WebGPU a pergunta é
+    outra — e onde não há adaptador, não há resposta melhor.
+
 !!! note "Onde a diferença aparece de verdade"
     Os **pesos** em meia precisão mudam as ativações, e portanto as confianças,
     nas casas decimais. A classe prevista raramente muda; o número ao lado dela

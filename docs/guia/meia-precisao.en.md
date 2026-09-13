@@ -144,6 +144,21 @@ every coordinate ahead of NMS and the scale-back to original-image coordinates �
 which is why the SDK widens at the boundary, and why you never see half
 precision inside a `BoundingBox`.
 
+!!! warning "On WASM, FP16 buys bytes — not time"
+    The WASM backend has no half-precision kernels: the cast is extra work.
+    Measured on a real fused pipeline (2 batteries × 30 repetitions, idle
+    machine, medians reproducing within 0.4–1.1%):
+
+    | Variant | Median | File |
+    | --- | --- | --- |
+    | fp32 fused | 63.2 / 62.7 ms | 30.92 MB |
+    | fp16 fused | 87.5 / 88.2 ms | 15.54 MB |
+
+    **+39% latency for 1.99× fewer bytes.** That inverts the expectation FP16
+    sets on a server. Choose FP16 in the browser when the bottleneck is
+    download or memory, not when it is inference time. WebGPU is a different
+    question — and where there is no adapter, there is no better answer.
+
 !!! note "Where the difference really shows"
     Half-precision **weights** change the activations, and therefore the
     confidences, in the decimals. The predicted class rarely moves; the number

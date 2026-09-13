@@ -47,6 +47,11 @@ const WIRE_FIXED32 = 5;
  * Hard ceiling on a single length-delimited field, as a guard against a corrupt
  * length turning into a huge slice. Model metadata values are strings — a class
  * name map for thousands of classes still fits well inside this.
+ *
+ * It applies to leaf fields being read *out* of the file, not to the messages
+ * walked *through* to reach them. The `graph` of a real export is the file: 21.79
+ * MB on a reported YOLO detector. Applying this ceiling there made the reader
+ * give up on every model anyone would actually load, and give up silently.
  */
 const MAX_FIELD_BYTES = 1 << 20;
 
@@ -111,12 +116,18 @@ function skipField(cursor: Cursor, wireType: number): boolean {
  * Read a length-delimited payload as a byte range.
  *
  * @param cursor Cursor to advance past the payload.
+ * @param maxBytes Largest payload to accept, defaulting to
+ *   {@link MAX_FIELD_BYTES}. Pass the buffer length when descending into a
+ *   message whose size is the file's size rather than a leaf value's.
  * @returns Start and end offsets of the payload, or `null` when the length is
- *   truncated, overruns the buffer, or exceeds {@link MAX_FIELD_BYTES}.
+ *   truncated, overruns the buffer, or exceeds `maxBytes`.
  */
-function readLengthDelimited(cursor: Cursor): { start: number; end: number } | null {
+function readLengthDelimited(
+  cursor: Cursor,
+  maxBytes: number = MAX_FIELD_BYTES,
+): { start: number; end: number } | null {
   const length = readVarint(cursor);
-  if (length === null || length > MAX_FIELD_BYTES) return null;
+  if (length === null || length > maxBytes) return null;
   const start = cursor.pos;
   const end = start + length;
   if (end > cursor.end) return null;
@@ -314,7 +325,7 @@ export function readModelInputTypes(
     const field = tag >>> 3;
     const wireType = tag & 0x07;
     if (field === MODEL_GRAPH_FIELD && wireType === WIRE_LENGTH_DELIMITED) {
-      const graph = readLengthDelimited(cursor);
+      const graph = readLengthDelimited(cursor, bytes.length);
       if (graph === null) break;
       const inner: Cursor = { bytes, end: graph.end, pos: graph.start };
       while (inner.pos < inner.end) {

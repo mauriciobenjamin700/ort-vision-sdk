@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-09-13
+
+### Fixed
+
+- **`readModelInputTypes` gave up on every model anyone would actually load
+  (#54).** Descending into the `ModelProto`'s `graph` went through the same
+  helper that reads a metadata *string*, which caps a field at 1 MB as a guard
+  against a corrupt length. A real export's graph is the file: 21.79 MB, 10.92
+  MB and 5.35 MB on the three models this was reported against. The reader
+  returned `{}`, the session fell back to "assume float32", and 0.9.0's fix was
+  undone for exactly the models it was written for.
+
+  The ceiling now applies to leaf fields being read *out* of the file, not to
+  the messages walked *through* to reach them; the graph descent is bounded by
+  the buffer length instead.
+
+  The suite could not see this: its fixtures run from 856 B to 14.8 kB, all of
+  them comfortably under the cap. Two regression tests build a `ModelProto` with
+  a 2 MB graph by hand — cheaper than committing a multi-megabyte `.onnx` — and
+  one of them declares float32, because the old code was equally broken there
+  and merely guessed right by accident.
+
+### Added
+
+- **A warning when the model's bytes yield no input type at all.** Every ONNX
+  graph declares at least one input, so an empty read from bytes means the
+  reader failed rather than that the model said nothing. Falling back silently
+  is what let #54 ship and reach a consumer: float32 is right for most models
+  and wrong for precisely the half-precision ones this reader exists to serve,
+  so nothing looks broken until `predict()` throws `Unexpected input data type`.
+
+
 ## [0.9.0] - 2026-09-13
 
 ### Fixed
@@ -688,7 +720,8 @@ console.log(r.boxes.xyxy, r.boxes.cls, r.boxes.conf, r.names);
 - Execution-provider resolution defaulting to `["webgpu", "wasm"]`.
 - Public types mirroring the Python SDK: `BoundingBox`, `ClassProbability`, `ClassificationResult`, `DetectionResult`, `RGBImage`.
 
-[Unreleased]: https://github.com/mauriciobenjamin700/ort-vision-sdk/compare/web-v0.9.0...HEAD
+[Unreleased]: https://github.com/mauriciobenjamin700/ort-vision-sdk/compare/web-v0.9.1...HEAD
+[0.9.1]: https://github.com/mauriciobenjamin700/ort-vision-sdk/compare/web-v0.9.0...web-v0.9.1
 [0.9.0]: https://github.com/mauriciobenjamin700/ort-vision-sdk/compare/web-v0.8.1...web-v0.9.0
 [0.8.1]: https://github.com/mauriciobenjamin700/ort-vision-sdk/compare/web-v0.8.0...web-v0.8.1
 [0.8.0]: https://github.com/mauriciobenjamin700/ort-vision-sdk/compare/web-v0.7.1...web-v0.8.0

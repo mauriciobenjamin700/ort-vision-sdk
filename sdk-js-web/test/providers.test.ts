@@ -55,6 +55,23 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+/**
+ * The provider-related warnings, out of everything `create` may have warned about.
+ *
+ * These tests hand `create` an eight-byte buffer, which is a valid stand-in for
+ * a model only because ORT is mocked — the real reader also warns that it could
+ * not find an input type in it. Filtering keeps each test asserting on the
+ * warning it is actually about.
+ *
+ * @param warn The spy installed on `console.warn`.
+ * @returns Messages mentioning execution providers.
+ */
+function providerWarnings(warn: { mock: { calls: unknown[][] } }): string[] {
+  return warn.mock.calls
+    .map((call) => String(call[0]))
+    .filter((message) => message.includes("execution provider"));
+}
+
 describe("detectProviders", () => {
   it("keeps webgpu when an adapter exists", async () => {
     withGpu({});
@@ -114,8 +131,8 @@ describe("OrtSession providers", () => {
 
     await OrtSession.create(new ArrayBuffer(8), { providers: ["webgpu"] });
 
-    expect(warn).toHaveBeenCalledOnce();
-    expect(warn.mock.calls[0]?.[0]).toMatch(/webgpu/);
+    expect(providerWarnings(warn)).toHaveLength(1);
+    expect(providerWarnings(warn)[0]).toMatch(/webgpu/);
   });
 
   it("stays quiet when the default list falls back", async () => {
@@ -125,7 +142,7 @@ describe("OrtSession providers", () => {
     const session = await OrtSession.create(new ArrayBuffer(8));
 
     expect(session.providers).toEqual(["wasm"]);
-    expect(warn).not.toHaveBeenCalled();
+    expect(providerWarnings(warn)).toEqual([]);
   });
 
   it("falls back to wasm when nothing survives, rather than to an unsatisfiable list", async () => {

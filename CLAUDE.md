@@ -29,13 +29,26 @@ do monorepo, e `[tool.hatch.build.targets.wheel]` já aponta para ele. Não
 comportamento que entra só de um lado é como eles divergem — e a divergência é
 silenciosa, porque cada suíte de testes só conhece o seu lado.
 
-Casos reais que passaram despercebidos exatamente assim:
+`sdk-python/tests/test_public_surface.py` é o guard: ele lê
+`sdk-js-web/src/index.ts` e pareia cada export com um nome do
+`ort_vision_sdk.__all__`. Exportar de um lado e não do outro **quebra a suíte**.
+Assimetria legítima entra em `WEB_ONLY` ou `PYTHON_ONLY` **com o motivo escrito**
+— é o registro da decisão, não uma lista de exceções para crescer sem pensar.
 
-- `OrtSession.providers` guardava a lista *pedida* nos dois SDKs. Corrigido no
-  Python; o TypeScript ainda relata o pedido.
-- `Classifier` assume normalização ImageNet nos dois, o que degrada em silêncio
-  um classificador Ultralytics. Corrigido na fusão (Python-only); o
-  `Classifier` de ambos os lados ainda tem o default antigo.
+O guard cobre superfície, não comportamento. Os dois casos que motivaram esta
+seção mostram a diferença:
+
+- **Superfície (o guard pega hoje).** O root do Python exportava 45 nomes e o do
+  web, os mesmos mais 34 — entre eles as oito exceções, então `except
+  ModelLoadError` precisava de submódulo de um lado e nada do outro. A própria
+  referência se contradizia: "tudo importável diretamente de `ort_vision_sdk`"
+  três linhas acima de uma tabela apontando para `ort_vision_sdk.core`.
+- **Comportamento (nenhum guard pega — só perguntar pega).** As tasks montavam
+  o feed sempre em float32 e ninguém lia o `elem_type` do grafo, então modelo
+  FP16 carregava e morria no primeiro `predict()`. O defeito era **idêntico dos
+  dois lados**, e foi reportado só contra o web (#50) porque cada suíte
+  alimentava fixtures que ela mesma exportou em float32. Um SDK "sem issue" não
+  é um SDK sem o bug.
 
 Ao mudar comportamento em `sdk-python/src/`, pergunte **sempre** se
 `sdk-js-web/src/` precisa do mesmo — e vice-versa. Um hook `PreToolUse` avisa
@@ -113,6 +126,22 @@ confirme pelo índice simples.
   O mesmo vale para `gh pr edit` — veja `~/.claude/rules/git-pr.md`.
 - **Interpretador do pacote:** `sdk-python/.venv/bin/python`. O Makefile já cai
   nele automaticamente (`PY :=`), e usa `uv` quando o venv não existe.
+- **Nunca rode `python` com o cwd dentro de `sdk-python/src/ort_vision_sdk/`.**
+  O `types.py` do pacote sombreia o `types` da stdlib e o interpretador morre
+  antes do seu script:
+
+  ```text
+  ImportError: cannot import name 'GenericAlias' from partially initialized
+  module 'types' (most likely due to a circular import)
+  ```
+
+  Vale para qualquer script auxiliar, inclusive um `python3 - <<EOF` de uma
+  linha. Rode da raiz do repo com caminho absoluto/relativo.
+- **O gate linta só `src/`.** `ruff check src`, `ruff format --check src`,
+  `mypy src` — `tests/` fica de fora de propósito (a suíte usa fakes com
+  assinaturas que as regras `D`/`ANN` reprovariam). Rodar `ruff check tests` por
+  conta própria produz centenas de achados que **não** são regressão, e
+  `ruff format tests` reescreveria a suíte inteira num diff que ninguém pediu.
 
 ## Skills e agentes que valem aqui
 

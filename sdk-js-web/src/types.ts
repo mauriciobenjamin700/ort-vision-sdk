@@ -18,13 +18,69 @@ import { ImageLoadError } from "./core/exceptions.js";
  *
  * `data.length` must equal `width * height * 3`. The buffer is laid out row
  * by row, top-to-bottom, with each pixel as `[R, G, B]`.
+ *
+ * The pixels can also be produced on first read — see {@link RGBImage.deferred}.
+ * Reading `data` is the same either way.
  */
 export class RGBImage {
+  private _data: Uint8Array | null;
+  private _materialize: (() => Uint8Array) | null = null;
+
   constructor(
-    public readonly data: Uint8Array,
+    data: Uint8Array,
     public readonly width: number,
     public readonly height: number,
   ) {
+    RGBImage._check(data, width, height);
+    this._data = data;
+  }
+
+  /**
+   * An image whose pixels are computed the first time `data` is read.
+   *
+   * Used by the decoder for frames it can hand to preprocessing without
+   * reading back: a 1080p `getImageData` plus the RGBA→RGB copy is most of
+   * the `load` stage (9.4 ms vs 1.9 ms for the GPU-side copy, measured in
+   * Chromium), and a camera loop that only reads boxes never needs it.
+   *
+   * @param width Width in pixels.
+   * @param height Height in pixels.
+   * @param materialize Produces the `width * height * 3` buffer; called at most
+   *   once, and must keep returning the pixels of the moment the image was
+   *   made — snapshot whatever it reads from.
+   * @returns The image. Built without the constructor, which would need the
+   *   very buffer this defers.
+   */
+  static deferred(width: number, height: number, materialize: () => Uint8Array): RGBImage {
+    const image = Object.create(RGBImage.prototype) as RGBImage;
+    Object.assign(image, { width, height, _data: null, _materialize: materialize });
+    return image;
+  }
+
+  /**
+   * The HWC RGB pixels, materialized on first read for a deferred image.
+   *
+   * @throws {@link ImageLoadError} if a deferred image's buffer has the wrong length.
+   */
+  get data(): Uint8Array {
+    if (this._data === null) {
+      const data = (this._materialize as () => Uint8Array)();
+      RGBImage._check(data, this.width, this.height);
+      this._data = data;
+      this._materialize = null;
+    }
+    return this._data;
+  }
+
+  /**
+   * Validate a buffer's length against the image size.
+   *
+   * @param data The pixels.
+   * @param width Width in pixels.
+   * @param height Height in pixels.
+   * @throws {@link ImageLoadError} if `data.length !== width * height * 3`.
+   */
+  private static _check(data: Uint8Array, width: number, height: number): void {
     if (data.length !== width * height * 3) {
       throw new ImageLoadError(
         `RGBImage data length ${data.length} does not match width * height * 3 = ${

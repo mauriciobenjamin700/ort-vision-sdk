@@ -251,10 +251,14 @@ export class Segmenter extends VisionTask {
     const path = typeof image === "string" ? image : null;
     const { image: original, canvas, owned } = await loadImageSource(image);
     timer.stage("load");
-    const { tensor, scale, padLeft, padTop } = this._preprocess(original, canvas);
+    const { tensor, scale, padLeft, padTop, reused } = this._preprocess(original, canvas);
     timer.stage("preprocess");
-    const outputs = await this._session.run({ [this._session.inputName]: tensor });
-    this._pipeline.release();
+    let outputs: Record<string, ort.Tensor>;
+    try {
+      outputs = await this._session.run({ [this._session.inputName]: tensor });
+    } finally {
+      this._pipeline.release({ reused });
+    }
     timer.stage("inference");
 
     const { perAnchor, prototypes } = this._splitOutputs(outputs);
@@ -330,6 +334,7 @@ export class Segmenter extends VisionTask {
     scale: number;
     padLeft: number;
     padTop: number;
+    reused: boolean;
   } {
     const [tw, th] = this._inputSize;
     const fused = this._pipeline.run(image, canvas);
@@ -338,6 +343,7 @@ export class Segmenter extends VisionTask {
       scale: fused.scale,
       padLeft: fused.padLeft,
       padTop: fused.padTop,
+      reused: fused.reused,
     };
   }
 

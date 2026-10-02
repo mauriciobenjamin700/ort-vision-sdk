@@ -108,7 +108,7 @@ export async function loadImageSource(source: ImageInput): Promise<LoadedImage> 
           "Wait for its 'loadeddata' event before predicting on it.",
       );
     }
-    return drawableToRGB(source, source.videoWidth, source.videoHeight);
+    return drawableToRGB(source, source.videoWidth, source.videoHeight, isLiveStream(source));
   }
 
   if (typeof HTMLCanvasElement !== "undefined" && source instanceof HTMLCanvasElement) {
@@ -124,7 +124,12 @@ export async function loadImageSource(source: ImageInput): Promise<LoadedImage> 
   }
 
   if (typeof VideoFrame !== "undefined" && source instanceof VideoFrame) {
-    return drawableToRGB(source, source.displayWidth, source.displayHeight);
+    return drawableToRGB(
+      source,
+      source.displayWidth,
+      source.displayHeight,
+      source.format !== null && OPAQUE_FRAME_FORMATS.has(source.format),
+    );
   }
 
   throw new ImageLoadError(
@@ -162,7 +167,7 @@ async function loadFromBlob(blob: Blob): Promise<LoadedImage> {
     );
   }
   try {
-    return drawableToRGB(bitmap, bitmap.width, bitmap.height);
+    return drawableToRGB(bitmap, bitmap.width, bitmap.height, blob.type === "image/jpeg");
   } finally {
     bitmap.close();
   }
@@ -191,11 +196,52 @@ function waitForImageElement(img: HTMLImageElement): Promise<void> {
 }
 
 /**
+ * `VideoFrame` pixel formats that carry no alpha channel.
+ *
+ * The `A`-suffixed planar formats and `RGBA`/`BGRA` do; a frame in one of
+ * these never has a translucent pixel.
+ */
+const OPAQUE_FRAME_FORMATS: ReadonlySet<string> = new Set([
+  "I420",
+  "I422",
+  "I444",
+  "NV12",
+  "RGBX",
+  "BGRX",
+]);
+
+/**
+ * Whether a video element is playing a live capture (camera, screen).
+ *
+ * `MediaStream` video tracks carry no alpha, so every frame is opaque. A video
+ * playing a file may not be — VP9 with alpha exists — so it gets no such
+ * promise.
+ *
+ * @param video The element.
+ */
+function isLiveStream(video: HTMLVideoElement): boolean {
+  return typeof MediaStream !== "undefined" && video.srcObject instanceof MediaStream;
+}
+
+/**
  * Paint a drawable onto a fresh canvas and read it back as RGB.
+ *
+ * When the source is known to be opaque without looking — a JPEG, a camera
+ * frame, an alpha-less `VideoFrame` — the read-back is deferred: the image's
+ * pixels come out of the canvas the first time something reads `data`. The
+ * canvas is this call's own, so it still holds the frame of this moment
+ * however late that read happens. Preprocessing draws from the canvas and
+ * never reads `data`, so a loop that only consumes boxes skips the
+ * full-resolution `getImageData` altogether.
+ *
+ * Any other source is read back now, because whether its canvas may stand in
+ * for the RGB image depends on every pixel being opaque, and only the read
+ * tells.
  *
  * @param drawable The source to decode.
  * @param width Its intrinsic width.
  * @param height Its intrinsic height.
+ * @param knownOpaque Whether the source cannot contain a translucent pixel.
  * @returns The decoded image, with the canvas attached when it is opaque.
  * @throws {@link ImageLoadError} for a zero-sized source.
  */
@@ -203,6 +249,7 @@ function drawableToRGB(
   drawable: CanvasImageSource,
   width: number,
   height: number,
+  knownOpaque: boolean = false,
 ): LoadedImage {
   if (width === 0 || height === 0) {
     throw new ImageLoadError(`Cannot load image with zero dimension (${width}x${height}).`);
@@ -210,6 +257,14 @@ function drawableToRGB(
   const canvas = createCanvas(width, height);
   const ctx = get2DContext(canvas);
   ctx.drawImage(drawable, 0, 0, width, height);
+  if (knownOpaque) {
+    const image = RGBImage.deferred(
+      width,
+      height,
+      () => imageDataToRGBChecked(ctx.getImageData(0, 0, width, height)).image.data,
+    );
+    return { image, canvas, owned: true };
+  }
   const { image, opaque } = imageDataToRGBChecked(ctx.getImageData(0, 0, width, height));
   return { image, canvas: opaque ? canvas : null, owned: true };
 }

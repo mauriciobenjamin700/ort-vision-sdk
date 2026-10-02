@@ -215,8 +215,18 @@ export class LetterboxPipeline {
    * Call it once the tensor built from a {@link run} result has been handed to
    * ONNX Runtime and the run has resolved — after that the values are inside
    * the WASM heap and the buffer can be overwritten.
+   *
+   * Pass the result being released when several runs can be outstanding at
+   * once. A result that got a fresh allocation (`reused: false`) holds nothing
+   * of the pipeline's, so releasing it is a no-op; without that check, the
+   * caller finishing with a fresh buffer would free the shared one while
+   * another caller still had its frame in it. Called without an argument it
+   * frees the shared buffer unconditionally, as before.
+   *
+   * @param result The {@link run} result being released.
    */
-  release(): void {
+  release(result?: { readonly reused: boolean }): void {
+    if (result !== undefined && !result.reused) return;
     this._buffer.release();
   }
 
@@ -393,8 +403,18 @@ export class ResizePipeline {
    * Call it once the tensor built from a {@link run} result has been handed to
    * ONNX Runtime and the run has resolved — after that the values are inside
    * the WASM heap and the buffer can be overwritten.
+   *
+   * Pass the result being released when several runs can be outstanding at
+   * once. A result that got a fresh allocation (`reused: false`) holds nothing
+   * of the pipeline's, so releasing it is a no-op; without that check, the
+   * caller finishing with a fresh buffer would free the shared one while
+   * another caller still had its frame in it. Called without an argument it
+   * frees the shared buffer unconditionally, as before.
+   *
+   * @param result The {@link run} result being released.
    */
-  release(): void {
+  release(result?: { readonly reused: boolean }): void {
+    if (result !== undefined && !result.reused) return;
     this._buffer.release();
   }
 

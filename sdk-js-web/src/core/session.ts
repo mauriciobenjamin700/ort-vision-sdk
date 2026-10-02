@@ -34,6 +34,109 @@ export type ModelSource = string | ArrayBufferLike | Uint8Array;
  */
 export const GRAPH_OPTIMIZATION_KEY = "ort_vision_sdk.graph_optimization";
 
+/**
+ * An 84-byte ONNX model — one `Identity` on a float `[1]` — used to start the runtime.
+ *
+ * Generated with `onnx.helper` (opset 13, IR 7, producer `ort-vision-sdk`).
+ * See {@link warmRuntime} for why it exists.
+ */
+const RUNTIME_PROBE_MODEL =
+  "CAcSDm9ydC12aXNpb24tc2RrOjoKEAoBeBIBeSIISWRlbnRpdHkSBHdhcm1aDwoBeBIKCggIARIECgIIAWIPCgF5EgoKCAgBEgQKAggBQgQKABAN";
+
+/** Runtime start-ups already begun on this page, keyed by provider names. */
+const runtimeWarmups = new Map<string, Promise<void>>();
+
+/**
+ * Start ONNX Runtime's backends for a provider list, once per page.
+ *
+ * ORT downloads and compiles its WebAssembly binary — 12.8 MB for the plain
+ * WASM build, 25.9 MB for the one carrying WebGPU — inside the first
+ * `InferenceSession.create`. {@link OrtSession.create} only reaches that call
+ * after it has downloaded the model, so on a real network the two largest
+ * downloads of a page load ran one after the other. Creating and releasing a
+ * session on a tiny model while the real one downloads lets them overlap; the
+ * real `create` then finds the runtime ready.
+ *
+ * A failure here is swallowed: the real `create` runs against the same runtime
+ * and reports the same problem with the right model in the message.
+ *
+ * @param specs Providers the real session will use.
+ * @returns Settles when the runtime is up, or when starting it failed.
+ */
+function warmRuntime(specs: readonly ProviderSpec[]): Promise<void> {
+  const key = specs.map(providerName).join(",");
+  let pending = runtimeWarmups.get(key);
+  if (pending === undefined) {
+    pending = (async () => {
+      try {
+        const probe = Uint8Array.from(atob(RUNTIME_PROBE_MODEL), (c) => c.charCodeAt(0));
+        const session = await ortRuntime.InferenceSession.create(probe, {
+          executionProviders: specs as ort.InferenceSession.SessionOptions["executionProviders"],
+        });
+        await session.release();
+      } catch {
+        return;
+      }
+    })();
+    runtimeWarmups.set(key, pending);
+  }
+  return pending;
+}
+
+/**
+ * Warn that a model optimized offline is about to run on WebGPU.
+ *
+ * `optimize_model` fuses operators for the CPU, which is what the WASM backend
+ * runs. On WebGPU some of those fused nodes have no GPU kernel: on a
+ * YOLO11n-seg, ONNX Runtime placed 2 nodes on the CPU for the optimized file
+ * and none for the original, so every inference pays GPU↔CPU copies. The SDK
+ * cannot swap the file, so it says which one to ship.
+ */
+function warnPreOptimizedOnWebGpu(): void {
+  console.warn(
+    "[@ort-vision-sdk/web] This model was pre-optimized by optimize_model, which targets the " +
+      "WASM backend; on WebGPU some of its fused nodes fall back to the CPU. For WebGPU, ship " +
+      "the original export instead.",
+  );
+}
+
+/**
+ * Metadata key the Python SDK's `quantize_model` writes on an INT8 model.
+ *
+ * Mirrored by `QUANTIZATION_KEY` in the Python SDK; both test suites pin the
+ * string. See {@link keepQuantizedOffWebGpu} for what a session does with it.
+ */
+export const QUANTIZATION_KEY = "ort_vision_sdk.quantization";
+
+/**
+ * Drop `webgpu` from the providers of a model `quantize_model` produced.
+ *
+ * ONNX Runtime Web's WebGPU `DequantizeLinear` rejects the quantized bias such
+ * a model carries — `scale and zero-point inputs must have the same rank` —
+ * so the first `predict()` fails; and a variant with the bias left in float
+ * ran but returned different detections than WASM for the same file. The
+ * model is fine on WASM, which is also where INT8 pays (52.7 ms vs 68.4 ms on
+ * a YOLO11n-seg), so the session runs there and says so.
+ *
+ * @param specs Providers that survived detection.
+ * @param metadata The model's metadata map.
+ * @returns `specs` without `webgpu` when the model is marked quantized; the
+ *   WASM fallback when nothing else is left.
+ */
+function keepQuantizedOffWebGpu(
+  specs: readonly ProviderSpec[],
+  metadata: Readonly<Record<string, string>>,
+): ProviderSpec[] {
+  if (metadata[QUANTIZATION_KEY] === undefined) return [...specs];
+  const kept = specs.filter((spec) => providerName(spec) !== "webgpu");
+  if (kept.length === specs.length) return kept;
+  console.warn(
+    `[@ort-vision-sdk/web] This model was quantized by quantize_model (${metadata[QUANTIZATION_KEY]}); ` +
+      "ONNX Runtime Web's WebGPU backend cannot run its quantized operators, so it runs on WASM.",
+  );
+  return kept.length > 0 ? kept : [FALLBACK_PROVIDER];
+}
+
 /** Cache Storage bucket used when {@link OrtSessionOptions.cache} is `true`. */
 export const DEFAULT_MODEL_CACHE = "ort-vision-sdk-models";
 
@@ -317,6 +420,13 @@ export class OrtSession {
   ) {}
 
   /**
+   * Tail of the run queue: settles when the latest queued run has finished.
+   *
+   * See {@link run} for why runs are serialized.
+   */
+  private _runQueue: Promise<unknown> = Promise.resolve();
+
+  /**
    * Load an ONNX model into an ORT inference session.
    *
    * The metadata map is read **before** the session is built, and that order is
@@ -331,6 +441,8 @@ export class OrtSession {
    *
    * The provider probe and the model download run concurrently: neither
    * depends on the other, and on a real GPU `requestAdapter()` is not free.
+   * When the model is downloaded here, ORT's runtime is started alongside the
+   * download too — see {@link warmRuntime}.
    *
    * A model whose metadata carries {@link GRAPH_OPTIMIZATION_KEY} was already
    * optimized offline by the Python SDK's `optimize_model`, so it is loaded
@@ -354,18 +466,25 @@ export class OrtSession {
     const cacheName =
       options.cache === true ? DEFAULT_MODEL_CACHE : options.cache ? options.cache : null;
     const shouldFetch = typeof model === "string" && (wantsMetadata || cacheName !== null);
+    const detection = detectProviders(requested).then((detected) =>
+      detected.length > 0 ? detected : [FALLBACK_PROVIDER],
+    );
     const [detected, source] = await Promise.all([
-      detectProviders(requested),
+      detection,
       shouldFetch ? fetchModel(model, cacheName) : Promise.resolve(model),
+      shouldFetch ? detection.then(warmRuntime) : Promise.resolve(),
     ]);
-    const specs = detected.length > 0 ? detected : [FALLBACK_PROVIDER];
+    const metadata =
+      wantsMetadata && typeof source !== "string" ? readModelMetadata(source) : {};
+    const specs = keepQuantizedOffWebGpu(detected, metadata);
     const requestedNames = requested.map(providerName);
     const providers = specs.map(providerName);
     if (options.providers !== undefined && options.providers.length > 0) {
-      warnOnDroppedProviders(requestedNames, providers);
+      warnOnDroppedProviders(requestedNames, detected.map(providerName));
     }
-    const metadata =
-      wantsMetadata && typeof source !== "string" ? readModelMetadata(source) : {};
+    if (metadata[GRAPH_OPTIMIZATION_KEY] !== undefined && providers.includes("webgpu")) {
+      warnPreOptimizedOnWebGpu();
+    }
     const preOptimized =
       metadata[GRAPH_OPTIMIZATION_KEY] !== undefined &&
       options.sessionOptions?.graphOptimizationLevel === undefined;
@@ -517,10 +636,30 @@ export class OrtSession {
   /**
    * Run inference and return all outputs.
    *
+   * Runs on one session are serialized. ONNX Runtime Web refuses a second
+   * `run` while one is in flight — it rejects with `Session already started` —
+   * so two overlapping `predict()` calls on the same task used to fail. Queued
+   * here, they overlap where they can: while one run executes (in a worker,
+   * with `env.wasm.proxy`, or on the GPU), the next `predict()` decodes and
+   * preprocesses its frame and only waits for its turn at the runtime. A run
+   * that fails does not block the ones behind it.
+   *
    * @param feeds Map of input name to `ort.Tensor`. Keys must match {@link inputNames}.
    * @throws {@link InferenceError} if ORT raises any error during execution.
    */
-  async run(
+  run(feeds: Record<string, ort.Tensor>): Promise<Record<string, ort.Tensor>> {
+    const turn = this._runQueue.then(() => this._runNow(feeds));
+    this._runQueue = turn.catch(() => undefined);
+    return turn;
+  }
+
+  /**
+   * Execute one run immediately; only {@link run}'s queue calls this.
+   *
+   * @param feeds Map of input name to `ort.Tensor`.
+   * @throws {@link InferenceError} if ORT raises any error during execution.
+   */
+  private async _runNow(
     feeds: Record<string, ort.Tensor>,
   ): Promise<Record<string, ort.Tensor>> {
     try {

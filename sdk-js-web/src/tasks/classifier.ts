@@ -269,10 +269,14 @@ export class Classifier extends VisionTask {
     const path = typeof image === "string" ? image : null;
     const { image: original, canvas } = await loadImageSource(image);
     timer.stage("load");
-    const tensor = this._preprocess(original, canvas);
+    const { tensor, reused } = this._preprocess(original, canvas);
     timer.stage("preprocess");
-    const outputs = await this._session.run({ [this._session.inputName]: tensor });
-    this._pipeline.release();
+    let outputs: Record<string, ort.Tensor>;
+    try {
+      outputs = await this._session.run({ [this._session.inputName]: tensor });
+    } finally {
+      this._pipeline.release({ reused });
+    }
     timer.stage("inference");
     const firstOutputName = this._session.outputNames[0];
     if (firstOutputName === undefined) {
@@ -337,10 +341,13 @@ export class Classifier extends VisionTask {
    * @param canvas The opaque canvas it was decoded on, when there is one — see
    *   {@link ResizePipeline.run}.
    */
-  private _preprocess(image: RGBImage, canvas: CanvasImageSource | null): ort.Tensor {
+  private _preprocess(
+    image: RGBImage,
+    canvas: CanvasImageSource | null,
+  ): { tensor: ort.Tensor; reused: boolean } {
     const [tw, th] = this._inputSize;
-    const { data } = this._pipeline.run(image, canvas);
-    return toFloat32Tensor(data, [1, 3, th, tw]);
+    const { data, reused } = this._pipeline.run(image, canvas);
+    return { tensor: toFloat32Tensor(data, [1, 3, th, tw]), reused };
   }
 
   private _postprocess(raw: Float32Array): Float32Array {

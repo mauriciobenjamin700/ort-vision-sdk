@@ -48,6 +48,7 @@ export {
   type ModelSource,
   type OrtSessionOptions,
   OrtSession,
+  QUANTIZATION_KEY,
 } from "./core/session.js";
 export {
   type DeclaredDim,

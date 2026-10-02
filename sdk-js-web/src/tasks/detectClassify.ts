@@ -257,10 +257,14 @@ export class DetectClassify extends VisionTask {
     const path = typeof image === "string" ? image : null;
     const { image: original, canvas } = await loadImageSource(image);
     timer.stage("load");
-    const { feeds, scale, padLeft, padTop } = this._preprocess(original, canvas);
+    const { feeds, scale, padLeft, padTop, reused } = this._preprocess(original, canvas);
     timer.stage("preprocess");
-    const outputs = await this._session.run(feeds);
-    this._pipeline.release();
+    let outputs: Record<string, ort.Tensor>;
+    try {
+      outputs = await this._session.run(feeds);
+    } finally {
+      this._pipeline.release({ reused });
+    }
     timer.stage("inference");
 
     const probsTensor = output(outputs, OUTPUT_PROBS);
@@ -344,6 +348,7 @@ export class DetectClassify extends VisionTask {
     scale: number;
     padLeft: number;
     padTop: number;
+    reused: boolean;
   } {
     const [width, height] = this._spec.inputSize;
     const boxed = this._pipeline.run(image, canvas);
@@ -359,7 +364,13 @@ export class DetectClassify extends VisionTask {
         [2],
       );
     }
-    return { feeds, scale: boxed.scale, padLeft: boxed.padLeft, padTop: boxed.padTop };
+    return {
+      feeds,
+      scale: boxed.scale,
+      padLeft: boxed.padLeft,
+      padTop: boxed.padTop,
+      reused: boxed.reused,
+    };
   }
 
   /**

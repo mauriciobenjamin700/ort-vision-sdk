@@ -7,6 +7,7 @@
 
 import { NoDetectionsError } from "../core/exceptions.js";
 import { OrtSession } from "../core/session.js";
+import { type BoundingBox, RGBImage } from "../types.js";
 
 export abstract class VisionTask {
   protected constructor(protected readonly _session: OrtSession) {}
@@ -72,4 +73,56 @@ export function requireDetections(
   throw new NoDetectionsError(
     `No detections${where}${narrowed}: nothing cleared confThreshold=${formatThreshold(options.confThreshold)}.`,
   );
+}
+
+/**
+ * Cut the box region out of an image.
+ *
+ * The box is truncated to whole pixels and clamped to the image, the same
+ * rounding every task applies, so a crop always matches `bbox.asIntXyxy()`
+ * within the frame.
+ *
+ * @param image The source image.
+ * @param bbox The box, in the image's pixel coordinates.
+ * @returns The cropped region, or a zero-sized image for a box with no area.
+ */
+export function cropToBox(image: RGBImage, bbox: BoundingBox): RGBImage {
+  const [rawX1, rawY1, rawX2, rawY2] = bbox.asIntXyxy();
+  const x1 = Math.max(0, rawX1);
+  const y1 = Math.max(0, rawY1);
+  const x2 = Math.min(image.width, rawX2);
+  const y2 = Math.min(image.height, rawY2);
+  if (x2 <= x1 || y2 <= y1) return new RGBImage(new Uint8Array(0), 0, 0);
+
+  const width = x2 - x1;
+  const height = y2 - y1;
+  const out = new Uint8Array(width * height * 3);
+  for (let row = 0; row < height; row++) {
+    const offset = ((y1 + row) * image.width + x1) * 3;
+    out.set(image.data.subarray(offset, offset + width * 3), row * width * 3);
+  }
+  return new RGBImage(out, width, height);
+}
+
+/**
+ * Wrap a computation so it runs on first call and is remembered after.
+ *
+ * Backs the per-detection images (`croppedImage`, `segmentedImage`): most
+ * callers read a box and a class and never look at the pixels, yet building
+ * them eagerly copied every box region out of the frame on every
+ * `predict()` — up to `maxDetections` allocations nobody asked for.
+ *
+ * @param compute Produces the value; called at most once.
+ * @returns A getter returning the value, computing it on the first call.
+ */
+export function memoize<T>(compute: () => T): () => T {
+  let done = false;
+  let value: T;
+  return () => {
+    if (!done) {
+      value = compute();
+      done = true;
+    }
+    return value;
+  };
 }

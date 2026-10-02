@@ -7,7 +7,7 @@ import type * as ort from "onnxruntime-web";
 import { type ModelSource, type OrtSessionOptions, OrtSession } from "../core/session.js";
 import { SpeedTimer } from "../core/timing.js";
 
-import { type ImageInput, loadImage } from "../io/image.js";
+import { type ImageInput, loadImageSource } from "../io/image.js";
 import { detectionNumClasses, resolveInputSize } from "../core/graph.js";
 import { modelNames } from "../core/metadata.js";
 import { type LabelSpec, defaultLabels, resolveLabels } from "../labels.js";
@@ -16,7 +16,7 @@ import { asFloat32Array } from "../core/dtypes.js";
 import { toFloat32Tensor } from "../preprocess/image.js";
 import { LetterboxPipeline, zeroTensorData } from "../preprocess/pipeline.js";
 import { Boxes, DetectionResults } from "../results.js";
-import { VisionTask, requireDetections } from "./base.js";
+import { VisionTask, cropToBox, memoize, requireDetections } from "./base.js";
 import {
   type BoundingBox,
   type DetectionResult,
@@ -247,9 +247,9 @@ export class Detector extends VisionTask {
   ): Promise<DetectionResults[]> {
     const timer = new SpeedTimer();
     const path = typeof image === "string" ? image : null;
-    const original = await loadImage(image);
+    const { image: original, canvas, owned } = await loadImageSource(image);
     timer.stage("load");
-    const { tensor, scale, padLeft, padTop } = this._preprocess(original);
+    const { tensor, scale, padLeft, padTop } = this._preprocess(original, canvas);
     timer.stage("preprocess");
     const outputs = await this._session.run({ [this._session.inputName]: tensor });
     this._pipeline.release();
@@ -292,7 +292,7 @@ export class Detector extends VisionTask {
     });
 
     const detections = decoded.map((d) =>
-      this._buildResult(original, d.bbox, d.classId, d.confidence),
+      this._buildResult(original, d.bbox, d.classId, d.confidence, owned),
     );
 
     const orig: readonly [number, number] = [original.height, original.width];
@@ -319,15 +319,19 @@ export class Detector extends VisionTask {
    * readback loop, and reuses its output buffer between frames. The buffer is
    * handed straight to ONNX Runtime, so {@link _pipeline.release} must not be
    * called until the run resolves.
+   *
+   * @param image The decoded input.
+   * @param canvas The opaque canvas it was decoded on, when there is one — see
+   *   {@link LetterboxPipeline.run}.
    */
-  private _preprocess(image: RGBImage): {
+  private _preprocess(image: RGBImage, canvas: CanvasImageSource | null): {
     tensor: ort.Tensor;
     scale: number;
     padLeft: number;
     padTop: number;
   } {
     const [tw, th] = this._inputSize;
-    const fused = this._pipeline.run(image);
+    const fused = this._pipeline.run(image, canvas);
     return {
       tensor: toFloat32Tensor(fused.data, [1, 3, th, tw]),
       scale: fused.scale,
@@ -336,38 +340,29 @@ export class Detector extends VisionTask {
     };
   }
 
+  /**
+   * Assemble one detection.
+   *
+   * `croppedImage` is built on first read when the SDK owns the frame's pixels
+   * — see {@link memoize} for why. A frame the caller handed over as an
+   * `RGBImage` is cropped up front instead: its buffer is theirs, and a video
+   * loop refilling it would otherwise hand a late reader the wrong frame.
+   *
+   * @param original The decoded input.
+   * @param bbox Box in original-image coordinates.
+   * @param classId Predicted class.
+   * @param confidence Detection score.
+   * @param lazy Whether `croppedImage` may be deferred.
+   */
   private _buildResult(
     original: RGBImage,
     bbox: BoundingBox,
     classId: number,
     confidence: number,
+    lazy: boolean,
   ): DetectionResult {
-    const [x1, y1, x2, y2] = bbox.asIntXyxy();
-    const cx1 = Math.max(0, x1);
-    const cy1 = Math.max(0, y1);
-    const cx2 = Math.min(original.width, x2);
-    const cy2 = Math.min(original.height, y2);
-
-    let cropped: RGBImage;
-    if (cx2 > cx1 && cy2 > cy1) {
-      const cw = cx2 - cx1;
-      const ch = cy2 - cy1;
-      const out = new Uint8Array(cw * ch * 3);
-      for (let row = 0; row < ch; row++) {
-        const srcOffset = ((cy1 + row) * original.width + cx1) * 3;
-        out.set(
-          original.data.subarray(srcOffset, srcOffset + cw * 3),
-          row * cw * 3,
-        );
-      }
-      cropped = new RGBImage(out, cw, ch);
-    } else {
-      cropped = new RGBImage(new Uint8Array(0), 0, 0);
-    }
-
     const className = this._names[classId] ?? `class_${classId}`;
-
-    return {
+    const fields = {
       classId,
       className,
       confidence,
@@ -376,7 +371,14 @@ export class Detector extends VisionTask {
       name: className,
       conf: confidence,
       box: bbox,
-      croppedImage: cropped,
+    };
+    if (!lazy) return { ...fields, croppedImage: cropToBox(original, bbox) };
+    const cropped = memoize(() => cropToBox(original, bbox));
+    return {
+      ...fields,
+      get croppedImage(): RGBImage {
+        return cropped();
+      },
     };
   }
 

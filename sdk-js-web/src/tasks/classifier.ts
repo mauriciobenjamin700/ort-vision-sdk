@@ -6,7 +6,7 @@ import type * as ort from "onnxruntime-web";
 
 import { type ModelSource, type OrtSessionOptions, OrtSession } from "../core/session.js";
 import { SpeedTimer } from "../core/timing.js";
-import { type ImageInput, loadImage } from "../io/image.js";
+import { type ImageInput, loadImageSource } from "../io/image.js";
 import { classificationNumClasses, resolveInputSize } from "../core/graph.js";
 import { modelNames } from "../core/metadata.js";
 import { type LabelSpec, resolveLabels } from "../labels.js";
@@ -267,9 +267,9 @@ export class Classifier extends VisionTask {
   ): Promise<ClassificationResults[]> {
     const timer = new SpeedTimer();
     const path = typeof image === "string" ? image : null;
-    const original = await loadImage(image);
+    const { image: original, canvas } = await loadImageSource(image);
     timer.stage("load");
-    const tensor = this._preprocess(original);
+    const tensor = this._preprocess(original, canvas);
     timer.stage("preprocess");
     const outputs = await this._session.run({ [this._session.inputName]: tensor });
     this._pipeline.release();
@@ -330,9 +330,16 @@ export class Classifier extends VisionTask {
     ];
   }
 
-  private _preprocess(image: RGBImage): ort.Tensor {
+  /**
+   * Resize and pack the image into the tensor the model expects.
+   *
+   * @param image The decoded input.
+   * @param canvas The opaque canvas it was decoded on, when there is one — see
+   *   {@link ResizePipeline.run}.
+   */
+  private _preprocess(image: RGBImage, canvas: CanvasImageSource | null): ort.Tensor {
     const [tw, th] = this._inputSize;
-    const { data } = this._pipeline.run(image);
+    const { data } = this._pipeline.run(image, canvas);
     return toFloat32Tensor(data, [1, 3, th, tw]);
   }
 

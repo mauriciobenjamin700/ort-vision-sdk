@@ -23,6 +23,7 @@ the export, ship its output.
 
 from __future__ import annotations
 
+import warnings
 from pathlib import Path
 from typing import Literal
 
@@ -77,6 +78,14 @@ def optimize_model(
     Raises:
         FileNotFoundError: If ``model`` does not exist.
         ValueError: If ``level`` is not ``"basic"`` or ``"extended"``.
+
+    Warns:
+        UserWarning: If ``model`` is quantized (contains ``QuantizeLinear``).
+            ONNX Runtime fuses quantized operators at load time in ways the
+            offline levels do not reproduce: on an INT8 YOLO11n-seg under WASM
+            the pre-optimized file was created 79 ms faster but inferred 19%
+            slower (``"basic"``: 85% slower). Worth it only when start-up
+            matters more than per-frame time.
     """
     import onnxruntime as ort
 
@@ -89,6 +98,16 @@ def optimize_model(
     }
     if level not in levels:
         raise ValueError(f"level must be 'basic' or 'extended', got {level!r}.")
+
+    if b"QuantizeLinear" in source.read_bytes():
+        warnings.warn(
+            f"{source.name} is quantized. Loading a pre-optimized INT8 model with the optimizer "
+            "off skips fusions ONNX Runtime only applies at load time: measured under WASM, "
+            "creation was 79 ms faster but every inference 19% slower. Ship the quantized "
+            "file as is unless start-up matters more than per-frame time.",
+            UserWarning,
+            stacklevel=2,
+        )
 
     destination = Path(output)
     options = ort.SessionOptions()

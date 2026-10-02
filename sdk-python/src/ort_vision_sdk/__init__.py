@@ -93,6 +93,8 @@ from ort_vision_sdk.preprocess import resize as resize
 from ort_vision_sdk.preprocess import to_chw as to_chw
 from ort_vision_sdk.preprocess import to_cv2 as to_cv2
 from ort_vision_sdk.preprocess import to_tensor as to_tensor
+from ort_vision_sdk.quantize import QUANTIZATION_KEY as QUANTIZATION_KEY
+from ort_vision_sdk.quantize import quantize_model as quantize_model
 from ort_vision_sdk.results import Boxes as Boxes
 from ort_vision_sdk.results import ClassificationResults as ClassificationResults
 from ort_vision_sdk.results import DetectClassifyResults as DetectClassifyResults
@@ -139,6 +141,7 @@ __all__: list[str] = [
     "OUTPUT_NUM_DETECTIONS",
     "OUTPUT_PROBS",
     "OUTPUT_SCORES",
+    "QUANTIZATION_KEY",
     "STAGES",
     "BoundingBox",
     "Boxes",
@@ -199,6 +202,7 @@ __all__: list[str] = [
     "numpy_dtype_for",
     "optimize_model",
     "parse_names",
+    "quantize_model",
     "read_metadata",
     "reduction_factor",
     "require_detections",

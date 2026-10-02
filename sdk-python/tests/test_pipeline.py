@@ -285,6 +285,29 @@ class TestFeeds:
         assert backend.feeds[INPUT_PAD].tolist() == [0.0, 16.0]
 
 
+class TestWarmup:
+    """``warmup()`` feeds every input the fused graph declares."""
+
+    def test_feeds_only_the_image_by_default(self) -> None:
+        backend = StubBackend(outputs=_outputs(), metadata=_spec().to_metadata())
+        _pipeline(backend).warmup()
+
+        assert list(backend.feeds) == [INPUT_IMAGE]
+        assert backend.feeds[INPUT_IMAGE].shape == (1, 3, 64, 64)
+        assert not backend.feeds[INPUT_IMAGE].any()
+
+    def test_feeds_an_identity_letterbox_for_the_original_crop_source(self) -> None:
+        backend = StubBackend(
+            outputs=_outputs(), metadata=_spec(crop_source="original").to_metadata()
+        )
+        _pipeline(backend).warmup()
+
+        assert set(backend.feeds) == {INPUT_IMAGE, INPUT_SOURCE, INPUT_SCALE, INPUT_PAD}
+        assert backend.feeds[INPUT_SOURCE].shape == (1, 3, 64, 64)
+        assert backend.feeds[INPUT_SCALE].tolist() == [1.0]
+        assert backend.feeds[INPUT_PAD].tolist() == [0.0, 0.0]
+
+
 class TestResults:
     """How the graph's rows become detections."""
 

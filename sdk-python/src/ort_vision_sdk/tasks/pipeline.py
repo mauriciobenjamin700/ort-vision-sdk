@@ -348,6 +348,27 @@ class DetectClassify(VisionTask):
             raise_on_empty=raise_on_empty,
         )
 
+    def _warmup_feeds(self) -> dict[str, np.ndarray]:
+        """Zero-filled feeds for every input the fused graph declares.
+
+        A pipeline fused with ``crop_source="original"`` also takes the
+        untouched image, the letterbox scale and the padding; they are fed at
+        the letterbox resolution with an identity transform, which is a valid
+        frame for the graph to run on.
+
+        Returns:
+            dict[str, np.ndarray]: The warm-up feeds.
+        """
+        width, height = self._spec.input_size
+        feeds: dict[str, np.ndarray] = {
+            INPUT_IMAGE: np.zeros((1, 3, height, width), dtype=np.float32)
+        }
+        if self._spec.needs_source_image:
+            feeds[INPUT_SOURCE] = np.zeros((1, 3, height, width), dtype=np.float32)
+            feeds[INPUT_SCALE] = np.asarray([1.0], dtype=np.float32)
+            feeds[INPUT_PAD] = np.asarray([0.0, 0.0], dtype=np.float32)
+        return feeds
+
     def _preprocess(
         self, image: ImageArray
     ) -> tuple[dict[str, np.ndarray], float, tuple[int, int]]:

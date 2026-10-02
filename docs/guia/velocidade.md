@@ -163,7 +163,7 @@ sem pares de start/stop para esquecer. Chamar o mesmo nome duas vezes
 Com o número na mão, o próximo passo é
 [otimizar a criação e a inferência](desempenho.md). 🚀
 
-## Aquecimento (`warmup`) — só no Web
+## Aquecimento (`warmup`)
 
 A primeira inferência de uma sessão não é representativa: o WebGPU compila os
 shaders nela e o backend WASM materializa suas arenas, o que num celular
@@ -178,6 +178,19 @@ ainda está na tela — o custo vai para onde o usuário já está esperando:
 const det = await Detector.create("/models/yolov8n.onnx");
 await det.warmup();        // uma passada basta no WASM
 await det.warmup(2);       // WebGPU às vezes só assenta na segunda
+```
+
+O SDK Python tem o mesmo método. Num servidor, chame na subida, antes da
+primeira requisição: no CUDA a primeira inferência aloca a arena do device e
+roda a busca de algoritmo do cuDNN, e o TensorRT pode montar o engine nela. O
+tensor zerado é convertido para o tipo que o modelo declara, então um export em
+meia precisão é aquecido com o que vai rodar de verdade.
+
+```python
+from ort_vision_sdk import Detector
+
+det = Detector("yolov8n.onnx", providers=["cuda", "cpu"])
+det.warmup()
 ```
 
 !!! tip "Num pipeline fundido vale mais"

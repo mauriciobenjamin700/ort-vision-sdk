@@ -184,6 +184,12 @@ for (const d of result) console.log(d.className, d.confidence, d.bbox.asXyxy());
     cannot create the session on the main thread cannot create it in the worker
     either.
 
+!!! tip "But it frees the main thread for the next frame"
+    With inference in the worker, two `predict()` calls in flight overlap one
+    frame's preprocessing with the previous frame's inference: ~15% more frames
+    per second on a 1080p frame. See
+    [Two `predict` calls in flight](desempenho.md#inference-two-predict-calls-in-flight).
+
 ??? info "Technical details: why this needed an SDK fix (0.7.1)"
     The proxy posts the input tensors with their `ArrayBuffer`s in the transfer
     list, which **detaches** them on the sender's side. Since `LetterboxPipeline`

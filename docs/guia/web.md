@@ -183,6 +183,12 @@ for (const d of result) console.log(d.className, d.confidence, d.bbox.asXyxy());
     memória compartilhada do build pthread apenas mudam de thread; um aparelho que
     não consegue criar a sessão na main thread também não consegue no worker.
 
+!!! tip "Mas libera a main thread para o próximo frame"
+    Com a inferência no worker, dois `predict()` em voo sobrepõem o
+    pré-processamento de um frame à inferência do anterior: ~15% mais frames por
+    segundo num frame 1080p. Veja
+    [Dois `predict` em voo](desempenho.md#inferencia-dois-predict-em-voo).
+
 ??? info "Detalhe técnico: por que isso precisou de um fix no SDK (0.7.1)"
     O proxy posta os tensores de entrada com os `ArrayBuffer`s na *transfer list*,
     o que **destaca** o buffer do lado de quem enviou. Como `LetterboxPipeline` e

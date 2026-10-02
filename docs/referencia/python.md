@@ -160,6 +160,8 @@ dele. Ver [Pipelines fundidos](../guia/pipeline.md).
 | --- | --- |
 | `optimize_model(model, output, level="extended")` | Grava uma cópia do modelo com o grafo já otimizado pelo ORT e marcada na metadata. O SDK web carrega o arquivo marcado sem otimizar de novo. Ver [Otimizando criação e inferência](../guia/desempenho.md). |
 | `GRAPH_OPTIMIZATION_KEY` | A chave de metadata da marca (`"ort_vision_sdk.graph_optimization"`). |
+| `quantize_model(model, output, calibration, task=None, per_channel=True)` | Grava uma cópia INT8 (QDQ) do modelo, calibrada com o pré-processamento da própria tarefa. Extra `[quantize]`. |
+| `QUANTIZATION_KEY` | Chave de metadata que o `quantize_model` grava (`"ort_vision_sdk.quantization"`); o SDK web roda um modelo marcado em WASM. |
 
 ## Imagens e rótulos
 
@@ -193,6 +195,7 @@ dele. Ver [Pipelines fundidos](../guia/pipeline.md).
 | `ProviderSpec` | Um provider: o nome, ou um par `(nome, opções)` como o `InferenceSession` aceita (cache do TensorRT, `cudnn_conv_algo_search`...). |
 | `OrtSession.providers` | Providers que o ORT **de fato** registrou para a sessão. |
 | `OrtSession.requested_providers` | O que foi pedido, depois dos defaults. Um pedido que o ORT descarta emite `UserWarning`. |
+| `task.warmup(runs=1)` | Roda o modelo com tensor zerado, no dtype declarado, para pagar a primeira inferência (arena do CUDA, cuDNN, engine do TensorRT) antes da primeira requisição. |
 | `SpeedTimer` / `STAGES` / `Stage` | O cronômetro por estágio que preenche o `speed` de cada `Results`, os nomes dos estágios e o tipo deles. |
 
 ## Pipelines fundidos — nomes do grafo

@@ -158,6 +158,8 @@ it. See [Fused pipelines](../guia/pipeline.md).
 | --- | --- |
 | `optimize_model(model, output, level="extended")` | Writes a copy of the model with its graph already optimized by ORT and marked in its metadata. The web SDK loads a marked file without optimizing it again. See [Optimizing creation and inference](../guia/desempenho.md). |
 | `GRAPH_OPTIMIZATION_KEY` | The mark's metadata key (`"ort_vision_sdk.graph_optimization"`). |
+| `quantize_model(model, output, calibration, task=None, per_channel=True)` | Writes an INT8 (QDQ) copy of the model, calibrated with the task's own preprocessing. `[quantize]` extra. |
+| `QUANTIZATION_KEY` | Metadata key `quantize_model` writes (`"ort_vision_sdk.quantization"`); the web SDK runs a marked model on WASM. |
 
 ## Images and labels
 
@@ -191,6 +193,7 @@ it. See [Fused pipelines](../guia/pipeline.md).
 | `ProviderSpec` | One provider: its name, or a `(name, options)` pair as `InferenceSession` accepts it (TensorRT cache, `cudnn_conv_algo_search`...). |
 | `OrtSession.providers` | Providers ORT **actually** registered for the session. |
 | `OrtSession.requested_providers` | What was asked for, after defaults. A request ORT drops raises a `UserWarning`. |
+| `task.warmup(runs=1)` | Runs the model on a zero tensor, in the declared dtype, to pay the first inference (CUDA arena, cuDNN, TensorRT engine) before the first request. |
 | `SpeedTimer` / `STAGES` / `Stage` | The per-stage timer that fills each `Results.speed`, the stage names, and their type. |
 
 ## Fused pipelines — graph names

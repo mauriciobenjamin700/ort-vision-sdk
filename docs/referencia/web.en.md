@@ -48,7 +48,7 @@ Bulk views: `Boxes`, `Probs`, `Masks` (same attributes as Python).
 Per-instance types/classes: `DetectionResult`, `SegmentationResult`,
 `ClassificationResult`, `ClassProbability` (with `classId`/`className`/
 `confidence` and the aliases `cls`/`name`/`conf`/`box`), plus `BoundingBox`
-(`asXyxy()`, `asXywh()`), `Mask` (`data`/`width`/`height`) and `RGBImage`.
+(`asXyxy()`, `asXywh()`), `Mask` (`data`/`width`/`height`) and `RGBImage` (with `RGBImage.deferred(w, h, materialize)` for pixels built on the first read of `data`).
 
 ## Images, labels and providers
 
@@ -66,6 +66,7 @@ Per-instance types/classes: `DetectionResult`, `SegmentationResult`,
 | `Normalization` / `resolveNormalization(...)` / `isUltralyticsClassifier(...)` | Which preprocessing the classifier expects, read from the model metadata. |
 | `OrtSession` / `OrtSessionOptions` / `ModelSource` | Low-level session. `OrtSessionOptions.cache` keeps URL models in Cache Storage. |
 | `DEFAULT_MODEL_CACHE` | Bucket used by `cache: true` (`"ort-vision-sdk-models"`). |
+| `QUANTIZATION_KEY` | Metadata key written by the Python `quantize_model`; a marked model runs on WASM even when `webgpu` was asked for. |
 | `GRAPH_OPTIMIZATION_KEY` | Metadata key written by the Python `optimize_model`; a marked model loads with ORT's optimizer off. See [Optimizing creation and inference](../guia/desempenho.md). |
 | `OrtSession.inputShape` / `.inputShapes` | Shapes the graph declares, dynamic axes as `null`. |
 | `OrtSession.providers` | Providers this browser can offer — best-effort; ORT-Web does not report the effective one. |
@@ -130,7 +131,7 @@ with the output buffer reused across frames:
 
 | Symbol | What it does |
 | --- | --- |
-| `LetterboxPipeline(w, h, fill?)` | Resizes **preserving aspect ratio** and pads the rest, returning `{ data, scale, padLeft, padTop, reused }`. This is what `Detector`, `Segmenter` and `DetectClassify` use. |
+| `LetterboxPipeline(w, h, fill?)` | Resizes **preserving aspect ratio** and pads the rest, returning `{ data, scale, padLeft, padTop, reused }`. This is what `Detector`, `Segmenter` and `DetectClassify` use. `run(image, canvas?)` draws straight from an opaque canvas holding the same pixels; `release(result?)` frees the shared buffer only when `result` is it. |
 | `ResizePipeline(w, h, mean?, std?)` | Stretches to the target (no padding) and normalizes in the same pass, returning `{ data, reused }`. This is what `Classifier` uses — it maps nothing back onto the original image, so there is no scale or padding to invert. |
 | `letterboxToTensorData(...)` / `resizeToTensorData(...)` | The one-shot forms, for a caller who does not want to keep a pipeline alive. |
 | `writePlanarFloat32(rgba, w, h, mean, std, out, stride?)` | The loop itself: RGBA (or packed RGB, with `stride: 3`) → normalized planar float32. |

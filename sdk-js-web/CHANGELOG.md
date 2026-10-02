@@ -31,7 +31,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   video straight to `predict()`; the frame on screen at call time is decoded.
   A video without a current frame throws `ImageLoadError`.
 
+- **`QUANTIZATION_KEY`.** A model the Python SDK's `quantize_model` marked runs
+  on WASM even when `webgpu` is requested, with a console warning: ORT-Web's
+  WebGPU `DequantizeLinear` rejects its quantized bias (`scale and zero-point
+  inputs must have the same rank`). On WASM a YOLO11n-seg INT8 model runs at
+  52.7 ms vs 68.4 ms for FP32.
+
+- **`RGBImage.deferred(width, height, materialize)`**, an image whose pixels
+  are built on the first read of `data`. `RGBImage.data` is now a getter.
+
 ### Changed
+
+- **The ORT runtime starts while the model downloads.** The first `create` of
+  a URL model creates and releases a session on an embedded 84-byte model, once
+  per page and provider list, concurrently with the download, instead of ORT
+  fetching and compiling its `.wasm` only after it. First creation with
+  bandwidth capped at 5 MB/s: 5020–5145 ms → 2648–2656 ms.
+
+- **Camera frames skip the read-back.** For sources that cannot be translucent
+  — a `MediaStream` video, an alpha-less `VideoFrame`, a JPEG blob or URL — the
+  decoder hands preprocessing a GPU-side copy and defers the full-resolution
+  `getImageData` until `origImg` / crops are read. `load` on a 1080p live video:
+  8.5–10.7 ms → 2.0–2.5 ms.
+
+- **Faster mask resize.** `decodeYoloSeg`'s bilinear resize runs separably,
+  6.7 → 4.9 ms on the 30-instance benchmark, output unchanged.
+
+- **A pre-optimized model headed for WebGPU logs a warning**: on a
+  YOLO11n-seg, ORT placed 2 of its fused nodes on the CPU (none for the
+  original export).
 
 - **Faster preprocessing for drawable inputs.** The letterbox and resize
   pipelines draw from the canvas the input was decoded onto instead of
@@ -62,6 +90,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   on machines without a GPU.
 
 ### Fixed
+
+- **Overlapping `predict()` calls on one task failed** with `Session already
+  started`: ORT-Web refuses a second `run` while one is in flight.
+  `OrtSession.run` now queues runs per session, so they overlap where they can
+  — with `env.wasm.proxy`, two in flight took a 1080p frame from 82–86 ms to
+  70–73 ms — and a failed run no longer blocks the ones behind it.
+
+- **`LetterboxPipeline` / `ResizePipeline` `release(result?)`** only frees the
+  shared buffer when `result` is the claim that holds it. Releasing a fresh
+  allocation used to free the shared buffer while another call still had its
+  frame in it — reachable once calls could overlap. The tasks also release in
+  a `finally`, so a failed run no longer leaves the buffer claimed.
 
 - **`Segmenter.create` counted mask coefficients as classes.** It read the
   class count with the detection formula, so on `onnxruntime-web` ≥ 1.21 (which

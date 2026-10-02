@@ -152,6 +152,13 @@ This module is the only one that imports `onnx`, and it ships only with
 `pip install "ort-vision-sdk[compose]"`. Running the fused model does not need
 it. See [Fused pipelines](../guia/pipeline.md).
 
+## Offline graph optimization
+
+| Symbol | Description |
+| --- | --- |
+| `optimize_model(model, output, level="extended")` | Writes a copy of the model with its graph already optimized by ORT and marked in its metadata. The web SDK loads a marked file without optimizing it again. See [Optimizing creation and inference](../guia/desempenho.md). |
+| `GRAPH_OPTIMIZATION_KEY` | The mark's metadata key (`"ort_vision_sdk.graph_optimization"`). |
+
 ## Images and labels
 
 | Symbol | Description |
@@ -180,7 +187,8 @@ it. See [Fused pipelines](../guia/pipeline.md).
 | Symbol | Description |
 | --- | --- |
 | `available_providers()` | Providers this ONNX Runtime build registered. |
-| `resolve_providers(requested)` | Normalizes aliases (`"cuda"`, `"gpu"`) to ORT names and applies the preference order. |
+| `resolve_providers(requested)` | Normalizes aliases (`"cuda"`, `"gpu"`) to ORT names and applies the preference order. `(name, options)` pairs keep their options intact. |
+| `ProviderSpec` | One provider: its name, or a `(name, options)` pair as `InferenceSession` accepts it (TensorRT cache, `cudnn_conv_algo_search`...). |
 | `OrtSession.providers` | Providers ORT **actually** registered for the session. |
 | `OrtSession.requested_providers` | What was asked for, after defaults. A request ORT drops raises a `UserWarning`. |
 | `SpeedTimer` / `STAGES` / `Stage` | The per-stage timer that fills each `Results.speed`, the stage names, and their type. |

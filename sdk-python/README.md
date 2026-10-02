@@ -267,6 +267,31 @@ det = Detector("yolov8n.onnx", providers=["CUDAExecutionProvider"])  # canonical
 
 Aliases supported: `"cpu"`, `"cuda"`, `"tensorrt"`, `"directml"`, `"coreml"`, `"openvino"`, `"rocm"`. Anything else is forwarded verbatim to ORT.
 
+To pass provider options, use a `(name, options)` pair — the form `onnxruntime.InferenceSession` itself accepts:
+
+```python
+det = Detector(
+    "yolov8n.onnx",
+    providers=[
+        ("tensorrt", {"trt_engine_cache_enable": True, "trt_engine_cache_path": "./trt"}),
+        ("cuda", {"cudnn_conv_algo_search": "HEURISTIC"}),
+        "cpu",
+    ],
+)
+```
+
+### Offline graph optimization
+
+`optimize_model()` runs ONNX Runtime's graph optimizer once, at build time, and marks the output so the web SDK loads it without optimizing again:
+
+```python
+from ort_vision_sdk import optimize_model
+
+optimize_model("yolov8n.onnx", "yolov8n.opt.onnx")
+```
+
+Guide: [PT-BR](https://mauriciobenjamin700.github.io/ort-vision-sdk/guia/desempenho/) · [EN](https://mauriciobenjamin700.github.io/ort-vision-sdk/en/guia/desempenho/).
+
 For fine-grained control (graph optimization, threading, profiling) pass an `ort.SessionOptions` instance:
 
 ```python

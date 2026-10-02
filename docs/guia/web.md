@@ -28,6 +28,8 @@ Assim como no Python, `predict()` retorna uma lista de comprimento 1
 - `string` — uma URL buscada via `fetch()`.
 - `Blob` / `File` — para uploads de `<input type="file">`.
 - `HTMLImageElement` — uma tag `<img>` existente.
+- `HTMLVideoElement` / `VideoFrame` — o frame atual de um vídeo ou da câmera
+  (o vídeo precisa ter frame: espere o evento `loadeddata`).
 - `HTMLCanvasElement` / `OffscreenCanvas` — canvas já renderizado.
 - `ImageBitmap` — de `createImageBitmap()`.
 - `ImageData` — buffer de pixels cru (RGBA do `getImageData()` do canvas).
@@ -133,6 +135,12 @@ const clf = await Classifier.create(model, {
   providers: ["wasm"], // força CPU
 });
 ```
+
+Cada entrada também pode ser o objeto de configuração do ORT para aquele
+provider, que passa as opções adiante intactas —
+`{ name: "webgpu", preferredLayout: "NHWC" }`. `session.providers` continua
+reportando só os nomes. Veja
+[Otimizando criação e inferência](desempenho.md#criacao-opcoes-por-execution-provider).
 
 Para o WebGPU realmente engajar, você precisa de um build recente do ORT-Web, um
 navegador Chromium com WebGPU habilitado e um contexto seguro (`https://` ou

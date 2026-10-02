@@ -27,6 +27,8 @@ use `[0]`. Each task also exposes a `run()` alias (parity with PyTorch's
 - `string` — a URL fetched via `fetch()`.
 - `Blob` / `File` — for `<input type="file">` uploads.
 - `HTMLImageElement` — an existing `<img>` tag.
+- `HTMLVideoElement` / `VideoFrame` — the current frame of a video or camera
+  (the video must have a frame: wait for its `loadeddata` event).
 - `HTMLCanvasElement` / `OffscreenCanvas` — an already-rendered canvas.
 - `ImageBitmap` — from `createImageBitmap()`.
 - `ImageData` — a raw pixel buffer (RGBA from canvas `getImageData()`).
@@ -133,6 +135,11 @@ const clf = await Classifier.create(model, {
   providers: ["wasm"], // force CPU
 });
 ```
+
+Each entry can also be ORT's config object for that provider, which passes the
+options through untouched — `{ name: "webgpu", preferredLayout: "NHWC" }`.
+`session.providers` still reports names only. See
+[Optimizing creation and inference](desempenho.md#creation-per-provider-options).
 
 For WebGPU to actually engage you need a recent ORT-Web build, a Chromium-based
 browser with WebGPU enabled, and a secure context (`https://` or `localhost`) —

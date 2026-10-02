@@ -7,6 +7,69 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`cache` option on every task's `create`.** `cache: true` (or a bucket name)
+  keeps a URL model in the browser's Cache Storage, so a returning visitor's
+  `create` reads the bytes from disk instead of the network. The URL is the key
+  and nothing expires it; version the URL when the model changes. Silently
+  skipped where Cache Storage is unavailable. `DEFAULT_MODEL_CACHE` names the
+  default bucket.
+
+- **Pre-optimized models load without re-optimizing.** A model whose metadata
+  carries `GRAPH_OPTIMIZATION_KEY` — written by the Python SDK's new
+  `optimize_model` — is created with `graphOptimizationLevel: "disabled"`. On a
+  YOLO11n-seg under WASM, session creation went from 29 ms to 12 ms with
+  unchanged inference time. An explicit `graphOptimizationLevel` still wins.
+
+- **Provider config objects.** `providers` accepts ORT's config object for a
+  provider alongside its name — `{ name: "webgpu", preferredLayout: "NHWC" }` —
+  and passes its options through. `session.providers` and
+  `requestedProviders` keep reporting names. New `ProviderSpec` type.
+
+- **`HTMLVideoElement` and `VideoFrame` inputs.** A camera loop can hand the
+  video straight to `predict()`; the frame on screen at call time is decoded.
+  A video without a current frame throws `ImageLoadError`.
+
+### Changed
+
+- **Faster preprocessing for drawable inputs.** The letterbox and resize
+  pipelines draw from the canvas the input was decoded onto instead of
+  rebuilding RGBA from the RGB copy and `putImageData`-ing it — two
+  full-resolution passes per frame. Measured on a 1080p frame, `preprocess`
+  went from ~10 ms to ~5 ms. Inputs with any translucent pixel keep the old
+  path, since compositing their alpha would change the colours. The pipelines'
+  `run()` takes the canvas as an optional second argument.
+
+- **`croppedImage` / `segmentedImage` are built on first read** when the SDK
+  owns the decoded pixels. An `RGBImage` passed by the caller is still cropped
+  up front, since its buffer may be refilled by a video loop.
+
+- **Faster postprocessing, bit-identical output.** Measured with the new
+  `scripts/bench_web.mjs`: `decodeYolo` 25–54% faster (class-major candidate
+  scan), `nms` 37–40% and `batchedNms` 28% faster (score-ordered contiguous
+  boxes), `decodeYoloSeg` 61% faster (coefficient-major mask assembly, fused
+  resize-and-threshold). Old and new outputs were compared on 1200 randomized
+  cases and 50 real-browser runs, with no difference.
+
+- **RGBA ⇄ RGB conversions move one 32-bit word per pixel** on little-endian
+  platforms (all browser engines), 20–29% faster at 1080p, with a byte-wise
+  fallback.
+
+- **`detectProviders` only requests a WebGPU adapter when `webgpu` was asked
+  for**, and runs concurrently with the model download. WASM-only sessions no
+  longer pay a `requestAdapter()` round trip, nor log "No available adapters"
+  on machines without a GPU.
+
+### Fixed
+
+- **`Segmenter.create` counted mask coefficients as classes.** It read the
+  class count with the detection formula, so on `onnxruntime-web` ≥ 1.21 (which
+  reports output shapes) a one-class YOLO11n-seg was read as 33 classes and a
+  COCO one as 112, and the model's own baked-in names were then rejected with
+  `LabelMapError`. The count now subtracts the coefficient axis of the
+  prototype output.
+
 ## [0.10.0] - 2026-09-13
 
 ### Added

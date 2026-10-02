@@ -61,9 +61,12 @@ Tipos/classes por instância: `DetectionResult`, `SegmentationResult`,
 | `COCO_CLASSES` | As 80 classes do preset COCO. |
 | `DEFAULT_PROVIDERS` | `["webgpu", "wasm"]`. |
 | `resolveProviders(...)` | Resolve a lista de providers para nomes do ORT-Web. |
+| `ProviderSpec` | Um provider: o nome, ou o objeto de configuração do ORT para ele (`{ name: "webgpu", preferredLayout: "NHWC" }`). |
 | `detectProviders(...)` | Estreita a lista pedida pelo que o navegador consegue oferecer (WebGPU precisa de adapter). |
 | `Normalization` / `resolveNormalization(...)` / `isUltralyticsClassifier(...)` | Qual preprocessamento o classificador espera, lido dos metadados do modelo. |
-| `OrtSession` / `OrtSessionOptions` / `ModelSource` | Sessão de baixo nível. |
+| `OrtSession` / `OrtSessionOptions` / `ModelSource` | Sessão de baixo nível. `OrtSessionOptions.cache` guarda modelos por URL na Cache Storage. |
+| `DEFAULT_MODEL_CACHE` | Bucket usado por `cache: true` (`"ort-vision-sdk-models"`). |
+| `GRAPH_OPTIMIZATION_KEY` | Chave de metadata gravada pelo `optimize_model` do Python; um modelo marcado carrega com o otimizador do ORT desligado. Ver [Otimizando criação e inferência](../guia/desempenho.md). |
 | `OrtSession.inputShape` / `.inputShapes` | Shapes declarados pelo grafo, eixos dinâmicos como `null`. |
 | `OrtSession.providers` | Providers que este navegador pode oferecer — best-effort, o ORT-Web não reporta o efetivo. |
 | `OrtSession.requestedProviders` | Providers que foram pedidos, depois dos defaults. |

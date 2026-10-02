@@ -160,6 +160,9 @@ sem pares de start/stop para esquecer. Chamar o mesmo nome duas vezes
 - Carregar o modelo **não** está no `speed` — é custo de inicialização.
 - `SpeedTimer` mede as etapas do seu próprio pipeline com as mesmas regras.
 
+Com o número na mão, o próximo passo é
+[otimizar a criação e a inferência](desempenho.md). 🚀
+
 ## Aquecimento (`warmup`) — só no Web
 
 A primeira inferência de uma sessão não é representativa: o WebGPU compila os

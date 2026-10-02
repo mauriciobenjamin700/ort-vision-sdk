@@ -160,6 +160,9 @@ given — no start/stop pairs to forget. Calling the same name twice
 - Loading the model is **not** in `speed` — that is startup cost.
 - `SpeedTimer` measures your own pipeline stages under the same rules.
 
+With the number in hand, the next step is to
+[optimize creation and inference](desempenho.md). 🚀
+
 ## Warm-up (`warmup`) — web only
 
 The first inference of a session is not representative: WebGPU compiles its

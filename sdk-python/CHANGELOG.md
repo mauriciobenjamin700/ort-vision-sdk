@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`optimize_model(model, output, level="extended")`.** Runs ONNX Runtime's
+  graph optimizer once, at build time, and writes the result with a
+  `GRAPH_OPTIMIZATION_KEY` mark in its metadata. The web SDK loads a marked
+  model without optimizing it again — session creation 29 ms → 12 ms on a
+  YOLO11n-seg under WASM. The source's metadata is preserved; `"all"` is not
+  offered because its layout transforms are specific to the optimizing CPU.
+
+- **Provider options via `(name, options)` pairs.** `providers=` accepts the
+  pair form `onnxruntime.InferenceSession` itself takes —
+  `("tensorrt", {"trt_engine_cache_enable": True})`,
+  `("cuda", {"cudnn_conv_algo_search": "HEURISTIC"})` — with the usual aliases
+  in the name. `requested_providers` keeps reporting names. New `ProviderSpec`
+  alias; `resolve_providers` returns `list[str]` for a list of names as before.
+
+### Changed
+
+- **`Segmenter` reads the mask-coefficient count off the prototype output**
+  when inferring the class count, instead of assuming 32. Mirrors the web SDK,
+  so both agree on a head with a non-standard coefficient count.
+
 ## [0.11.0] - 2026-09-13
 
 ### Added

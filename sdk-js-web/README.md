@@ -133,6 +133,7 @@ Milliseconds. `preprocess` / `inference` / `postprocess` measure the same bounda
 - `string` — a URL fetched via `fetch()`.
 - `Blob` / `File` — for `<input type="file">` uploads.
 - `HTMLImageElement` — an existing `<img>` tag.
+- `HTMLVideoElement` / `VideoFrame` — the current frame of a video or camera stream (wait for `loadeddata` first).
 - `HTMLCanvasElement` / `OffscreenCanvas` — already-rendered canvas.
 - `ImageBitmap` — from `createImageBitmap()`.
 - `ImageData` — raw pixel buffer (RGBA from canvas `getImageData()`).
@@ -149,7 +150,17 @@ const clf = await Classifier.create(model, {
 });
 ```
 
+Each entry can also be ORT's config object for that provider — `{ name: "webgpu", preferredLayout: "NHWC" }` — which passes its options through untouched; `session.providers` still reports names.
+
 For WebGPU to actually engage you need a recent ORT-Web build, a Chromium-based browser with WebGPU enabled, and either secure context (`https://` or `localhost`) or the right COOP/COEP headers if you also want SharedArrayBuffer-based wasm threading.
+
+## Faster startup and inference
+
+- **`cache: true`** keeps a URL model in the browser's Cache Storage, so a returning visitor skips the download. The URL is the cache key: version it when the model changes.
+- **Pre-optimized models** — run `optimize_model()` from the Python SDK at build time and ship its output; the web SDK sees the mark it leaves and skips ONNX Runtime's graph optimizer (session creation 29 ms → 12 ms on a YOLO11n-seg).
+- **Cross-origin isolation** (COOP/COEP headers) lets the WASM backend use threads: 221 ms → 65 ms per inference on the same model.
+
+Full guide, with every number measured: [PT-BR](https://mauriciobenjamin700.github.io/ort-vision-sdk/guia/desempenho/) · [EN](https://mauriciobenjamin700.github.io/ort-vision-sdk/en/guia/desempenho/).
 
 ## Status
 

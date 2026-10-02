@@ -27,6 +27,13 @@ import { BoundingBox } from "../types.js";
  * @returns Indices of kept boxes, in descending score order. Boxes tied on
  *   score are visited lowest-index first, so the survivor of a tie is
  *   deterministic and matches both `torchvision` and the Python SDK.
+ *
+ * The boxes are copied once into score order, so the inner loop walks a
+ * contiguous `Float32Array` instead of hopping through `order` into the caller's
+ * layout. A pair with no horizontal overlap is skipped before the vertical
+ * extent is computed: its IoU is `0`, which suppresses nothing for any
+ * non-negative threshold — the shortcut is gated on that so a negative
+ * threshold keeps the exact semantics.
  */
 export function nms(
   boxes: Float32Array,
@@ -36,52 +43,52 @@ export function nms(
   const n = scores.length;
   if (n === 0) return new Int32Array(0);
 
-  const areas = new Float32Array(n);
-  for (let i = 0; i < n; i++) {
-    const x1 = boxes[i * 4] as number;
-    const y1 = boxes[i * 4 + 1] as number;
-    const x2 = boxes[i * 4 + 2] as number;
-    const y2 = boxes[i * 4 + 3] as number;
-    areas[i] = Math.max(0, x2 - x1) * Math.max(0, y2 - y1);
-  }
-
   const order = new Array<number>(n);
   for (let i = 0; i < n; i++) order[i] = i;
   order.sort((a, b) => (scores[b] as number) - (scores[a] as number) || a - b);
 
+  const sorted = new Float32Array(n * 4);
+  const areas = new Float32Array(n);
+  for (let k = 0; k < n; k++) {
+    const i = (order[k] as number) * 4;
+    const x1 = boxes[i] as number;
+    const y1 = boxes[i + 1] as number;
+    const x2 = boxes[i + 2] as number;
+    const y2 = boxes[i + 3] as number;
+    sorted[k * 4] = x1;
+    sorted[k * 4 + 1] = y1;
+    sorted[k * 4 + 2] = x2;
+    sorted[k * 4 + 3] = y2;
+    areas[k] = Math.max(0, x2 - x1) * Math.max(0, y2 - y1);
+  }
+
+  const skipDisjoint = iouThreshold >= 0;
   const suppressed = new Uint8Array(n);
   const keep: number[] = [];
 
-  for (let oi = 0; oi < order.length; oi++) {
-    const i = order[oi] as number;
-    if (suppressed[i]) continue;
-    keep.push(i);
+  for (let k = 0; k < n; k++) {
+    if (suppressed[k]) continue;
+    keep.push(order[k] as number);
 
-    const ax1 = boxes[i * 4] as number;
-    const ay1 = boxes[i * 4 + 1] as number;
-    const ax2 = boxes[i * 4 + 2] as number;
-    const ay2 = boxes[i * 4 + 3] as number;
-    const ai = areas[i] as number;
+    const ax1 = sorted[k * 4] as number;
+    const ay1 = sorted[k * 4 + 1] as number;
+    const ax2 = sorted[k * 4 + 2] as number;
+    const ay2 = sorted[k * 4 + 3] as number;
+    const ak = areas[k] as number;
 
-    for (let oj = oi + 1; oj < order.length; oj++) {
-      const j = order[oj] as number;
-      if (suppressed[j]) continue;
-
-      const bx1 = boxes[j * 4] as number;
-      const by1 = boxes[j * 4 + 1] as number;
-      const bx2 = boxes[j * 4 + 2] as number;
-      const by2 = boxes[j * 4 + 3] as number;
-
-      const ix1 = Math.max(ax1, bx1);
-      const iy1 = Math.max(ay1, by1);
-      const ix2 = Math.min(ax2, bx2);
-      const iy2 = Math.min(ay2, by2);
-      const iw = Math.max(0, ix2 - ix1);
-      const ih = Math.max(0, iy2 - iy1);
+    for (let m = k + 1; m < n; m++) {
+      if (suppressed[m]) continue;
+      const bx1 = sorted[m * 4] as number;
+      const by1 = sorted[m * 4 + 1] as number;
+      const bx2 = sorted[m * 4 + 2] as number;
+      const by2 = sorted[m * 4 + 3] as number;
+      const iw = Math.max(0, Math.min(ax2, bx2) - Math.max(ax1, bx1));
+      if (iw === 0 && skipDisjoint) continue;
+      const ih = Math.max(0, Math.min(ay2, by2) - Math.max(ay1, by1));
       const inter = iw * ih;
-      const union = ai + (areas[j] as number) - inter;
+      const union = ak + (areas[m] as number) - inter;
       const iou = union > 0 ? inter / union : 0;
-      if (iou > iouThreshold) suppressed[j] = 1;
+      if (iou > iouThreshold) suppressed[m] = 1;
     }
   }
 
@@ -175,6 +182,16 @@ export interface DecodedAnchors {
  * mask coefficients) are ignored — callers can fetch them via the returned
  * {@link DecodedAnchors.anchorIndices}.
  *
+ * Candidates are found in two passes, mirroring the Python decoder. The first
+ * walks each class row contiguously and only *marks* anchors holding some score
+ * at or above the threshold — an anchor's best score clears the threshold
+ * exactly when one of its scores does, so no running maximum is needed and the
+ * hot loop never writes on a typical frame. The anchor-major scan it replaces
+ * read `numClasses` values spaced `numAnchors` apart for every one of the 8400
+ * anchors and cost ~1 ms even on a frame with no candidates. The winning class
+ * is then picked only for the marked anchors — a few hundred, not 8400 — with
+ * the same strict `>` that keeps the lowest class id on a tie.
+ *
  * @param data Flat per-anchor output, length `channels * numAnchors`.
  * @param dims Dims as reported by ORT, e.g. `[1, 84, 8400]` (det) or
  *   `[1, 116, 8400]` (seg). The leading batch dim must be 1.
@@ -222,86 +239,67 @@ export function decodeYoloAnchors(
     );
   }
 
-  type Candidate = {
-    anchorIdx: number;
-    x1: number;
-    y1: number;
-    x2: number;
-    y2: number;
-    classId: number;
-    confidence: number;
-  };
-  const candidates: Candidate[] = [];
-
-  for (let a = 0; a < numAnchors; a++) {
-    let bestCls = 0;
-    let bestScore = -Infinity;
-    for (let c = 0; c < numClasses; c++) {
-      const s = data[(4 + c) * numAnchors + a];
-      if (s !== undefined && s > bestScore) {
-        bestScore = s;
-        bestCls = c;
-      }
+  const hit = new Uint8Array(numAnchors);
+  const classEnd = (4 + numClasses) * numAnchors;
+  for (let row = 4 * numAnchors; row < classEnd; row += numAnchors) {
+    for (let a = 0; a < numAnchors; a++) {
+      if ((data[row + a] as number) >= confThreshold) hit[a] = 1;
     }
-    if (bestScore < confThreshold) continue;
+  }
 
+  let count = 0;
+  const candidateAnchors = new Int32Array(numAnchors);
+  for (let a = 0; a < numAnchors; a++) {
+    if (hit[a] === 1) candidateAnchors[count++] = a;
+  }
+  if (count === 0) return emptyDecoded();
+
+  const flatBoxes = new Float32Array(count * 4);
+  const scoresArr = new Float32Array(count);
+  const idxsArr = new Int32Array(count);
+  for (let i = 0; i < count; i++) {
+    const a = candidateAnchors[i] as number;
     const cx = data[a] as number;
     const cy = data[numAnchors + a] as number;
     const w = data[2 * numAnchors + a] as number;
     const h = data[3 * numAnchors + a] as number;
-
-    let x1 = cx - w / 2;
-    let y1 = cy - h / 2;
-    let x2 = cx + w / 2;
-    let y2 = cy + h / 2;
-
-    x1 = (x1 - padLeft) / scale;
-    y1 = (y1 - padTop) / scale;
-    x2 = (x2 - padLeft) / scale;
-    y2 = (y2 - padTop) / scale;
-
-    x1 = Math.max(0, Math.min(originalWidth, x1));
-    y1 = Math.max(0, Math.min(originalHeight, y1));
-    x2 = Math.max(0, Math.min(originalWidth, x2));
-    y2 = Math.max(0, Math.min(originalHeight, y2));
-
-    candidates.push({ anchorIdx: a, x1, y1, x2, y2, classId: bestCls, confidence: bestScore });
-  }
-
-  if (candidates.length === 0) return emptyDecoded();
-
-  // Build flat arrays then delegate to batchedNms — same algorithm as before
-  // but funnelled through the public per-class NMS helper.
-  const flatBoxes = new Float32Array(candidates.length * 4);
-  const scoresArr = new Float32Array(candidates.length);
-  const idxsArr = new Int32Array(candidates.length);
-  for (let i = 0; i < candidates.length; i++) {
-    const c = candidates[i] as Candidate;
-    flatBoxes[i * 4] = c.x1;
-    flatBoxes[i * 4 + 1] = c.y1;
-    flatBoxes[i * 4 + 2] = c.x2;
-    flatBoxes[i * 4 + 3] = c.y2;
-    scoresArr[i] = c.confidence;
-    idxsArr[i] = c.classId;
+    const x1 = (cx - w / 2 - padLeft) / scale;
+    const y1 = (cy - h / 2 - padTop) / scale;
+    const x2 = (cx + w / 2 - padLeft) / scale;
+    const y2 = (cy + h / 2 - padTop) / scale;
+    flatBoxes[i * 4] = Math.max(0, Math.min(originalWidth, x1));
+    flatBoxes[i * 4 + 1] = Math.max(0, Math.min(originalHeight, y1));
+    flatBoxes[i * 4 + 2] = Math.max(0, Math.min(originalWidth, x2));
+    flatBoxes[i * 4 + 3] = Math.max(0, Math.min(originalHeight, y2));
+    let bestScore = -Infinity;
+    let bestClass = 0;
+    for (let c = 0, at = 4 * numAnchors + a; c < numClasses; c++, at += numAnchors) {
+      const score = data[at] as number;
+      if (score > bestScore) {
+        bestScore = score;
+        bestClass = c;
+      }
+    }
+    scoresArr[i] = bestScore;
+    idxsArr[i] = bestClass;
   }
   const kept = batchedNms(flatBoxes, scoresArr, idxsArr, iouThreshold);
   if (kept.length === 0) return emptyDecoded();
 
-  const limited = Array.from(kept).slice(0, maxDetections);
-  const k = limited.length;
+  const k = Math.min(kept.length, maxDetections);
   const anchorIndices = new Int32Array(k);
   const boxesXyxy = new Float32Array(k * 4);
   const classIds = new Int32Array(k);
   const confidences = new Float32Array(k);
   for (let i = 0; i < k; i++) {
-    const c = candidates[limited[i] as number] as Candidate;
-    anchorIndices[i] = c.anchorIdx;
-    boxesXyxy[i * 4] = c.x1;
-    boxesXyxy[i * 4 + 1] = c.y1;
-    boxesXyxy[i * 4 + 2] = c.x2;
-    boxesXyxy[i * 4 + 3] = c.y2;
-    classIds[i] = c.classId;
-    confidences[i] = c.confidence;
+    const j = kept[i] as number;
+    anchorIndices[i] = candidateAnchors[j] as number;
+    boxesXyxy[i * 4] = flatBoxes[j * 4] as number;
+    boxesXyxy[i * 4 + 1] = flatBoxes[j * 4 + 1] as number;
+    boxesXyxy[i * 4 + 2] = flatBoxes[j * 4 + 2] as number;
+    boxesXyxy[i * 4 + 3] = flatBoxes[j * 4 + 3] as number;
+    classIds[i] = idxsArr[j] as number;
+    confidences[i] = scoresArr[j] as number;
   }
   return { anchorIndices, boxesXyxy, classIds, confidences };
 }

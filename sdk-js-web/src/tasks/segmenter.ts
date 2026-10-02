@@ -12,7 +12,7 @@ import {
 import { SpeedTimer } from "../core/timing.js";
 
 import { type ImageInput, loadImage } from "../io/image.js";
-import { detectionNumClasses, resolveInputSize } from "../core/graph.js";
+import { resolveInputSize, segmentationNumClasses } from "../core/graph.js";
 import { modelNames } from "../core/metadata.js";
 import { type LabelSpec, defaultLabels, resolveLabels } from "../labels.js";
 import { decodeYoloSeg } from "../postprocess/segmentation.js";
@@ -176,7 +176,7 @@ export class Segmenter extends VisionTask {
     }
     const session = await OrtSession.create(model, options);
     const numClasses =
-      options.numClasses ?? detectionNumClasses(session.outputShape) ?? undefined;
+      options.numClasses ?? segmentationNumClasses(session.outputShapes) ?? undefined;
     const labels = resolveLabels(
       options.labels ?? modelNames(session.metadata) ?? defaultLabels(numClasses),
       { numClasses },

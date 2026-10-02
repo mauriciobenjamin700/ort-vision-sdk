@@ -5,6 +5,7 @@ import {
   declaredShapesFrom,
   detectionNumClasses,
   resolveInputSize,
+  segmentationNumClasses,
   spatialInputSize,
 } from "../src/core/graph.js";
 
@@ -113,6 +114,33 @@ describe("detectionNumClasses", () => {
     expect(detectionNumClasses([])).toBeNull();
     // 4 channels would leave zero classes after the box coordinates.
     expect(detectionNumClasses([1, 4, 8400])).toBeNull();
+  });
+});
+
+describe("segmentationNumClasses", () => {
+  it("subtracts the mask coefficients the prototype output declares", () => {
+    expect(segmentationNumClasses([[1, 37, 8400], [1, 32, 160, 160]])).toBe(1);
+    expect(segmentationNumClasses([[1, 116, 8400], [1, 32, 160, 160]])).toBe(80);
+    expect(segmentationNumClasses([[1, 39, 40], [1, 32, 8, 8]])).toBe(3);
+  });
+
+  it("reads a non-standard coefficient count off the prototypes", () => {
+    expect(segmentationNumClasses([[1, 20, 8400], [1, 8, 160, 160]])).toBe(8);
+  });
+
+  it("finds the outputs whatever order they are declared in", () => {
+    expect(segmentationNumClasses([[1, 32, 160, 160], [1, 37, 8400]])).toBe(1);
+  });
+
+  it("assumes 32 coefficients when the prototype channels are dynamic", () => {
+    expect(segmentationNumClasses([[1, 37, 8400], [1, null, 160, 160]])).toBe(1);
+    expect(segmentationNumClasses([[1, 37, 8400]])).toBe(1);
+  });
+
+  it("returns null when the per-anchor shape cannot pin it", () => {
+    expect(segmentationNumClasses([])).toBeNull();
+    expect(segmentationNumClasses([[1, null, null], [1, 32, 160, 160]])).toBeNull();
+    expect(segmentationNumClasses([[1, 36, 8400], [1, 32, 160, 160]])).toBeNull();
   });
 });
 

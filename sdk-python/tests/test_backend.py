@@ -20,6 +20,7 @@ from ort_vision_sdk import (
     DetectionResults,
     InferenceBackend,
     OrtSession,
+    Segmenter,
 )
 
 
@@ -164,6 +165,24 @@ def test_detector_runs_through_injected_backend() -> None:
     assert isinstance(results, list)
     assert isinstance(results[0], DetectionResults)
     assert fake.calls == 1
+
+
+def test_segmenter_reads_mask_coefficients_off_the_prototypes() -> None:
+    """The class count subtracts the coefficients the prototype output declares.
+
+    Eight coefficients instead of the usual 32: assuming 32 here would leave a
+    negative class count, so this fails unless the prototype shape is read.
+    """
+    fake = FakeBackend([(1, 20, 8400), (1, 8, 160, 160)], [])
+
+    assert Segmenter("unused.onnx", backend=fake).num_classes == 8
+
+
+def test_segmenter_assumes_32_coefficients_when_prototypes_are_dynamic() -> None:
+    """A dynamic prototype channel axis falls back to the standard 32."""
+    fake = FakeBackend([(1, 37, 8400), (1, "coefs", 160, 160)], [])
+
+    assert Segmenter("unused.onnx", backend=fake).num_classes == 1
 
 
 def test_classifier_runs_through_injected_backend() -> None:

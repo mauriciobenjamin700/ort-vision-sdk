@@ -77,6 +77,41 @@ export function detectionNumClasses(shape: DeclaredShape): number | null {
 }
 
 /**
+ * Mask coefficients per anchor when no prototype shape says otherwise.
+ *
+ * Every Ultralytics seg head (v8, v11) emits 32; it is the fallback when the
+ * prototype output's channel axis is dynamic or the runtime reports no shapes.
+ */
+const DEFAULT_MASK_COEFS = 32;
+
+/**
+ * Infer how many classes a YOLO segmentation head emits.
+ *
+ * The per-anchor output declares `(B, 4 + nc + nm, N)`: the detection layout
+ * with `nm` mask coefficients stacked under the class scores. Reading it with
+ * {@link detectionNumClasses} counts those coefficients as classes — 33 for a
+ * one-class YOLO11n-seg, 112 for a COCO one — and the label check then rejects
+ * the model's own baked-in names. `nm` is the channel axis of the prototype
+ * output `(B, nm, H, W)`, so it is read from there.
+ *
+ * @param shapes Declared shapes of every output, in declaration order.
+ * @returns The class count, or `null` when the per-anchor shape is missing or
+ *   leaves it undeterminable.
+ */
+export function segmentationNumClasses(shapes: readonly DeclaredShape[]): number | null {
+  const perAnchor = shapes.find((shape) => shape.length === 3);
+  if (perAnchor === undefined) return null;
+  const staticDims = perAnchor.filter((dim): dim is number => dim !== null && dim > 1);
+  if (staticDims.length === 0) return null;
+  const channels = Math.min(...staticDims);
+  const prototypes = shapes.find((shape) => shape.length === 4);
+  const declared = prototypes?.[1];
+  const coefs = typeof declared === "number" && declared > 0 ? declared : DEFAULT_MASK_COEFS;
+  const classes = channels - 4 - coefs;
+  return classes > 0 ? classes : null;
+}
+
+/**
  * Infer how many classes a classification head emits.
  *
  * A classifier declares `(B, nc)`, so the count is the last static axis.

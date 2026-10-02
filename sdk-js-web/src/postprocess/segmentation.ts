@@ -263,9 +263,13 @@ function softMaskCrop(
  * Bilinearly resize a soft mask and threshold it in the same pass.
  *
  * Half-pixel-centre sampling, matching `cv2.resize(..., INTER_LINEAR)` and the
- * Python SDK. The column taps and weights depend only on `x`, so they are
- * computed once instead of once per row, and the thresholded byte is written
- * directly instead of materialising a `Float32Array` of the resized mask first.
+ * Python SDK. The interpolation is separable and runs that way, like the
+ * Python `_resize_bilinear`: first along x over the few source rows, into a
+ * `Float64Array` so every horizontal blend keeps its exact double value, then
+ * along y between two of those rows. Each output pixel costs two reads and one
+ * blend instead of four reads and three, with the same values as blending all
+ * four directly. The thresholded byte is written directly instead of
+ * materialising a `Float32Array` of the resized mask first.
  * Each interpolated value is rounded to float32 with `Math.fround` before the
  * comparison, because that is the value the intermediate array used to hold —
  * comparing the unrounded double would flip pixels sitting exactly on the
@@ -304,21 +308,28 @@ function resizeBilinearThreshold(
     x1s[x] = Math.min(srcWidth - 1, x0 + 1);
     wxs[x] = Math.max(0, Math.min(1, xx - x0));
   }
+  const across = new Float64Array(srcHeight * targetWidth);
+  for (let r = 0; r < srcHeight; r++) {
+    const row = r * srcWidth;
+    const dst = r * targetWidth;
+    for (let x = 0; x < targetWidth; x++) {
+      const wx = wxs[x] as number;
+      across[dst + x] =
+        (src[row + (x0s[x] as number)] as number) * (1 - wx) +
+        (src[row + (x1s[x] as number)] as number) * wx;
+    }
+  }
   for (let y = 0; y < targetHeight; y++) {
     const yy = (y + 0.5) * sy - 0.5;
     const y0 = Math.max(0, Math.floor(yy));
     const y1 = Math.min(srcHeight - 1, y0 + 1);
     const wy = Math.max(0, Math.min(1, yy - y0));
-    const row0 = y0 * srcWidth;
-    const row1 = y1 * srcWidth;
+    const top = y0 * targetWidth;
+    const bot = y1 * targetWidth;
     const dst = y * targetWidth;
     for (let x = 0; x < targetWidth; x++) {
-      const x0 = x0s[x] as number;
-      const x1 = x1s[x] as number;
-      const wx = wxs[x] as number;
-      const top = (src[row0 + x0] as number) * (1 - wx) + (src[row0 + x1] as number) * wx;
-      const bot = (src[row1 + x0] as number) * (1 - wx) + (src[row1 + x1] as number) * wx;
-      out[dst + x] = Math.fround(top * (1 - wy) + bot * wy) >= threshold ? 255 : 0;
+      const value = (across[top + x] as number) * (1 - wy) + (across[bot + x] as number) * wy;
+      out[dst + x] = Math.fround(value) >= threshold ? 255 : 0;
     }
   }
   return out;

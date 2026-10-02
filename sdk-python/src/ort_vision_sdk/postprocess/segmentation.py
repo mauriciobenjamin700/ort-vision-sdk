@@ -197,6 +197,15 @@ def _resize_bilinear(
     the same mask for the same model output, and a shared algorithm is what
     makes that checkable.
 
+    The interpolation is separable, and it is run that way: first along x over
+    the few source rows (a prototype crop is ~20 rows tall), then along y by
+    picking whole rows of that result. Gathering the four neighbours of every
+    target pixel directly with ``np.ix_`` cost four fancy-index passes the size
+    of the *output* mask per instance — most of the segmentation decode. The
+    row picked for ``top[i]`` is exactly the row the direct form blended for
+    it, with the same float32 operations in the same order, so the output is
+    bit-identical.
+
     Args:
         mask: Source mask, shape ``(src_h, src_w)``.
         target_size: Target ``(width, height)`` in pixels.
@@ -216,8 +225,9 @@ def _resize_bilinear(
     x0, x1, wx = _sample_axis(src_w, target_w)
     y0, y1, wy = _sample_axis(src_h, target_h)
 
-    top: np.ndarray = source[np.ix_(y0, x0)] * (1.0 - wx) + source[np.ix_(y0, x1)] * wx
-    bottom: np.ndarray = source[np.ix_(y1, x0)] * (1.0 - wx) + source[np.ix_(y1, x1)] * wx
+    across: np.ndarray = source[:, x0] * (1.0 - wx) + source[:, x1] * wx
+    top: np.ndarray = across[y0]
+    bottom: np.ndarray = across[y1]
     blended: np.ndarray = top * (1.0 - wy[:, None]) + bottom * wy[:, None]
     return blended.astype(np.float32, copy=False)
 

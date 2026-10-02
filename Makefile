@@ -130,7 +130,7 @@ bump-web: _require-tag ## Atualiza versão do sdk-js-web (use TAG=0.3.0)
 # mudança.
 
 .PHONY: fixtures-models fixtures-parity bench-python bench-python-save bench-python-check \
-	bench-web bench-web-save bench-web-check
+	bench-web bench-web-save bench-web-check bench-browser bench-browser-models
 
 BENCH_BASELINE := bench/baseline-python.json
 BENCH_WEB_BASELINE := bench/baseline-web.json
@@ -161,6 +161,13 @@ bench-web-save: ## Regrava o baseline de benchmark web com os números desta má
 bench-web-check: ## Compara os benchmarks web com o baseline (rode na mesma máquina)
 	npm --prefix sdk-js-web run build
 	node scripts/bench_web.mjs --compare $(BENCH_WEB_BASELINE)
+
+bench-browser: ## Builda o sdk-js-web e serve a bancada de browser em localhost:8765
+	npm --prefix sdk-js-web run build
+	node bench/browser/server.mjs
+
+bench-browser-models: ## Gera as variantes da bancada: make bench-browser-models MODEL=... IMAGE=... [CALIBRATION=dir]
+	PYTHONPATH=$(PY_DIR)/src $(PY) scripts/prepare_browser_bench.py --model $(MODEL) --image $(IMAGE) $(if $(CALIBRATION),--calibration $(CALIBRATION))
 
 # ---------------------------------------------------------------------------
 # Validação local (mesmos checks que o CI roda)

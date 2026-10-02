@@ -27,6 +27,8 @@ use `[0]`. Each task also exposes a `run()` alias (parity with PyTorch's
 - `string` — a URL fetched via `fetch()`.
 - `Blob` / `File` — for `<input type="file">` uploads.
 - `HTMLImageElement` — an existing `<img>` tag.
+- `HTMLVideoElement` / `VideoFrame` — the current frame of a video or camera
+  (the video must have a frame: wait for its `loadeddata` event).
 - `HTMLCanvasElement` / `OffscreenCanvas` — an already-rendered canvas.
 - `ImageBitmap` — from `createImageBitmap()`.
 - `ImageData` — a raw pixel buffer (RGBA from canvas `getImageData()`).
@@ -134,6 +136,11 @@ const clf = await Classifier.create(model, {
 });
 ```
 
+Each entry can also be ORT's config object for that provider, which passes the
+options through untouched — `{ name: "webgpu", preferredLayout: "NHWC" }`.
+`session.providers` still reports names only. See
+[Optimizing creation and inference](desempenho.md#creation-per-provider-options).
+
 For WebGPU to actually engage you need a recent ORT-Web build, a Chromium-based
 browser with WebGPU enabled, and a secure context (`https://` or `localhost`) —
 or the right COOP/COEP headers if you also want `SharedArrayBuffer`-based wasm
@@ -176,6 +183,12 @@ for (const d of result) console.log(d.className, d.confidence, d.bbox.asXyxy());
     pthread build's shared-memory reservation simply move threads; a device that
     cannot create the session on the main thread cannot create it in the worker
     either.
+
+!!! tip "But it frees the main thread for the next frame"
+    With inference in the worker, two `predict()` calls in flight overlap one
+    frame's preprocessing with the previous frame's inference: ~15% more frames
+    per second on a 1080p frame. See
+    [Two `predict` calls in flight](desempenho.md#inference-two-predict-calls-in-flight).
 
 ??? info "Technical details: why this needed an SDK fix (0.7.1)"
     The proxy posts the input tensors with their `ArrayBuffer`s in the transfer

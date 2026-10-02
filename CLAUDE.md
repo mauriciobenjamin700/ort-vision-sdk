@@ -14,7 +14,7 @@ ort-vision-sdk/
 ├── docs/                # site MkDocs bilíngue COMPARTILHADO pelos dois (pt default + .en.md)
 ├── scripts/             # validate.sh, release.sh, gen_test_models.py, gen_parity_fixtures.py, bench.py
 ├── fixtures/            # fixtures de paridade Python × Web
-├── bench/               # baseline de microbenchmark
+├── bench/               # baseline de microbenchmark + bancada de browser (bench/browser/)
 └── Makefile             # release, validação, fixtures, benchmark
 ```
 
@@ -58,9 +58,12 @@ commit ...` num único comando é julgado pelo índice anterior ao próprio `add
 faça o stage numa chamada e o commit na seguinte para o veredito valer. Quando a assimetria é legítima, **diga o porquê no corpo
 do commit**:
 
-- **Só Python:** `compose/` (fusão é build-time e precisa de `onnx`; não existe
-  no web).
-- **Só web:** `core/canvas.ts`, `warmup()`, tudo que depende de DOM/WebGPU.
+- **Só Python:** `compose/`, `optimize_model`, `quantize_model` — tudo build-time,
+  que precisa de `onnx` ou do otimizador nativo do ORT. O web só lê as marcas que
+  `optimize_model` e `quantize_model` gravam na metadata.
+- **Só web:** `core/canvas.ts`, a fila de `run` do `OrtSession` (o ORT Python já
+  aceita `run` concorrente), tudo que depende de DOM/WebGPU. `warmup()` existe nos
+  dois.
 - **Compartilhado:** `docs/` serve os dois; mudar prosa lá não conta como
   paridade de código.
 

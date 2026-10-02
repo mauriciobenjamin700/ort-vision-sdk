@@ -11,6 +11,7 @@ from numpy.typing import NDArray
 
 from ort_vision_sdk.core.backend import read_metadata
 from ort_vision_sdk.core.exceptions import FusionError
+from ort_vision_sdk.core.providers import ProviderSpec
 from ort_vision_sdk.core.timing import SpeedTimer
 from ort_vision_sdk.fusion import (
     INPUT_IMAGE,
@@ -101,7 +102,7 @@ class DetectClassify(VisionTask):
         labels: LabelSpec = None,
         classifier_labels: LabelSpec = None,
         raise_on_empty: bool = False,
-        providers: list[str] | None = None,
+        providers: list[ProviderSpec] | None = None,
         session_options: ort.SessionOptions | None = None,
         backend: InferenceBackend | None = None,
     ) -> None:
@@ -127,7 +128,8 @@ class DetectClassify(VisionTask):
                 Turn it on when an empty result means the surrounding pipeline
                 should stop rather than carry on with zero rows. Can be
                 overridden per :meth:`predict` call.
-            providers: Execution providers in preference order. Auto if
+            providers: Execution providers in preference order, as names or
+                ``(name, options)`` pairs (see :data:`ProviderSpec`). Auto if
                 ``None``. Ignored when ``backend`` is provided.
             session_options: Optional ORT session options. Ignored when
                 ``backend`` is provided.
@@ -345,6 +347,27 @@ class DetectClassify(VisionTask):
             top_k=top_k,
             raise_on_empty=raise_on_empty,
         )
+
+    def _warmup_feeds(self) -> dict[str, np.ndarray]:
+        """Zero-filled feeds for every input the fused graph declares.
+
+        A pipeline fused with ``crop_source="original"`` also takes the
+        untouched image, the letterbox scale and the padding; they are fed at
+        the letterbox resolution with an identity transform, which is a valid
+        frame for the graph to run on.
+
+        Returns:
+            dict[str, np.ndarray]: The warm-up feeds.
+        """
+        width, height = self._spec.input_size
+        feeds: dict[str, np.ndarray] = {
+            INPUT_IMAGE: np.zeros((1, 3, height, width), dtype=np.float32)
+        }
+        if self._spec.needs_source_image:
+            feeds[INPUT_SOURCE] = np.zeros((1, 3, height, width), dtype=np.float32)
+            feeds[INPUT_SCALE] = np.asarray([1.0], dtype=np.float32)
+            feeds[INPUT_PAD] = np.asarray([0.0, 0.0], dtype=np.float32)
+        return feeds
 
     def _preprocess(
         self, image: ImageArray

@@ -394,6 +394,12 @@ class TestHalfPrecisionEndToEnd:
         assert result.cls == 1
         assert result.name == "bee"
 
+    def test_warmup_feeds_the_declared_half_precision(self) -> None:
+        """A float32 warm-up tensor would fail with ``Unexpected input data type``."""
+        classifier = Classifier(MODELS / "tiny_classifier_fp16.onnx", providers=CPU)
+
+        classifier.warmup(2)
+
     def test_the_task_reports_the_dtype_it_feeds(self) -> None:
         classifier = Classifier(MODELS / "tiny_classifier_fp16.onnx", providers=CPU)
 

@@ -12,7 +12,26 @@ addition to the canonical ORT names (``"CPUExecutionProvider"``,
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+from typing import Any, TypeAlias, overload
+
 from ort_vision_sdk.core.exceptions import ProviderNotAvailableError
+
+ProviderSpec: TypeAlias = str | tuple[str, dict[str, Any]]
+"""One execution provider: its name, or a ``(name, options)`` pair.
+
+The pair form is what ``onnxruntime.InferenceSession`` itself accepts, and it
+is the only way to reach provider options — a TensorRT engine cache, the CUDA
+convolution search strategy, an OpenVINO cache directory::
+
+    providers=[
+        ("tensorrt", {"trt_engine_cache_enable": True, "trt_engine_cache_path": "./trt"}),
+        ("cuda", {"cudnn_conv_algo_search": "HEURISTIC"}),
+        "cpu",
+    ]
+
+The name in a pair accepts the same short aliases as a bare name.
+"""
 
 _PRIORITY: tuple[str, ...] = (
     "CUDAExecutionProvider",
@@ -86,20 +105,43 @@ def normalize_provider(name: str) -> str:
     return _ALIASES.get(name.lower(), name)
 
 
-def resolve_providers(requested: list[str] | None = None) -> list[str]:
+def provider_name(spec: ProviderSpec) -> str:
+    """Return the provider name a spec refers to, as written.
+
+    Args:
+        spec: A provider name or a ``(name, options)`` pair.
+
+    Returns:
+        The name part of the spec, before alias expansion.
+    """
+    return spec if isinstance(spec, str) else spec[0]
+
+
+@overload
+def resolve_providers(requested: list[str] | None = None) -> list[str]: ...
+
+
+@overload
+def resolve_providers(requested: Sequence[ProviderSpec]) -> list[ProviderSpec]: ...
+
+
+def resolve_providers(
+    requested: Sequence[ProviderSpec] | None = None,
+) -> list[str] | list[ProviderSpec]:
     """Resolve the execution providers to use for an inference session.
 
     Args:
         requested: Explicit list of providers in preference order. Each entry
-            may be a canonical ORT name (``"CUDAExecutionProvider"``) or a
-            short alias (``"cuda"``, ``"cpu"``, ``"tensorrt"``, ...). ``None``
-            (default) auto-selects the best available accelerator with CPU
-            as the final fallback.
+            may be a canonical ORT name (``"CUDAExecutionProvider"``), a short
+            alias (``"cuda"``, ``"cpu"``, ``"tensorrt"``, ...), or a
+            ``(name, options)`` pair whose name is either — see
+            :data:`ProviderSpec`. ``None`` (default) auto-selects the best
+            available accelerator with CPU as the final fallback.
 
     Returns:
-        Ordered list of canonical providers to pass to
-        ``onnxruntime.InferenceSession``. Always non-empty (CPU is always
-        available).
+        Ordered list to pass to ``onnxruntime.InferenceSession``, with every
+        name canonical and every options dict carried through unchanged. Always
+        non-empty (CPU is always available).
 
     Raises:
         ProviderNotAvailableError: If any explicitly requested provider is
@@ -107,11 +149,16 @@ def resolve_providers(requested: list[str] | None = None) -> list[str]:
     """
     available = set(available_providers())
     if requested is None:
-        ordered = [p for p in _PRIORITY if p in available]
+        ordered: list[ProviderSpec] = [p for p in _PRIORITY if p in available]
         return ordered or ["CPUExecutionProvider"]
 
-    canonical = [normalize_provider(p) for p in requested]
-    missing = [p for p in canonical if p not in available]
+    canonical: list[ProviderSpec] = [
+        normalize_provider(spec)
+        if isinstance(spec, str)
+        else (normalize_provider(spec[0]), spec[1])
+        for spec in requested
+    ]
+    missing = [provider_name(p) for p in canonical if provider_name(p) not in available]
     if missing:
         raise ProviderNotAvailableError(
             f"Requested execution provider(s) not available: {missing}. "

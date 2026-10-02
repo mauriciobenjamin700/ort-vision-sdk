@@ -1,0 +1,68 @@
+{
+  "environment": {
+    "node": "v24.15.0",
+    "platform": "linux-5.15.167.4-microsoft-standard-WSL2",
+    "arch": "x64"
+  },
+  "settings": {
+    "reps": 50,
+    "warmup": 10
+  },
+  "results": {
+    "rgba_to_rgb_1080p": {
+      "median_ms": 2.9146,
+      "min_ms": 2.7997,
+      "max_ms": 5.7855
+    },
+    "rgb_to_rgba_1080p": {
+      "median_ms": 3.0053,
+      "min_ms": 2.8828,
+      "max_ms": 5.0601
+    },
+    "write_planar_float32_640": {
+      "median_ms": 1.4141,
+      "min_ms": 1.3866,
+      "max_ms": 1.892
+    },
+    "decode_yolo_no_candidates": {
+      "median_ms": 0.4441,
+      "min_ms": 0.4344,
+      "max_ms": 0.4811
+    },
+    "decode_yolo_50_candidates": {
+      "median_ms": 0.4001,
+      "min_ms": 0.3888,
+      "max_ms": 0.7524
+    },
+    "decode_yolo_2000_candidates": {
+      "median_ms": 1.2345,
+      "min_ms": 1.1711,
+      "max_ms": 1.9201
+    },
+    "nms_300_boxes": {
+      "median_ms": 0.2724,
+      "min_ms": 0.2574,
+      "max_ms": 0.4508
+    },
+    "nms_2000_boxes": {
+      "median_ms": 6.6018,
+      "min_ms": 6.4221,
+      "max_ms": 7.1974
+    },
+    "batched_nms_300_boxes_20_classes": {
+      "median_ms": 0.0632,
+      "min_ms": 0.059,
+      "max_ms": 0.2392
+    },
+    "batched_nms_2000_boxes_20_classes": {
+      "median_ms": 1.085,
+      "min_ms": 1.0273,
+      "max_ms": 1.4614
+    },
+    "decode_yolo_seg_30_instances": {
+      "median_ms": 4.8357,
+      "min_ms": 4.6783,
+      "max_ms": 5.8829
+    }
+  }
+}

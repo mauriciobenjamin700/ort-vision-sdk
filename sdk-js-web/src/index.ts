@@ -43,9 +43,12 @@ export {
 } from "./core/exceptions.js";
 
 export {
+  DEFAULT_MODEL_CACHE,
+  GRAPH_OPTIMIZATION_KEY,
   type ModelSource,
   type OrtSessionOptions,
   OrtSession,
+  QUANTIZATION_KEY,
 } from "./core/session.js";
 export {
   type DeclaredDim,
@@ -70,7 +73,12 @@ export {
   readModelInputTypes,
   readModelMetadata,
 } from "./core/metadata.js";
-export { DEFAULT_PROVIDERS, detectProviders, resolveProviders } from "./core/providers.js";
+export {
+  DEFAULT_PROVIDERS,
+  type ProviderSpec,
+  detectProviders,
+  resolveProviders,
+} from "./core/providers.js";
 export { type Speed, SpeedTimer } from "./core/timing.js";
 export {
   CUSTOM_NORMALIZATION,

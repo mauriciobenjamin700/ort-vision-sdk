@@ -129,9 +129,11 @@ bump-web: _require-tag ## Atualiza versão do sdk-js-web (use TAG=0.3.0)
 # bench-python-check na mesma máquina que gravou o baseline, antes e depois da
 # mudança.
 
-.PHONY: fixtures-models fixtures-parity bench-python bench-python-save bench-python-check
+.PHONY: fixtures-models fixtures-parity bench-python bench-python-save bench-python-check \
+	bench-web bench-web-save bench-web-check bench-browser bench-browser-models
 
 BENCH_BASELINE := bench/baseline-python.json
+BENCH_WEB_BASELINE := bench/baseline-web.json
 
 fixtures-models: ## Regera os modelos ONNX sintéticos dos testes e2e (precisa de onnx)
 	uv run --with onnx --with numpy python scripts/gen_test_models.py
@@ -147,6 +149,25 @@ bench-python-save: ## Regrava o baseline de benchmark com os números desta máq
 
 bench-python-check: ## Compara os benchmarks com o baseline (rode na mesma máquina)
 	PYTHONPATH=$(PY_DIR)/src $(PY) scripts/bench.py --compare $(BENCH_BASELINE)
+
+bench-web: ## Builda o sdk-js-web e roda os microbenchmarks dele
+	npm --prefix sdk-js-web run build
+	node scripts/bench_web.mjs
+
+bench-web-save: ## Regrava o baseline de benchmark web com os números desta máquina
+	npm --prefix sdk-js-web run build
+	node scripts/bench_web.mjs --json $(BENCH_WEB_BASELINE)
+
+bench-web-check: ## Compara os benchmarks web com o baseline (rode na mesma máquina)
+	npm --prefix sdk-js-web run build
+	node scripts/bench_web.mjs --compare $(BENCH_WEB_BASELINE)
+
+bench-browser: ## Builda o sdk-js-web e serve a bancada de browser em localhost:8765
+	npm --prefix sdk-js-web run build
+	node bench/browser/server.mjs
+
+bench-browser-models: ## Gera as variantes da bancada: make bench-browser-models MODEL=... IMAGE=... [CALIBRATION=dir]
+	PYTHONPATH=$(PY_DIR)/src $(PY) scripts/prepare_browser_bench.py --model $(MODEL) --image $(IMAGE) $(if $(CALIBRATION),--calibration $(CALIBRATION))
 
 # ---------------------------------------------------------------------------
 # Validação local (mesmos checks que o CI roda)

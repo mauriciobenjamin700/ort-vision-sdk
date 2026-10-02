@@ -57,6 +57,7 @@ pip install ort-vision-sdk             # CPU only (default)
 pip install "ort-vision-sdk[gpu]"      # adds onnxruntime-gpu for CUDA / TensorRT
 pip install "ort-vision-sdk[opencv]"   # adds OpenCV image backend
 pip install "ort-vision-sdk[compose]"  # adds onnx, to fuse models into one pipeline
+pip install "ort-vision-sdk[quantize]" # adds onnx, to quantize models to INT8
 pip install "ort-vision-sdk[dev]"      # ruff, mypy, pytest, build, twine
 ```
 
@@ -266,6 +267,47 @@ det = Detector("yolov8n.onnx", providers=["CUDAExecutionProvider"])  # canonical
 ```
 
 Aliases supported: `"cpu"`, `"cuda"`, `"tensorrt"`, `"directml"`, `"coreml"`, `"openvino"`, `"rocm"`. Anything else is forwarded verbatim to ORT.
+
+To pass provider options, use a `(name, options)` pair — the form `onnxruntime.InferenceSession` itself accepts:
+
+```python
+det = Detector(
+    "yolov8n.onnx",
+    providers=[
+        ("tensorrt", {"trt_engine_cache_enable": True, "trt_engine_cache_path": "./trt"}),
+        ("cuda", {"cudnn_conv_algo_search": "HEURISTIC"}),
+        "cpu",
+    ],
+)
+```
+
+### Offline graph optimization
+
+`optimize_model()` runs ONNX Runtime's graph optimizer once, at build time, and marks the output so the web SDK loads it without optimizing again:
+
+```python
+from ort_vision_sdk import optimize_model
+
+optimize_model("yolov8n.onnx", "yolov8n.opt.onnx")
+```
+
+### INT8 quantization
+
+`quantize_model()` (the `[quantize]` extra) writes a static INT8 copy, calibrated with the same preprocessing `predict()` uses. On a YOLO11n-seg: 11.7 MB → 3.5 MB, and a full Python `predict()` 37.5 ms → 16.8 ms. Validate accuracy on your own data before shipping.
+
+```python
+from pathlib import Path
+
+from ort_vision_sdk import quantize_model
+
+quantize_model("yolov8n-seg.onnx", "yolov8n-seg.int8.onnx", sorted(Path("calibration/").glob("*.jpg")))
+```
+
+### Warm-up
+
+`task.warmup()` runs the model once on a zero tensor, so the first request does not pay CUDA's arena allocation, cuDNN's algorithm search or TensorRT's engine build.
+
+Guide: [PT-BR](https://mauriciobenjamin700.github.io/ort-vision-sdk/guia/desempenho/) · [EN](https://mauriciobenjamin700.github.io/ort-vision-sdk/en/guia/desempenho/).
 
 For fine-grained control (graph optimization, threading, profiling) pass an `ort.SessionOptions` instance:
 

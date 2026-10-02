@@ -7,6 +7,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`optimize_model(model, output, level="extended")`.** Runs ONNX Runtime's
+  graph optimizer once, at build time, and writes the result with a
+  `GRAPH_OPTIMIZATION_KEY` mark in its metadata. The web SDK loads a marked
+  model without optimizing it again — session creation 29 ms → 12 ms on a
+  YOLO11n-seg under WASM. The source's metadata is preserved; `"all"` is not
+  offered because its layout transforms are specific to the optimizing CPU.
+
+- **`quantize_model(model, output, calibration, task=None, per_channel=True)`**
+  (`[quantize]` extra). Writes a static INT8 QDQ copy, calibrated with the
+  task's own preprocessing (letterbox for detect/segment, resize and
+  normalization for classify), the task read from the Ultralytics metadata when
+  not given. On a YOLO11n-seg: 11.7 MB → 3.5 MB, native CPU inference 87 ms →
+  30.5 ms, full Python `predict()` 37.5 ms → 16.8 ms. The output carries
+  `QUANTIZATION_KEY`, which the web SDK reads to keep the model off WebGPU.
+  Float16 inputs, empty calibration sets and unknown tasks are refused up front.
+
+- **`warmup(runs=1)` on every task.** Runs the model on zero-filled input cast
+  to the declared dtype, so the first request does not pay CUDA's arena
+  allocation, cuDNN's algorithm search or TensorRT's engine build. Mirrors the
+  web SDK's `warmup()`; `DetectClassify` feeds every input its fused graph
+  declares.
+
+- **Provider options via `(name, options)` pairs.** `providers=` accepts the
+  pair form `onnxruntime.InferenceSession` itself takes —
+  `("tensorrt", {"trt_engine_cache_enable": True})`,
+  `("cuda", {"cudnn_conv_algo_search": "HEURISTIC"})` — with the usual aliases
+  in the name. `requested_providers` keeps reporting names. New `ProviderSpec`
+  alias; `resolve_providers` returns `list[str]` for a list of names as before.
+
+### Changed
+
+- **Faster postprocessing, bit-identical output.** `nms` uses a precomputed
+  IoU matrix up to `MATRIX_NMS_LIMIT` (512) boxes and returns a single box
+  without building anything; `batched_nms` calls it per class, so it nearly
+  always takes the fast path. The segmentation mask resize runs separably.
+  Measured with `scripts/bench.py`: decode 43–80% faster, nms 81% (300 boxes),
+  batched_nms 78–87%, decode_yolo_seg 81%. Old and new outputs compared on 400
+  randomized NMS cases and 3000 resize cases, with no difference.
+
+- **`optimize_model` warns on a quantized model**: loading a pre-optimized INT8
+  model with the optimizer off skips fusions ORT applies at load time (WASM:
+  creation 79 ms faster, every inference 19% slower).
+
+- **`Segmenter` reads the mask-coefficient count off the prototype output**
+  when inferring the class count, instead of assuming 32. Mirrors the web SDK,
+  so both agree on a head with a non-standard coefficient count.
+
 ## [0.11.0] - 2026-09-13
 
 ### Added

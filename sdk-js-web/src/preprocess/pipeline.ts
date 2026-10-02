@@ -161,8 +161,14 @@ export class LetterboxPipeline {
    * into — see {@link ReusableBuffer}.
    *
    * @param image Source image in the SDK's canonical HWC RGB layout.
+   * @param canvas Optional drawable already holding exactly `image`'s pixels at
+   *   `image.width × image.height`, fully opaque. When given it is drawn
+   *   straight into the target, skipping the RGB→RGBA rebuild and the
+   *   `putImageData` onto the scratch canvas — two full-resolution passes per
+   *   frame. The tasks pass the canvas `loadImage` decoded onto; a caller with a
+   *   translucent source must not, since the result would composite its alpha.
    */
-  run(image: RGBImage): FusedLetterboxResult {
+  run(image: RGBImage, canvas: CanvasImageSource | null = null): FusedLetterboxResult {
     const targetWidth = this._targetWidth;
     const targetHeight = this._targetHeight;
     const scale = Math.min(targetWidth / image.width, targetHeight / image.height);
@@ -171,8 +177,7 @@ export class LetterboxPipeline {
     const padLeft = Math.floor((targetWidth - scaledWidth) / 2);
     const padTop = Math.floor((targetHeight - scaledHeight) / 2);
 
-    const source = this._ensureSource(image.width, image.height);
-    source.putImageData(rgbToImageData(image), 0, 0);
+    const drawable = canvas ?? this._paintSource(image);
 
     const context = this._targetContext;
     if (padLeft > 0 || padTop > 0 || scaledWidth !== targetWidth || scaledHeight !== targetHeight) {
@@ -180,7 +185,7 @@ export class LetterboxPipeline {
       context.fillRect(0, 0, targetWidth, targetHeight);
     }
     context.drawImage(
-      this._source as CanvasImageSource,
+      drawable,
       0,
       0,
       image.width,
@@ -210,26 +215,38 @@ export class LetterboxPipeline {
    * Call it once the tensor built from a {@link run} result has been handed to
    * ONNX Runtime and the run has resolved — after that the values are inside
    * the WASM heap and the buffer can be overwritten.
+   *
+   * Pass the result being released when several runs can be outstanding at
+   * once. A result that got a fresh allocation (`reused: false`) holds nothing
+   * of the pipeline's, so releasing it is a no-op; without that check, the
+   * caller finishing with a fresh buffer would free the shared one while
+   * another caller still had its frame in it. Called without an argument it
+   * frees the shared buffer unconditionally, as before.
+   *
+   * @param result The {@link run} result being released.
    */
-  release(): void {
+  release(result?: { readonly reused: boolean }): void {
+    if (result !== undefined && !result.reused) return;
     this._buffer.release();
   }
 
   /**
-   * Grow the scratch source canvas to fit an image, reusing it when possible.
+   * Paint an image onto the scratch source canvas and return that canvas.
    *
-   * A canvas is only reallocated when a frame arrives at a different size than
-   * the last one, which for a camera or video source is never after the first.
+   * The canvas is only reallocated when a frame arrives at a different size
+   * than the last one, which for a camera or video source is never after the
+   * first.
    *
-   * @param width Source width in pixels.
-   * @param height Source height in pixels.
+   * @param image Source image in the SDK's canonical HWC RGB layout.
    */
-  private _ensureSource(width: number, height: number): Context2D {
+  private _paintSource(image: RGBImage): CanvasImageSource {
+    const { width, height } = image;
     if (this._source === null || this._source.width !== width || this._source.height !== height) {
       this._source = createCanvas(width, height);
       this._sourceContext = get2DContext(this._source);
     }
-    return this._sourceContext as Context2D;
+    (this._sourceContext as Context2D).putImageData(rgbToImageData(image), 0, 0);
+    return this._source as CanvasImageSource;
   }
 }
 
@@ -357,8 +374,11 @@ export class ResizePipeline {
    * a consumer detached it by transferring the tensor.
    *
    * @param image Source image in the SDK's canonical HWC RGB layout.
+   * @param canvas Optional opaque drawable holding exactly `image`'s pixels —
+   *   see {@link LetterboxPipeline.run}. Ignored on the same-size fast path,
+   *   which never touches a canvas.
    */
-  run(image: RGBImage): FusedResizeResult {
+  run(image: RGBImage, canvas: CanvasImageSource | null = null): FusedResizeResult {
     const targetWidth = this._targetWidth;
     const targetHeight = this._targetHeight;
     const { data, reused } = this._buffer.claim();
@@ -368,11 +388,9 @@ export class ResizePipeline {
       return { data, reused };
     }
 
-    const source = this._ensureSource(image.width, image.height);
-    source.putImageData(rgbToImageData(image), 0, 0);
-
+    const drawable = canvas ?? this._paintSource(image);
     const context = this._ensureTarget();
-    context.drawImage(this._source as CanvasImageSource, 0, 0, targetWidth, targetHeight);
+    context.drawImage(drawable, 0, 0, image.width, image.height, 0, 0, targetWidth, targetHeight);
 
     const rgba = context.getImageData(0, 0, targetWidth, targetHeight).data;
     writePlanarFloat32(rgba, targetWidth, targetHeight, this._mean, this._std, data);
@@ -385,8 +403,18 @@ export class ResizePipeline {
    * Call it once the tensor built from a {@link run} result has been handed to
    * ONNX Runtime and the run has resolved — after that the values are inside
    * the WASM heap and the buffer can be overwritten.
+   *
+   * Pass the result being released when several runs can be outstanding at
+   * once. A result that got a fresh allocation (`reused: false`) holds nothing
+   * of the pipeline's, so releasing it is a no-op; without that check, the
+   * caller finishing with a fresh buffer would free the shared one while
+   * another caller still had its frame in it. Called without an argument it
+   * frees the shared buffer unconditionally, as before.
+   *
+   * @param result The {@link run} result being released.
    */
-  release(): void {
+  release(result?: { readonly reused: boolean }): void {
+    if (result !== undefined && !result.reused) return;
     this._buffer.release();
   }
 
@@ -407,13 +435,19 @@ export class ResizePipeline {
     return this._targetContext as Context2D;
   }
 
-  /** Grow the scratch source canvas to fit an image, reusing it when possible. */
-  private _ensureSource(width: number, height: number): Context2D {
+  /**
+   * Paint an image onto the scratch source canvas and return that canvas.
+   *
+   * @param image Source image in the SDK's canonical HWC RGB layout.
+   */
+  private _paintSource(image: RGBImage): CanvasImageSource {
+    const { width, height } = image;
     if (this._source === null || this._source.width !== width || this._source.height !== height) {
       this._source = createCanvas(width, height);
       this._sourceContext = get2DContext(this._source);
     }
-    return this._sourceContext as Context2D;
+    (this._sourceContext as Context2D).putImageData(rgbToImageData(image), 0, 0);
+    return this._source as CanvasImageSource;
   }
 }
 

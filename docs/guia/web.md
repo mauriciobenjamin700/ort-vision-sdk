@@ -28,6 +28,8 @@ Assim como no Python, `predict()` retorna uma lista de comprimento 1
 - `string` — uma URL buscada via `fetch()`.
 - `Blob` / `File` — para uploads de `<input type="file">`.
 - `HTMLImageElement` — uma tag `<img>` existente.
+- `HTMLVideoElement` / `VideoFrame` — o frame atual de um vídeo ou da câmera
+  (o vídeo precisa ter frame: espere o evento `loadeddata`).
 - `HTMLCanvasElement` / `OffscreenCanvas` — canvas já renderizado.
 - `ImageBitmap` — de `createImageBitmap()`.
 - `ImageData` — buffer de pixels cru (RGBA do `getImageData()` do canvas).
@@ -134,6 +136,12 @@ const clf = await Classifier.create(model, {
 });
 ```
 
+Cada entrada também pode ser o objeto de configuração do ORT para aquele
+provider, que passa as opções adiante intactas —
+`{ name: "webgpu", preferredLayout: "NHWC" }`. `session.providers` continua
+reportando só os nomes. Veja
+[Otimizando criação e inferência](desempenho.md#criacao-opcoes-por-execution-provider).
+
 Para o WebGPU realmente engajar, você precisa de um build recente do ORT-Web, um
 navegador Chromium com WebGPU habilitado e um contexto seguro (`https://` ou
 `localhost`) — ou os cabeçalhos COOP/COEP corretos se também quiser threading
@@ -174,6 +182,12 @@ for (const d of result) console.log(d.className, d.confidence, d.bbox.asXyxy());
     Ele muda *onde* o custo é pago, não o quanto. O heap WASM e a reserva de
     memória compartilhada do build pthread apenas mudam de thread; um aparelho que
     não consegue criar a sessão na main thread também não consegue no worker.
+
+!!! tip "Mas libera a main thread para o próximo frame"
+    Com a inferência no worker, dois `predict()` em voo sobrepõem o
+    pré-processamento de um frame à inferência do anterior: ~15% mais frames por
+    segundo num frame 1080p. Veja
+    [Dois `predict` em voo](desempenho.md#inferencia-dois-predict-em-voo).
 
 ??? info "Detalhe técnico: por que isso precisou de um fix no SDK (0.7.1)"
     O proxy posta os tensores de entrada com os `ArrayBuffer`s na *transfer list*,

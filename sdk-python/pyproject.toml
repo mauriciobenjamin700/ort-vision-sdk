@@ -40,6 +40,10 @@ opencv = ["opencv-python>=4.8.0"]
 # onnxruntime already in the base dependencies, so `onnx` stays out of the
 # runtime install.
 compose = ["onnx>=1.16.0"]
+# Build-time only: `ort_vision_sdk.quantize_model` drives ONNX Runtime's
+# quantization tooling, which imports `onnx`. The quantized model runs on the
+# base install.
+quantize = ["onnx>=1.16.0"]
 dev = [
     "onnx>=1.16.0",
     "pytest>=8.0.0",

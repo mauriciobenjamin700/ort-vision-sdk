@@ -160,7 +160,10 @@ given — no start/stop pairs to forget. Calling the same name twice
 - Loading the model is **not** in `speed` — that is startup cost.
 - `SpeedTimer` measures your own pipeline stages under the same rules.
 
-## Warm-up (`warmup`) — web only
+With the number in hand, the next step is to
+[optimize creation and inference](desempenho.md). 🚀
+
+## Warm-up (`warmup`)
 
 The first inference of a session is not representative: WebGPU compiles its
 shaders on it and the WASM backend faults in its arenas, which on a phone turns
@@ -174,6 +177,19 @@ still up — the cost moves somewhere the user is already waiting:
 const det = await Detector.create("/models/yolov8n.onnx");
 await det.warmup();        // one pass is enough for WASM
 await det.warmup(2);       // WebGPU sometimes settles on the second
+```
+
+The Python SDK has the same method. On a server, call it at start-up, before
+the first request: on CUDA the first inference allocates the device arena and
+runs cuDNN's algorithm search, and TensorRT may build its engine there. The
+zero tensor is cast to the dtype the model declares, so a half-precision export
+is warmed with what it really runs on.
+
+```python
+from ort_vision_sdk import Detector
+
+det = Detector("yolov8n.onnx", providers=["cuda", "cpu"])
+det.warmup()
 ```
 
 !!! tip "Worth more on a fused pipeline"

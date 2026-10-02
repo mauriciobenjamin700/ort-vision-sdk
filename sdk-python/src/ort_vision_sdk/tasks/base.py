@@ -17,6 +17,7 @@ import numpy as np
 
 from ort_vision_sdk.core.backend import InferenceBackend
 from ort_vision_sdk.core.exceptions import NoDetectionsError
+from ort_vision_sdk.core.providers import ProviderSpec
 from ort_vision_sdk.core.session import OrtSession
 from ort_vision_sdk.dtypes import as_float32, numpy_dtype_for
 
@@ -51,7 +52,7 @@ class VisionTask:
         self,
         model_path: str | Path,
         *,
-        providers: list[str] | None = None,
+        providers: list[ProviderSpec] | None = None,
         session_options: ort.SessionOptions | None = None,
         backend: InferenceBackend | None = None,
     ) -> None:
@@ -60,7 +61,8 @@ class VisionTask:
         Args:
             model_path: Path to the ``.onnx`` model file. Ignored when
                 ``backend`` is provided.
-            providers: Execution providers in preference order. ``None``
+            providers: Execution providers in preference order, as names or
+                ``(name, options)`` pairs (see :data:`ProviderSpec`). ``None``
                 (default) auto-selects the best available accelerator. Ignored
                 when ``backend`` is provided.
             session_options: Optional ORT session options. Ignored when
@@ -95,6 +97,46 @@ class VisionTask:
         or the default :class:`OrtSession` when none was provided.
         """
         return self._session
+
+    @property
+    def input_size(self) -> tuple[int, int]:
+        """The ``(width, height)`` this task preprocesses to.
+
+        Raises:
+            NotImplementedError: Always; every concrete task overrides it.
+        """
+        raise NotImplementedError
+
+    def warmup(self, runs: int = 1) -> None:
+        """Run the model on zero-filled input, paying one-time costs up front.
+
+        The first inference of a session is not representative. On CUDA it
+        allocates the device arena and runs cuDNN's algorithm search; TensorRT
+        may build its engine there; even the CPU provider faults in its memory
+        arena. Calling this while the service is starting — before the first
+        request — moves that cost out of someone's latency. Mirrors the web
+        SDK's ``warmup()``.
+
+        The feeds are cast to the element type each input declares, so a
+        half-precision export is warmed with the dtype it will really run on.
+
+        Args:
+            runs (int): How many warm-up inferences to run. One is usually
+                enough; defaults to ``1``.
+        """
+        feeds = self._as_feeds(self._warmup_feeds())
+        for _ in range(runs):
+            self._session.run(feeds)
+
+    def _warmup_feeds(self) -> dict[str, np.ndarray]:
+        """Zero-filled feeds of the shape :meth:`predict` produces.
+
+        Returns:
+            dict[str, np.ndarray]: One ``(1, 3, H, W)`` ``float32`` tensor for
+            the image input.
+        """
+        width, height = self.input_size
+        return {self._session.input_name: np.zeros((1, 3, height, width), dtype=np.float32)}
 
     @property
     def input_dtype(self) -> np.dtype:

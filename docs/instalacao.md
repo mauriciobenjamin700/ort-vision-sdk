@@ -13,6 +13,7 @@ pip install ort-vision-sdk            # somente CPU (padrão)
 pip install "ort-vision-sdk[gpu]"     # adiciona onnxruntime-gpu (CUDA / TensorRT)
 pip install "ort-vision-sdk[opencv]"  # adiciona o backend de imagem OpenCV
 pip install "ort-vision-sdk[compose]" # adiciona onnx, para fundir modelos num pipeline
+pip install "ort-vision-sdk[quantize]" # adiciona onnx, para quantizar modelos em INT8
 pip install "ort-vision-sdk[dev]"     # ruff, mypy, pytest, build, twine
 ```
 

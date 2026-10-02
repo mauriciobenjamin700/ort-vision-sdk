@@ -55,6 +55,7 @@ plugins:
             Python: Python
             Backends de inferência: Inference backends
             Custo da inferência: Inference cost
+            Otimizando criação e inferência: Optimizing creation and inference
             Web (browser): Web (browser)
             Meia precisão (FP16): Half precision (FP16)
             Referência: Reference
@@ -99,6 +100,7 @@ nav:
       - Python: guia/python.md
       - Backends de inferência: guia/backends.md
       - Custo da inferência: guia/velocidade.md
+      - Otimizando criação e inferência: guia/desempenho.md
       - Web (browser): guia/web.md
       - Meia precisão (FP16): guia/meia-precisao.md
   - Referência:

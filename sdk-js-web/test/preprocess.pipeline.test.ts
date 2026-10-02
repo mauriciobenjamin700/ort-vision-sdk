@@ -116,6 +116,21 @@ describe("ResizePipeline", () => {
     expect(pipeline.run(image(4, 4)).reused).toBe(true);
   });
 
+  it("does not free the shared buffer when releasing a fresh allocation", () => {
+    const pipeline = new ResizePipeline(4, 4);
+
+    const first = pipeline.run(image(4, 4));
+    const second = pipeline.run(image(4, 4, 9));
+    pipeline.release(second);
+    const third = pipeline.run(image(4, 4, 17));
+
+    expect(third.reused).toBe(false);
+    expect(third.data).not.toBe(first.data);
+
+    pipeline.release(first);
+    expect(pipeline.run(image(4, 4)).reused).toBe(true);
+  });
+
   it("replaces the held buffer when a consumer transferred it away", () => {
     const pipeline = new ResizePipeline(4, 4);
     const first = pipeline.run(image(4, 4));

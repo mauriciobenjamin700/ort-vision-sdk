@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 from ort_vision_sdk.core.exceptions import InferenceError, ModelLoadError
-from ort_vision_sdk.core.providers import resolve_providers
+from ort_vision_sdk.core.providers import ProviderSpec, provider_name, resolve_providers
 
 if TYPE_CHECKING:
     # onnxruntime is imported lazily at runtime (inside ``OrtSession.__init__``) so
@@ -83,14 +83,16 @@ class OrtSession:
         self,
         model_path: str | Path,
         *,
-        providers: list[str] | None = None,
+        providers: list[ProviderSpec] | None = None,
         session_options: ort.SessionOptions | None = None,
     ) -> None:
         """Load an ONNX model into an ORT inference session.
 
         Args:
             model_path: Path to the ``.onnx`` model file.
-            providers: Execution providers to use, in preference order. ``None``
+            providers: Execution providers to use, in preference order, as
+                names or ``(name, options)`` pairs — see
+                :data:`~ort_vision_sdk.core.providers.ProviderSpec`. ``None``
                 selects the best available provider automatically.
             session_options: Optional ``SessionOptions`` to customize the session
                 (graph optimization level, threading, etc.).
@@ -111,13 +113,14 @@ class OrtSession:
             raise ModelLoadError(f"Model file not found: {path}")
 
         self.model_path: Path = path
-        self.requested_providers: list[str] = resolve_providers(providers)
+        specs = resolve_providers(providers)
+        self.requested_providers: list[str] = [provider_name(spec) for spec in specs]
 
         try:
             self._session: ort.InferenceSession = ort.InferenceSession(
                 str(path),
                 sess_options=session_options,
-                providers=self.requested_providers,
+                providers=specs,
             )
         except Exception as exc:
             raise ModelLoadError(f"Failed to load ONNX model from {path}: {exc}") from exc

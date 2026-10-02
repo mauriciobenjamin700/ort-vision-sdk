@@ -29,7 +29,7 @@ import {
   type FusionSpec,
   readFusionSpec,
 } from "../fusion.js";
-import { type ImageInput, loadImage } from "../io/image.js";
+import { type ImageInput, loadImageSource } from "../io/image.js";
 import { type LabelSpec, resolveLabels } from "../labels.js";
 import { softmax, topK } from "../postprocess/classification.js";
 import { asFloat32Array } from "../core/dtypes.js";
@@ -44,7 +44,7 @@ import {
   type ClassificationResult,
   type DetectionResult,
 } from "../types.js";
-import { VisionTask, requireDetections } from "./base.js";
+import { VisionTask, cropToBox, requireDetections } from "./base.js";
 
 export interface DetectClassifyOptions extends OrtSessionOptions {
   /**
@@ -255,12 +255,16 @@ export class DetectClassify extends VisionTask {
   ): Promise<DetectClassifyResults[]> {
     const timer = new SpeedTimer();
     const path = typeof image === "string" ? image : null;
-    const original = await loadImage(image);
+    const { image: original, canvas } = await loadImageSource(image);
     timer.stage("load");
-    const { feeds, scale, padLeft, padTop } = this._preprocess(original);
+    const { feeds, scale, padLeft, padTop, reused } = this._preprocess(original, canvas);
     timer.stage("preprocess");
-    const outputs = await this._session.run(feeds);
-    this._pipeline.release();
+    let outputs: Record<string, ort.Tensor>;
+    try {
+      outputs = await this._session.run(feeds);
+    } finally {
+      this._pipeline.release({ reused });
+    }
     timer.stage("inference");
 
     const probsTensor = output(outputs, OUTPUT_PROBS);
@@ -283,7 +287,7 @@ export class DetectClassify extends VisionTask {
       if (confidence < floor || (allowed !== null && !allowed.has(classId))) continue;
 
       const bbox = this._toOriginal(boxes, row, { scale, padLeft, padTop, original });
-      const cropped = crop(original, bbox);
+      const cropped = cropToBox(original, bbox);
       detections.push(
         detection(
           classId,
@@ -334,15 +338,20 @@ export class DetectClassify extends VisionTask {
    * is what lets the graph undo the letterbox transform internally and crop at
    * native resolution instead of from the downscaled copy. That one is **not**
    * letterboxed by definition, so it does not go through the fused path.
+   *
+   * @param image The decoded input.
+   * @param canvas The opaque canvas it was decoded on, when there is one — see
+   *   {@link LetterboxPipeline.run}.
    */
-  private _preprocess(image: RGBImage): {
+  private _preprocess(image: RGBImage, canvas: CanvasImageSource | null): {
     feeds: Record<string, ort.Tensor>;
     scale: number;
     padLeft: number;
     padTop: number;
+    reused: boolean;
   } {
     const [width, height] = this._spec.inputSize;
-    const boxed = this._pipeline.run(image);
+    const boxed = this._pipeline.run(image, canvas);
     const feeds: Record<string, ort.Tensor> = {
       [INPUT_IMAGE]: toFloat32Tensor(boxed.data, [1, 3, height, width]),
     };
@@ -355,7 +364,13 @@ export class DetectClassify extends VisionTask {
         [2],
       );
     }
-    return { feeds, scale: boxed.scale, padLeft: boxed.padLeft, padTop: boxed.padTop };
+    return {
+      feeds,
+      scale: boxed.scale,
+      padLeft: boxed.padLeft,
+      padTop: boxed.padTop,
+      reused: boxed.reused,
+    };
   }
 
   /**
@@ -522,31 +537,6 @@ function integers(outputs: Record<string, ort.Tensor>, name: string): number[] {
 function tensorOf(image: RGBImage): ort.Tensor {
   const chw = toCHW(toFloat32(image), image.width, image.height, 3);
   return toFloat32Tensor(chw, [1, 3, image.height, image.width]);
-}
-
-/**
- * Cut the box region out of the original image.
- *
- * @param image The source image.
- * @param bbox The box, in original-image pixel coordinates.
- * @returns The cropped region, or a zero-sized image for a box with no area.
- */
-function crop(image: RGBImage, bbox: BoundingBox): RGBImage {
-  const [rawX1, rawY1, rawX2, rawY2] = bbox.asIntXyxy();
-  const x1 = Math.max(0, rawX1);
-  const y1 = Math.max(0, rawY1);
-  const x2 = Math.min(image.width, rawX2);
-  const y2 = Math.min(image.height, rawY2);
-  if (x2 <= x1 || y2 <= y1) return new RGBImage(new Uint8Array(0), 0, 0);
-
-  const width = x2 - x1;
-  const height = y2 - y1;
-  const out = new Uint8Array(width * height * 3);
-  for (let row = 0; row < height; row++) {
-    const offset = ((y1 + row) * image.width + x1) * 3;
-    out.set(image.data.subarray(offset, offset + width * 3), row * width * 3);
-  }
-  return new RGBImage(out, width, height);
 }
 
 /**

@@ -30,6 +30,7 @@ from ort_vision_sdk.core import NoDetectionsError as NoDetectionsError
 from ort_vision_sdk.core import OrtSession as OrtSession
 from ort_vision_sdk.core import OrtVisionError as OrtVisionError
 from ort_vision_sdk.core import ProviderNotAvailableError as ProviderNotAvailableError
+from ort_vision_sdk.core import ProviderSpec as ProviderSpec
 from ort_vision_sdk.core import SpeedTimer as SpeedTimer
 from ort_vision_sdk.core import Stage as Stage
 from ort_vision_sdk.core import available_providers as available_providers
@@ -73,6 +74,8 @@ from ort_vision_sdk.normalization import NORMALIZATION_PRESETS as NORMALIZATION_
 from ort_vision_sdk.normalization import Normalization as Normalization
 from ort_vision_sdk.normalization import is_ultralytics_classifier as is_ultralytics_classifier
 from ort_vision_sdk.normalization import resolve_normalization as resolve_normalization
+from ort_vision_sdk.optimize import GRAPH_OPTIMIZATION_KEY as GRAPH_OPTIMIZATION_KEY
+from ort_vision_sdk.optimize import optimize_model as optimize_model
 from ort_vision_sdk.postprocess import DecodedSegmentation as DecodedSegmentation
 from ort_vision_sdk.postprocess import batched_nms as batched_nms
 from ort_vision_sdk.postprocess import decode_yolo as decode_yolo
@@ -90,6 +93,8 @@ from ort_vision_sdk.preprocess import resize as resize
 from ort_vision_sdk.preprocess import to_chw as to_chw
 from ort_vision_sdk.preprocess import to_cv2 as to_cv2
 from ort_vision_sdk.preprocess import to_tensor as to_tensor
+from ort_vision_sdk.quantize import QUANTIZATION_KEY as QUANTIZATION_KEY
+from ort_vision_sdk.quantize import quantize_model as quantize_model
 from ort_vision_sdk.results import Boxes as Boxes
 from ort_vision_sdk.results import ClassificationResults as ClassificationResults
 from ort_vision_sdk.results import DetectClassifyResults as DetectClassifyResults
@@ -119,6 +124,7 @@ __all__: list[str] = [
     "CUSTOM_NORMALIZATION",
     "FUSION_KIND_DETECT_CLASSIFY",
     "FUSION_KIND_DETECT_SEGMENT_CLASSIFY",
+    "GRAPH_OPTIMIZATION_KEY",
     "IDENTITY_MEAN",
     "IDENTITY_STD",
     "IMAGENET_MEAN",
@@ -135,6 +141,7 @@ __all__: list[str] = [
     "OUTPUT_NUM_DETECTIONS",
     "OUTPUT_PROBS",
     "OUTPUT_SCORES",
+    "QUANTIZATION_KEY",
     "STAGES",
     "BoundingBox",
     "Boxes",
@@ -168,6 +175,7 @@ __all__: list[str] = [
     "OrtVisionError",
     "Probs",
     "ProviderNotAvailableError",
+    "ProviderSpec",
     "SegmentationResult",
     "SegmentationResults",
     "Segmenter",
@@ -192,7 +200,9 @@ __all__: list[str] = [
     "nms",
     "normalize",
     "numpy_dtype_for",
+    "optimize_model",
     "parse_names",
+    "quantize_model",
     "read_metadata",
     "reduction_factor",
     "require_detections",

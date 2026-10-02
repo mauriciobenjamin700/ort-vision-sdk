@@ -53,6 +53,11 @@ export interface DecodedSegmentation {
  *
  * Compatible with YOLOv8-seg / YOLOv11-seg.
  *
+ * The prototypes' batch axis is stripped here; the per-anchor batch axis is
+ * validated by {@link decodeYoloAnchors}. Each instance's box is mapped back
+ * into input-tensor coordinates and from there into the low-resolution
+ * prototype grid, and only the prototype pixels under it are assembled.
+ *
  * @param perAnchorData Flat `output0`, length `(4 + numClasses + numMaskCoefs) * numAnchors`.
  * @param perAnchorDims Dims as reported by ORT, e.g. `[1, 116, 8400]`.
  * @param prototypeData Flat `output1`, length `numMaskCoefs * maskH * maskW`.
@@ -65,7 +70,6 @@ export function decodeYoloSeg(
   prototypeDims: readonly number[],
   options: DecodeYoloSegOptions,
 ): DecodedSegmentation[] {
-  // Strip batch dim from prototypes; perAnchor batch is validated by the helper.
   let pDims = prototypeDims;
   if (pDims.length === 4) {
     if (pDims[0] !== 1) {
@@ -142,7 +146,6 @@ export function decodeYoloSeg(
       continue;
     }
 
-    // Bbox in input-tensor coords, then in low-res mask coords.
     const ibx1 = x1 * options.scale + options.padLeft;
     const iby1 = y1 * options.scale + options.padTop;
     const ibx2 = x2 * options.scale + options.padLeft;
@@ -163,29 +166,29 @@ export function decodeYoloSeg(
       continue;
     }
 
-    // Compute soft mask only within the prototype region under this bbox.
     const cropW = mbx2 - mbx1;
     const cropH = mby2 - mby1;
-    const softCrop = new Float32Array(cropW * cropH);
-    for (let y = 0; y < cropH; y++) {
-      const py = mby1 + y;
-      for (let x = 0; x < cropW; x++) {
-        const px = mbx1 + x;
-        let sum = 0;
-        for (let kk = 0; kk < numMaskCoefs; kk++) {
-          const coef = perAnchorData[coefBase + kk * numAnchors + a];
-          const proto = prototypeData[kk * protoPlane + py * maskW + px];
-          sum += coef * proto;
-        }
-        softCrop[y * cropW + x] = sigmoid(sum);
-      }
-    }
-
-    const resized = resizeBilinear(softCrop, cropW, cropH, bboxW, bboxH);
-    const binary = new Uint8Array(bboxW * bboxH);
-    for (let j = 0; j < binary.length; j++) {
-      binary[j] = resized[j] >= maskThreshold ? 255 : 0;
-    }
+    const softCrop = softMaskCrop(
+      perAnchorData,
+      prototypeData,
+      coefBase + a,
+      numAnchors,
+      numMaskCoefs,
+      maskW,
+      protoPlane,
+      mbx1,
+      mby1,
+      cropW,
+      cropH,
+    );
+    const binary = resizeBilinearThreshold(
+      softCrop,
+      cropW,
+      cropH,
+      bboxW,
+      bboxH,
+      maskThreshold,
+    );
 
     results.push({ bbox, classId, confidence, mask: new Mask(binary, bboxW, bboxH) });
   }
@@ -201,40 +204,132 @@ function sigmoid(x: number): number {
   return e / (1 + e);
 }
 
-function resizeBilinear(
+/**
+ * Assemble one instance's soft mask over the prototype region under its box.
+ *
+ * The loop runs coefficient-major: for each of the `numMaskCoefs` prototypes it
+ * walks the crop row by row, so every read of `prototypeData` is contiguous.
+ * The pixel-major order it replaces jumped a whole prototype plane (25 600
+ * floats for a 160×160 head) between consecutive reads, touching a fresh cache
+ * line on every multiply. The accumulator is a `Float64Array` so each pixel's
+ * sum is still built in double precision and in the same coefficient order as a
+ * scalar `let sum = 0` — the result is bit-identical, only the memory walk
+ * changed.
+ *
+ * @param perAnchorData Flat `output0`.
+ * @param prototypeData Flat `output1`.
+ * @param coefOffset Index of this anchor's first mask coefficient.
+ * @param numAnchors Stride between consecutive coefficients of one anchor.
+ * @param numMaskCoefs Number of prototypes.
+ * @param maskW Prototype width.
+ * @param protoPlane Prototype plane size, `maskW * maskH`.
+ * @param left First prototype column of the crop.
+ * @param top First prototype row of the crop.
+ * @param cropW Crop width in prototype pixels.
+ * @param cropH Crop height in prototype pixels.
+ * @returns The sigmoid of the mask logits, `cropW * cropH`, row-major.
+ */
+function softMaskCrop(
+  perAnchorData: Float32Array,
+  prototypeData: Float32Array,
+  coefOffset: number,
+  numAnchors: number,
+  numMaskCoefs: number,
+  maskW: number,
+  protoPlane: number,
+  left: number,
+  top: number,
+  cropW: number,
+  cropH: number,
+): Float32Array {
+  const acc = new Float64Array(cropW * cropH);
+  for (let kk = 0; kk < numMaskCoefs; kk++) {
+    const coef = perAnchorData[coefOffset + kk * numAnchors] as number;
+    const planeBase = kk * protoPlane + left;
+    for (let y = 0; y < cropH; y++) {
+      const src = planeBase + (top + y) * maskW;
+      const dst = y * cropW;
+      for (let x = 0; x < cropW; x++) {
+        acc[dst + x] = (acc[dst + x] as number) + coef * (prototypeData[src + x] as number);
+      }
+    }
+  }
+  const soft = new Float32Array(acc.length);
+  for (let j = 0; j < acc.length; j++) soft[j] = sigmoid(acc[j] as number);
+  return soft;
+}
+
+/**
+ * Bilinearly resize a soft mask and threshold it in the same pass.
+ *
+ * Half-pixel-centre sampling, matching `cv2.resize(..., INTER_LINEAR)` and the
+ * Python SDK. The interpolation is separable and runs that way, like the
+ * Python `_resize_bilinear`: first along x over the few source rows, into a
+ * `Float64Array` so every horizontal blend keeps its exact double value, then
+ * along y between two of those rows. Each output pixel costs two reads and one
+ * blend instead of four reads and three, with the same values as blending all
+ * four directly. The thresholded byte is written directly instead of
+ * materialising a `Float32Array` of the resized mask first.
+ * Each interpolated value is rounded to float32 with `Math.fround` before the
+ * comparison, because that is the value the intermediate array used to hold —
+ * comparing the unrounded double would flip pixels sitting exactly on the
+ * threshold.
+ *
+ * @param src Soft mask, `srcWidth * srcHeight`, row-major.
+ * @param srcWidth Source width.
+ * @param srcHeight Source height.
+ * @param targetWidth Output width, at least 1.
+ * @param targetHeight Output height, at least 1.
+ * @param threshold Probability at or above which a pixel is foreground.
+ * @returns `255` for foreground and `0` for background, `targetWidth * targetHeight`.
+ */
+function resizeBilinearThreshold(
   src: Float32Array,
   srcWidth: number,
   srcHeight: number,
   targetWidth: number,
   targetHeight: number,
-): Float32Array {
-  const out = new Float32Array(targetWidth * targetHeight);
-  if (targetWidth === 0 || targetHeight === 0 || srcWidth === 0 || srcHeight === 0) {
-    return out;
-  }
+  threshold: number,
+): Uint8Array {
+  const out = new Uint8Array(targetWidth * targetHeight);
   if (targetWidth === srcWidth && targetHeight === srcHeight) {
-    out.set(src);
+    for (let j = 0; j < out.length; j++) out[j] = (src[j] as number) >= threshold ? 255 : 0;
     return out;
   }
   const sx = srcWidth / targetWidth;
   const sy = srcHeight / targetHeight;
+  const x0s = new Int32Array(targetWidth);
+  const x1s = new Int32Array(targetWidth);
+  const wxs = new Float64Array(targetWidth);
+  for (let x = 0; x < targetWidth; x++) {
+    const xx = (x + 0.5) * sx - 0.5;
+    const x0 = Math.max(0, Math.floor(xx));
+    x0s[x] = x0;
+    x1s[x] = Math.min(srcWidth - 1, x0 + 1);
+    wxs[x] = Math.max(0, Math.min(1, xx - x0));
+  }
+  const across = new Float64Array(srcHeight * targetWidth);
+  for (let r = 0; r < srcHeight; r++) {
+    const row = r * srcWidth;
+    const dst = r * targetWidth;
+    for (let x = 0; x < targetWidth; x++) {
+      const wx = wxs[x] as number;
+      across[dst + x] =
+        (src[row + (x0s[x] as number)] as number) * (1 - wx) +
+        (src[row + (x1s[x] as number)] as number) * wx;
+    }
+  }
   for (let y = 0; y < targetHeight; y++) {
     const yy = (y + 0.5) * sy - 0.5;
     const y0 = Math.max(0, Math.floor(yy));
     const y1 = Math.min(srcHeight - 1, y0 + 1);
     const wy = Math.max(0, Math.min(1, yy - y0));
+    const top = y0 * targetWidth;
+    const bot = y1 * targetWidth;
+    const dst = y * targetWidth;
     for (let x = 0; x < targetWidth; x++) {
-      const xx = (x + 0.5) * sx - 0.5;
-      const x0 = Math.max(0, Math.floor(xx));
-      const x1 = Math.min(srcWidth - 1, x0 + 1);
-      const wx = Math.max(0, Math.min(1, xx - x0));
-      const v00 = src[y0 * srcWidth + x0];
-      const v01 = src[y0 * srcWidth + x1];
-      const v10 = src[y1 * srcWidth + x0];
-      const v11 = src[y1 * srcWidth + x1];
-      const top = v00 * (1 - wx) + v01 * wx;
-      const bot = v10 * (1 - wx) + v11 * wx;
-      out[y * targetWidth + x] = top * (1 - wy) + bot * wy;
+      const value = (across[top + x] as number) * (1 - wy) + (across[bot + x] as number) * wy;
+      out[dst + x] = Math.fround(value) >= threshold ? 255 : 0;
     }
   }
   return out;

@@ -11,8 +11,8 @@ import {
 } from "../core/session.js";
 import { SpeedTimer } from "../core/timing.js";
 
-import { type ImageInput, loadImage } from "../io/image.js";
-import { detectionNumClasses, resolveInputSize } from "../core/graph.js";
+import { type ImageInput, loadImageSource } from "../io/image.js";
+import { resolveInputSize, segmentationNumClasses } from "../core/graph.js";
 import { modelNames } from "../core/metadata.js";
 import { type LabelSpec, defaultLabels, resolveLabels } from "../labels.js";
 import { decodeYoloSeg } from "../postprocess/segmentation.js";
@@ -20,7 +20,7 @@ import { asFloat32Array } from "../core/dtypes.js";
 import { toFloat32Tensor } from "../preprocess/image.js";
 import { LetterboxPipeline, zeroTensorData } from "../preprocess/pipeline.js";
 import { Boxes, Masks, SegmentationResults } from "../results.js";
-import { VisionTask, requireDetections } from "./base.js";
+import { VisionTask, memoize, requireDetections } from "./base.js";
 import {
   type BoundingBox,
   type SegmentationResult,
@@ -176,7 +176,7 @@ export class Segmenter extends VisionTask {
     }
     const session = await OrtSession.create(model, options);
     const numClasses =
-      options.numClasses ?? detectionNumClasses(session.outputShape) ?? undefined;
+      options.numClasses ?? segmentationNumClasses(session.outputShapes) ?? undefined;
     const labels = resolveLabels(
       options.labels ?? modelNames(session.metadata) ?? defaultLabels(numClasses),
       { numClasses },
@@ -249,12 +249,16 @@ export class Segmenter extends VisionTask {
   ): Promise<SegmentationResults[]> {
     const timer = new SpeedTimer();
     const path = typeof image === "string" ? image : null;
-    const original = await loadImage(image);
+    const { image: original, canvas, owned } = await loadImageSource(image);
     timer.stage("load");
-    const { tensor, scale, padLeft, padTop } = this._preprocess(original);
+    const { tensor, scale, padLeft, padTop, reused } = this._preprocess(original, canvas);
     timer.stage("preprocess");
-    const outputs = await this._session.run({ [this._session.inputName]: tensor });
-    this._pipeline.release();
+    let outputs: Record<string, ort.Tensor>;
+    try {
+      outputs = await this._session.run({ [this._session.inputName]: tensor });
+    } finally {
+      this._pipeline.release({ reused });
+    }
     timer.stage("inference");
 
     const { perAnchor, prototypes } = this._splitOutputs(outputs);
@@ -297,7 +301,7 @@ export class Segmenter extends VisionTask {
     });
 
     const detections = decoded.map((d) =>
-      this._buildResult(original, d.bbox, d.classId, d.confidence, d.mask),
+      this._buildResult(original, d.bbox, d.classId, d.confidence, d.mask, owned),
     );
 
     const orig: readonly [number, number] = [original.height, original.width];
@@ -318,19 +322,28 @@ export class Segmenter extends VisionTask {
     ];
   }
 
-  private _preprocess(image: RGBImage): {
+  /**
+   * Letterbox and pack the image into the tensor the model expects.
+   *
+   * @param image The decoded input.
+   * @param canvas The opaque canvas it was decoded on, when there is one — see
+   *   {@link LetterboxPipeline.run}.
+   */
+  private _preprocess(image: RGBImage, canvas: CanvasImageSource | null): {
     tensor: ort.Tensor;
     scale: number;
     padLeft: number;
     padTop: number;
+    reused: boolean;
   } {
     const [tw, th] = this._inputSize;
-    const fused = this._pipeline.run(image);
+    const fused = this._pipeline.run(image, canvas);
     return {
       tensor: toFloat32Tensor(fused.data, [1, 3, th, tw]),
       scale: fused.scale,
       padLeft: fused.padLeft,
       padTop: fused.padTop,
+      reused: fused.reused,
     };
   }
 
@@ -359,61 +372,36 @@ export class Segmenter extends VisionTask {
     return { perAnchor, prototypes };
   }
 
+  /**
+   * Assemble one instance.
+   *
+   * The mask is trimmed to the part of the box inside the frame up front — it
+   * is small and every caller reads it. `segmentedImage`, a masked copy of the
+   * frame's pixels, is built on first read when the SDK owns those pixels and
+   * up front otherwise, for the reason {@link Detector} gives for its crops.
+   *
+   * @param original The decoded input.
+   * @param bbox Box in original-image coordinates.
+   * @param classId Predicted class.
+   * @param confidence Detection score.
+   * @param mask Binary mask shaped to `bbox`.
+   * @param lazy Whether `segmentedImage` may be deferred.
+   */
   private _buildResult(
     original: RGBImage,
     bbox: BoundingBox,
     classId: number,
     confidence: number,
     mask: Mask,
+    lazy: boolean,
   ): SegmentationResult {
     const [x1, y1, x2, y2] = bbox.asIntXyxy();
     const cx1 = Math.max(0, x1);
     const cy1 = Math.max(0, y1);
     const cx2 = Math.min(original.width, x2);
     const cy2 = Math.min(original.height, y2);
-
-    let segmentedImage: RGBImage;
-    let finalMask = mask;
-    if (cx2 > cx1 && cy2 > cy1 && mask.data.length > 0) {
-      const cropW = cx2 - cx1;
-      const cropH = cy2 - cy1;
-      const mw = Math.min(mask.width, cropW);
-      const mh = Math.min(mask.height, cropH);
-      const segData = new Uint8Array(mw * mh * 3);
-      for (let row = 0; row < mh; row++) {
-        const srcRowOffset = ((cy1 + row) * original.width + cx1) * 3;
-        const dstRowOffset = row * mw * 3;
-        const maskRowOffset = row * mask.width;
-        for (let col = 0; col < mw; col++) {
-          const m = mask.data[maskRowOffset + col];
-          if (m !== 0) {
-            const s = srcRowOffset + col * 3;
-            const d = dstRowOffset + col * 3;
-            segData[d] = original.data[s];
-            segData[d + 1] = original.data[s + 1];
-            segData[d + 2] = original.data[s + 2];
-          }
-        }
-      }
-      segmentedImage = new RGBImage(segData, mw, mh);
-      if (mw !== mask.width || mh !== mask.height) {
-        const trimmed = new Uint8Array(mw * mh);
-        for (let row = 0; row < mh; row++) {
-          trimmed.set(
-            mask.data.subarray(row * mask.width, row * mask.width + mw),
-            row * mw,
-          );
-        }
-        finalMask = new Mask(trimmed, mw, mh);
-      }
-    } else {
-      finalMask = new Mask(new Uint8Array(0), 0, 0);
-      segmentedImage = new RGBImage(new Uint8Array(0), 0, 0);
-    }
-
     const className = this._names[classId] ?? `class_${classId}`;
-
-    return {
+    const fields = {
       classId,
       className,
       confidence,
@@ -422,8 +410,54 @@ export class Segmenter extends VisionTask {
       name: className,
       conf: confidence,
       box: bbox,
+    };
+
+    if (!(cx2 > cx1 && cy2 > cy1 && mask.data.length > 0)) {
+      return {
+        ...fields,
+        mask: new Mask(new Uint8Array(0), 0, 0),
+        segmentedImage: new RGBImage(new Uint8Array(0), 0, 0),
+      };
+    }
+
+    const mw = Math.min(mask.width, cx2 - cx1);
+    const mh = Math.min(mask.height, cy2 - cy1);
+    let finalMask = mask;
+    if (mw !== mask.width || mh !== mask.height) {
+      const trimmed = new Uint8Array(mw * mh);
+      for (let row = 0; row < mh; row++) {
+        trimmed.set(mask.data.subarray(row * mask.width, row * mask.width + mw), row * mw);
+      }
+      finalMask = new Mask(trimmed, mw, mh);
+    }
+
+    const build = (): RGBImage => {
+      const segData = new Uint8Array(mw * mh * 3);
+      for (let row = 0; row < mh; row++) {
+        const srcRowOffset = ((cy1 + row) * original.width + cx1) * 3;
+        const dstRowOffset = row * mw * 3;
+        const maskRowOffset = row * mask.width;
+        for (let col = 0; col < mw; col++) {
+          if (mask.data[maskRowOffset + col] !== 0) {
+            const src = srcRowOffset + col * 3;
+            const dst = dstRowOffset + col * 3;
+            segData[dst] = original.data[src] as number;
+            segData[dst + 1] = original.data[src + 1] as number;
+            segData[dst + 2] = original.data[src + 2] as number;
+          }
+        }
+      }
+      return new RGBImage(segData, mw, mh);
+    };
+
+    if (!lazy) return { ...fields, mask: finalMask, segmentedImage: build() };
+    const segmented = memoize(build);
+    return {
+      ...fields,
       mask: finalMask,
-      segmentedImage,
+      get segmentedImage(): RGBImage {
+        return segmented();
+      },
     };
   }
 

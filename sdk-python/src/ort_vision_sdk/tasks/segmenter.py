@@ -10,6 +10,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from ort_vision_sdk.core.backend import read_metadata
+from ort_vision_sdk.core.providers import ProviderSpec
 from ort_vision_sdk.core.timing import SpeedTimer
 from ort_vision_sdk.graph import model_names, resolve_input_size
 from ort_vision_sdk.io.image import ImageInput, load_image
@@ -29,6 +30,13 @@ if TYPE_CHECKING:
     import onnxruntime as ort
 
     from ort_vision_sdk.core.backend import InferenceBackend
+
+_DEFAULT_MASK_COEFS = 32
+"""Mask coefficients per anchor when the prototype shape does not say.
+
+Every Ultralytics seg head (v8, v11) emits 32. Used only when the prototype
+output's channel axis is dynamic or no output shapes are available.
+"""
 
 SegmenterHead = Literal["yolo-seg"]
 """Decoder family for the segmentation head.
@@ -81,7 +89,7 @@ class Segmenter(VisionTask):
         *,
         head: SegmenterHead = "yolo-seg",
         labels: LabelSpec = None,
-        providers: list[str] | None = None,
+        providers: list[ProviderSpec] | None = None,
         session_options: ort.SessionOptions | None = None,
         backend: InferenceBackend | None = None,
         input_size: tuple[int, int] | None = None,
@@ -105,8 +113,10 @@ class Segmenter(VisionTask):
                 COCO preset when the model carries none. Pass a spec to override
                 what the model declares.
             providers: Execution providers in preference order. Accepts short
-                aliases (``"cuda"``, ``"cpu"``, ...) or canonical ORT names.
-                Auto if ``None``. Ignored when ``backend`` is provided.
+                aliases (``"cuda"``, ``"cpu"``, ...) or canonical ORT names,
+                or ``(name, options)`` pairs to pass provider options (see
+                :data:`ProviderSpec`). Auto if ``None``. Ignored when
+                ``backend`` is provided.
             session_options: Optional ORT session options. Ignored when
                 ``backend`` is provided.
             backend: An explicit
@@ -510,24 +520,26 @@ class Segmenter(VisionTask):
         )
 
     def _infer_num_classes(self) -> int | None:
-        """Best-effort inference of ``num_classes`` from the per-anchor output shape.
+        """Best-effort inference of ``num_classes`` from the declared output shapes.
 
         Per-anchor output has channels = ``4 + num_classes + num_mask_coefs``.
-        Without prototypes available at construction time we cannot know
-        ``num_mask_coefs`` precisely, so we assume the standard YOLO seg value
-        of 32. If the user passes the wrong labels the constructor's
-        validation will catch it; otherwise ``predict`` will raise.
+        ``num_mask_coefs`` is the channel axis of the prototype output
+        ``(1, num_mask_coefs, H, W)``, read from its declared shape; when that
+        axis is dynamic the standard YOLO seg value of 32 is assumed. Mirrors
+        ``segmentationNumClasses`` in the web SDK, so both agree on a head with
+        a non-standard coefficient count. If the user passes the wrong labels
+        the constructor's validation will catch it; otherwise ``predict`` will
+        raise.
         """
         output_shapes = self._session.output_shapes
-        if not output_shapes:
+        per_anchor = next((shape for shape in output_shapes if len(shape) == 3), None)
+        if per_anchor is None:
             return None
-        for shape in output_shapes:
-            if len(shape) != 3:
-                continue
-            int_dims = [d for d in shape if isinstance(d, int) and d > 1]
-            if not int_dims:
-                return None
-            channels = min(int_dims)
-            inferred = channels - 4 - 32  # standard YOLO seg num_mask_coefs
-            return int(inferred) if inferred > 0 else None
-        return None
+        int_dims = [d for d in per_anchor if isinstance(d, int) and d > 1]
+        if not int_dims:
+            return None
+        prototypes = next((shape for shape in output_shapes if len(shape) == 4), None)
+        declared = prototypes[1] if prototypes is not None else None
+        coefs = declared if isinstance(declared, int) and declared > 0 else _DEFAULT_MASK_COEFS
+        inferred = min(int_dims) - 4 - coefs
+        return int(inferred) if inferred > 0 else None

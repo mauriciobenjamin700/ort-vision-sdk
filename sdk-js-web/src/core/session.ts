@@ -14,10 +14,131 @@ import {
 import { InferenceError, ModelLoadError } from "./exceptions.js";
 import { type DeclaredShape, declaredShapesFrom } from "./graph.js";
 import { readModelInputTypes, readModelMetadata } from "./metadata.js";
-import { FALLBACK_PROVIDER, detectProviders, resolveProviders } from "./providers.js";
+import {
+  FALLBACK_PROVIDER,
+  type ProviderSpec,
+  detectProviders,
+  providerName,
+  resolveProviders,
+} from "./providers.js";
 
 /** Anything `InferenceSession.create` accepts. */
 export type ModelSource = string | ArrayBufferLike | Uint8Array;
+
+/**
+ * Metadata key naming the level a model was graph-optimized at offline.
+ *
+ * Written by the Python SDK's `optimize_model`; both test suites pin the same
+ * string, so a rename on one side fails. See {@link OrtSession.create} for what
+ * the session does when it finds it.
+ */
+export const GRAPH_OPTIMIZATION_KEY = "ort_vision_sdk.graph_optimization";
+
+/**
+ * An 84-byte ONNX model — one `Identity` on a float `[1]` — used to start the runtime.
+ *
+ * Generated with `onnx.helper` (opset 13, IR 7, producer `ort-vision-sdk`).
+ * See {@link warmRuntime} for why it exists.
+ */
+const RUNTIME_PROBE_MODEL =
+  "CAcSDm9ydC12aXNpb24tc2RrOjoKEAoBeBIBeSIISWRlbnRpdHkSBHdhcm1aDwoBeBIKCggIARIECgIIAWIPCgF5EgoKCAgBEgQKAggBQgQKABAN";
+
+/** Runtime start-ups already begun on this page, keyed by provider names. */
+const runtimeWarmups = new Map<string, Promise<void>>();
+
+/**
+ * Start ONNX Runtime's backends for a provider list, once per page.
+ *
+ * ORT downloads and compiles its WebAssembly binary — 12.8 MB for the plain
+ * WASM build, 25.9 MB for the one carrying WebGPU — inside the first
+ * `InferenceSession.create`. {@link OrtSession.create} only reaches that call
+ * after it has downloaded the model, so on a real network the two largest
+ * downloads of a page load ran one after the other. Creating and releasing a
+ * session on a tiny model while the real one downloads lets them overlap; the
+ * real `create` then finds the runtime ready.
+ *
+ * A failure here is swallowed: the real `create` runs against the same runtime
+ * and reports the same problem with the right model in the message.
+ *
+ * @param specs Providers the real session will use.
+ * @returns Settles when the runtime is up, or when starting it failed.
+ */
+function warmRuntime(specs: readonly ProviderSpec[]): Promise<void> {
+  const key = specs.map(providerName).join(",");
+  let pending = runtimeWarmups.get(key);
+  if (pending === undefined) {
+    pending = (async () => {
+      try {
+        const probe = Uint8Array.from(atob(RUNTIME_PROBE_MODEL), (c) => c.charCodeAt(0));
+        const session = await ortRuntime.InferenceSession.create(probe, {
+          executionProviders: specs as ort.InferenceSession.SessionOptions["executionProviders"],
+        });
+        await session.release();
+      } catch {
+        return;
+      }
+    })();
+    runtimeWarmups.set(key, pending);
+  }
+  return pending;
+}
+
+/**
+ * Warn that a model optimized offline is about to run on WebGPU.
+ *
+ * `optimize_model` fuses operators for the CPU, which is what the WASM backend
+ * runs. On WebGPU some of those fused nodes have no GPU kernel: on a
+ * YOLO11n-seg, ONNX Runtime placed 2 nodes on the CPU for the optimized file
+ * and none for the original, so every inference pays GPU↔CPU copies. The SDK
+ * cannot swap the file, so it says which one to ship.
+ */
+function warnPreOptimizedOnWebGpu(): void {
+  console.warn(
+    "[@ort-vision-sdk/web] This model was pre-optimized by optimize_model, which targets the " +
+      "WASM backend; on WebGPU some of its fused nodes fall back to the CPU. For WebGPU, ship " +
+      "the original export instead.",
+  );
+}
+
+/**
+ * Metadata key the Python SDK's `quantize_model` writes on an INT8 model.
+ *
+ * Mirrored by `QUANTIZATION_KEY` in the Python SDK; both test suites pin the
+ * string. See {@link keepQuantizedOffWebGpu} for what a session does with it.
+ */
+export const QUANTIZATION_KEY = "ort_vision_sdk.quantization";
+
+/**
+ * Drop `webgpu` from the providers of a model `quantize_model` produced.
+ *
+ * ONNX Runtime Web's WebGPU `DequantizeLinear` rejects the quantized bias such
+ * a model carries — `scale and zero-point inputs must have the same rank` —
+ * so the first `predict()` fails; and a variant with the bias left in float
+ * ran but returned different detections than WASM for the same file. The
+ * model is fine on WASM, which is also where INT8 pays (52.7 ms vs 68.4 ms on
+ * a YOLO11n-seg), so the session runs there and says so.
+ *
+ * @param specs Providers that survived detection.
+ * @param metadata The model's metadata map.
+ * @returns `specs` without `webgpu` when the model is marked quantized; the
+ *   WASM fallback when nothing else is left.
+ */
+function keepQuantizedOffWebGpu(
+  specs: readonly ProviderSpec[],
+  metadata: Readonly<Record<string, string>>,
+): ProviderSpec[] {
+  if (metadata[QUANTIZATION_KEY] === undefined) return [...specs];
+  const kept = specs.filter((spec) => providerName(spec) !== "webgpu");
+  if (kept.length === specs.length) return kept;
+  console.warn(
+    `[@ort-vision-sdk/web] This model was quantized by quantize_model (${metadata[QUANTIZATION_KEY]}); ` +
+      "ONNX Runtime Web's WebGPU backend cannot run its quantized operators, so it runs on WASM.",
+  );
+  return kept.length > 0 ? kept : [FALLBACK_PROVIDER];
+}
+
+/** Cache Storage bucket used when {@link OrtSessionOptions.cache} is `true`. */
+export const DEFAULT_MODEL_CACHE = "ort-vision-sdk-models";
 
 /**
  * Fetch a model URL as bytes so its metadata can be read.
@@ -27,19 +148,70 @@ export type ModelSource = string | ArrayBufferLike | Uint8Array;
  * that ORT could have fetched would be a regression.
  *
  * @param url Where the `.onnx` lives.
+ * @param cacheName Cache Storage bucket to read from and fill, or `null` to
+ *   always go to the network.
  * @returns The model bytes, or the original URL when they could not be fetched.
  */
-async function fetchModel(url: string): Promise<Uint8Array | string> {
+async function fetchModel(url: string, cacheName: string | null): Promise<Uint8Array | string> {
+  const cache = cacheName === null ? null : await openCache(cacheName);
+  if (cache !== null) {
+    const hit = await cache.match(url).catch(() => undefined);
+    if (hit !== undefined) return new Uint8Array(await hit.arrayBuffer());
+  }
   try {
     const response = await fetch(url);
     if (!response.ok) {
       warnMetadataUnavailable(url, `HTTP ${response.status} ${response.statusText}`);
       return url;
     }
-    return new Uint8Array(await response.arrayBuffer());
+    const buffer = await response.arrayBuffer();
+    if (cache !== null) await storeModel(cache, url, buffer);
+    return new Uint8Array(buffer);
   } catch (err) {
     warnMetadataUnavailable(url, (err as Error).message);
     return url;
+  }
+}
+
+/**
+ * Put a model's bytes into the cache, never failing the load over it.
+ *
+ * Stores a fresh `Response` built from bytes already read rather than a
+ * `clone()` of the network response: one read, and nothing that can throw
+ * synchronously outside the guard. Awaited on purpose — a `put` left running
+ * would keep its copy of the model reachable while ORT builds the session, the
+ * same doubled peak {@link OrtSession.create} orders its reads to avoid.
+ *
+ * @param cache The open bucket.
+ * @param url Cache key.
+ * @param buffer The model.
+ */
+async function storeModel(cache: Cache, url: string, buffer: ArrayBuffer): Promise<void> {
+  try {
+    await cache.put(url, new Response(buffer));
+  } catch {
+    return;
+  }
+}
+
+/**
+ * Open a Cache Storage bucket, or report that there is none to open.
+ *
+ * Cache Storage only exists in secure contexts (HTTPS, `localhost`), and a
+ * browser may refuse it outright — private windows, blocked site data, an
+ * exhausted quota. None of that is worth failing a model load over: the model
+ * is fetched from the network as if caching had not been asked for. A failed
+ * `put` is swallowed for the same reason — see {@link storeModel}.
+ *
+ * @param name Bucket name.
+ * @returns The cache, or `null` when this environment cannot provide one.
+ */
+async function openCache(name: string): Promise<Cache | null> {
+  if (typeof caches === "undefined") return null;
+  try {
+    return await caches.open(name);
+  } catch {
+    return null;
   }
 }
 
@@ -68,10 +240,29 @@ export interface OrtSessionOptions {
   /**
    * Execution providers in preference order. `undefined` uses {@link DEFAULT_PROVIDERS}.
    *
+   * Each entry is a name (`"webgpu"`, `"wasm"`) or ORT's config object for that
+   * provider, which passes provider options through untouched —
+   * `{ name: "webgpu", preferredLayout: "NHWC" }`.
+   *
    * Naming one explicitly also opts into a `console.warn` when this browser
    * cannot offer it, instead of falling back in silence.
    */
-  readonly providers?: readonly string[];
+  readonly providers?: readonly ProviderSpec[];
+  /**
+   * Keep a URL model in the browser's Cache Storage between page loads.
+   *
+   * `true` uses the {@link DEFAULT_MODEL_CACHE} bucket; a string names the
+   * bucket. A later `create` with the same URL reads the bytes from the cache
+   * instead of the network — for a model of several megabytes, the bulk of
+   * what a returning visitor waits for. Defaults to `false`.
+   *
+   * The URL is the cache key and nothing expires it: publish a changed model
+   * under a new URL (`yolo.v2.onnx`, `?v=2`) or a new bucket name, or delete
+   * the bucket with `caches.delete(name)`. Ignored for models passed as bytes,
+   * and silently skipped where Cache Storage is unavailable (non-secure
+   * contexts, blocked site data).
+   */
+  readonly cache?: boolean | string;
   /** Optional ORT session options forwarded to `InferenceSession.create`. */
   readonly sessionOptions?: ort.InferenceSession.SessionOptions;
   /**
@@ -82,7 +273,8 @@ export interface OrtSessionOptions {
    * which means a URL model is fetched here and handed to ORT as bytes instead
    * of letting ORT fetch it. That is the same single download either way, and
    * it is what lets a task resolve its labels off the model. Set to `false` to
-   * keep the URL path untouched and leave {@link OrtSession.metadata} empty.
+   * keep the URL path untouched (unless {@link cache} is set, which needs the
+   * bytes) and leave {@link OrtSession.metadata} empty.
    *
    * `false` is also the escape hatch when a device cannot afford the bytes: the
    * fetched buffer is dropped before ORT builds the graph (see
@@ -228,6 +420,13 @@ export class OrtSession {
   ) {}
 
   /**
+   * Tail of the run queue: settles when the latest queued run has finished.
+   *
+   * See {@link run} for why runs are serialized.
+   */
+  private _runQueue: Promise<unknown> = Promise.resolve();
+
+  /**
    * Load an ONNX model into an ORT inference session.
    *
    * The metadata map is read **before** the session is built, and that order is
@@ -240,6 +439,19 @@ export class OrtSession {
    * it — on a phone that was the difference between a session and
    * `Can't create a session. failed to allocate a buffer of size N`.
    *
+   * The provider probe and the model download run concurrently: neither
+   * depends on the other, and on a real GPU `requestAdapter()` is not free.
+   * When the model is downloaded here, ORT's runtime is started alongside the
+   * download too — see {@link warmRuntime}.
+   *
+   * A model whose metadata carries {@link GRAPH_OPTIMIZATION_KEY} was already
+   * optimized offline by the Python SDK's `optimize_model`, so it is loaded
+   * with `graphOptimizationLevel: "disabled"` instead of paying the optimizer a
+   * second time — measured on a YOLO11n-seg under WASM, 29 ms of session
+   * creation down to 12 ms with unchanged inference time. An explicit
+   * `graphOptimizationLevel` in `sessionOptions` always wins. The mark is read
+   * with the rest of the metadata, so `readMetadata: false` skips it too.
+   *
    * @param model Either a URL string, or a `Uint8Array`/`ArrayBuffer` containing the model bytes.
    * @param options Provider list, pass-through `SessionOptions`, and whether to
    *   read the model's metadata map (see {@link OrtSessionOptions.readMetadata}).
@@ -250,20 +462,37 @@ export class OrtSession {
     options: OrtSessionOptions = {},
   ): Promise<OrtSession> {
     const requested = resolveProviders(options.providers);
-    const detected = await detectProviders(requested);
-    const providers = detected.length > 0 ? detected : [FALLBACK_PROVIDER];
-    if (options.providers !== undefined && options.providers.length > 0) {
-      warnOnDroppedProviders(requested, providers);
-    }
-    const sessionOptions: ort.InferenceSession.SessionOptions = {
-      ...(options.sessionOptions ?? {}),
-      executionProviders: providers as ort.InferenceSession.SessionOptions["executionProviders"],
-    };
     const wantsMetadata = options.readMetadata !== false;
-    const source =
-      typeof model === "string" && wantsMetadata ? await fetchModel(model) : model;
+    const cacheName =
+      options.cache === true ? DEFAULT_MODEL_CACHE : options.cache ? options.cache : null;
+    const shouldFetch = typeof model === "string" && (wantsMetadata || cacheName !== null);
+    const detection = detectProviders(requested).then((detected) =>
+      detected.length > 0 ? detected : [FALLBACK_PROVIDER],
+    );
+    const [detected, source] = await Promise.all([
+      detection,
+      shouldFetch ? fetchModel(model, cacheName) : Promise.resolve(model),
+      shouldFetch ? detection.then(warmRuntime) : Promise.resolve(),
+    ]);
     const metadata =
       wantsMetadata && typeof source !== "string" ? readModelMetadata(source) : {};
+    const specs = keepQuantizedOffWebGpu(detected, metadata);
+    const requestedNames = requested.map(providerName);
+    const providers = specs.map(providerName);
+    if (options.providers !== undefined && options.providers.length > 0) {
+      warnOnDroppedProviders(requestedNames, detected.map(providerName));
+    }
+    if (metadata[GRAPH_OPTIMIZATION_KEY] !== undefined && providers.includes("webgpu")) {
+      warnPreOptimizedOnWebGpu();
+    }
+    const preOptimized =
+      metadata[GRAPH_OPTIMIZATION_KEY] !== undefined &&
+      options.sessionOptions?.graphOptimizationLevel === undefined;
+    const sessionOptions: ort.InferenceSession.SessionOptions = {
+      ...(preOptimized ? { graphOptimizationLevel: "disabled" as const } : {}),
+      ...(options.sessionOptions ?? {}),
+      executionProviders: specs as ort.InferenceSession.SessionOptions["executionProviders"],
+    };
     const inputTypes =
       typeof source !== "string" ? declaredInputTypes(source) : {};
     if (typeof source !== "string" && Object.keys(inputTypes).length === 0) {
@@ -290,7 +519,7 @@ export class OrtSession {
       );
     }
 
-    return new OrtSession(session, providers, metadata, requested, inputTypes);
+    return new OrtSession(session, providers, metadata, requestedNames, inputTypes);
   }
 
   /**
@@ -407,10 +636,30 @@ export class OrtSession {
   /**
    * Run inference and return all outputs.
    *
+   * Runs on one session are serialized. ONNX Runtime Web refuses a second
+   * `run` while one is in flight — it rejects with `Session already started` —
+   * so two overlapping `predict()` calls on the same task used to fail. Queued
+   * here, they overlap where they can: while one run executes (in a worker,
+   * with `env.wasm.proxy`, or on the GPU), the next `predict()` decodes and
+   * preprocesses its frame and only waits for its turn at the runtime. A run
+   * that fails does not block the ones behind it.
+   *
    * @param feeds Map of input name to `ort.Tensor`. Keys must match {@link inputNames}.
    * @throws {@link InferenceError} if ORT raises any error during execution.
    */
-  async run(
+  run(feeds: Record<string, ort.Tensor>): Promise<Record<string, ort.Tensor>> {
+    const turn = this._runQueue.then(() => this._runNow(feeds));
+    this._runQueue = turn.catch(() => undefined);
+    return turn;
+  }
+
+  /**
+   * Execute one run immediately; only {@link run}'s queue calls this.
+   *
+   * @param feeds Map of input name to `ort.Tensor`.
+   * @throws {@link InferenceError} if ORT raises any error during execution.
+   */
+  private async _runNow(
     feeds: Record<string, ort.Tensor>,
   ): Promise<Record<string, ort.Tensor>> {
     try {

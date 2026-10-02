@@ -103,6 +103,22 @@ describe("detectProviders", () => {
     expect(await detectProviders(["webgpu", "wasm"])).toEqual(["wasm"]);
   });
 
+  it("does not ask for an adapter when webgpu was not requested", async () => {
+    const requestAdapter = vi.fn(() => Promise.resolve({}));
+    vi.stubGlobal("navigator", { gpu: { requestAdapter } });
+
+    expect(await detectProviders(["wasm"])).toEqual(["wasm"]);
+    expect(requestAdapter).not.toHaveBeenCalled();
+  });
+
+  it("filters config objects by their name and keeps them intact", async () => {
+    withGpu(null);
+    const webgpu = { name: "webgpu", preferredLayout: "NHWC" };
+    const wasm = { name: "wasm" };
+
+    expect(await detectProviders([webgpu, wasm])).toEqual([wasm]);
+  });
+
   it("keeps a provider it does not know how to test", async () => {
     withGpu(null);
 

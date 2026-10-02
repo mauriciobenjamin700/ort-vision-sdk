@@ -14,10 +14,28 @@ import {
 import { InferenceError, ModelLoadError } from "./exceptions.js";
 import { type DeclaredShape, declaredShapesFrom } from "./graph.js";
 import { readModelInputTypes, readModelMetadata } from "./metadata.js";
-import { FALLBACK_PROVIDER, detectProviders, resolveProviders } from "./providers.js";
+import {
+  FALLBACK_PROVIDER,
+  type ProviderSpec,
+  detectProviders,
+  providerName,
+  resolveProviders,
+} from "./providers.js";
 
 /** Anything `InferenceSession.create` accepts. */
 export type ModelSource = string | ArrayBufferLike | Uint8Array;
+
+/**
+ * Metadata key naming the level a model was graph-optimized at offline.
+ *
+ * Written by the Python SDK's `optimize_model`; both test suites pin the same
+ * string, so a rename on one side fails. See {@link OrtSession.create} for what
+ * the session does when it finds it.
+ */
+export const GRAPH_OPTIMIZATION_KEY = "ort_vision_sdk.graph_optimization";
+
+/** Cache Storage bucket used when {@link OrtSessionOptions.cache} is `true`. */
+export const DEFAULT_MODEL_CACHE = "ort-vision-sdk-models";
 
 /**
  * Fetch a model URL as bytes so its metadata can be read.
@@ -27,19 +45,70 @@ export type ModelSource = string | ArrayBufferLike | Uint8Array;
  * that ORT could have fetched would be a regression.
  *
  * @param url Where the `.onnx` lives.
+ * @param cacheName Cache Storage bucket to read from and fill, or `null` to
+ *   always go to the network.
  * @returns The model bytes, or the original URL when they could not be fetched.
  */
-async function fetchModel(url: string): Promise<Uint8Array | string> {
+async function fetchModel(url: string, cacheName: string | null): Promise<Uint8Array | string> {
+  const cache = cacheName === null ? null : await openCache(cacheName);
+  if (cache !== null) {
+    const hit = await cache.match(url).catch(() => undefined);
+    if (hit !== undefined) return new Uint8Array(await hit.arrayBuffer());
+  }
   try {
     const response = await fetch(url);
     if (!response.ok) {
       warnMetadataUnavailable(url, `HTTP ${response.status} ${response.statusText}`);
       return url;
     }
-    return new Uint8Array(await response.arrayBuffer());
+    const buffer = await response.arrayBuffer();
+    if (cache !== null) await storeModel(cache, url, buffer);
+    return new Uint8Array(buffer);
   } catch (err) {
     warnMetadataUnavailable(url, (err as Error).message);
     return url;
+  }
+}
+
+/**
+ * Put a model's bytes into the cache, never failing the load over it.
+ *
+ * Stores a fresh `Response` built from bytes already read rather than a
+ * `clone()` of the network response: one read, and nothing that can throw
+ * synchronously outside the guard. Awaited on purpose — a `put` left running
+ * would keep its copy of the model reachable while ORT builds the session, the
+ * same doubled peak {@link OrtSession.create} orders its reads to avoid.
+ *
+ * @param cache The open bucket.
+ * @param url Cache key.
+ * @param buffer The model.
+ */
+async function storeModel(cache: Cache, url: string, buffer: ArrayBuffer): Promise<void> {
+  try {
+    await cache.put(url, new Response(buffer));
+  } catch {
+    return;
+  }
+}
+
+/**
+ * Open a Cache Storage bucket, or report that there is none to open.
+ *
+ * Cache Storage only exists in secure contexts (HTTPS, `localhost`), and a
+ * browser may refuse it outright — private windows, blocked site data, an
+ * exhausted quota. None of that is worth failing a model load over: the model
+ * is fetched from the network as if caching had not been asked for. A failed
+ * `put` is swallowed for the same reason — see {@link storeModel}.
+ *
+ * @param name Bucket name.
+ * @returns The cache, or `null` when this environment cannot provide one.
+ */
+async function openCache(name: string): Promise<Cache | null> {
+  if (typeof caches === "undefined") return null;
+  try {
+    return await caches.open(name);
+  } catch {
+    return null;
   }
 }
 
@@ -68,10 +137,29 @@ export interface OrtSessionOptions {
   /**
    * Execution providers in preference order. `undefined` uses {@link DEFAULT_PROVIDERS}.
    *
+   * Each entry is a name (`"webgpu"`, `"wasm"`) or ORT's config object for that
+   * provider, which passes provider options through untouched —
+   * `{ name: "webgpu", preferredLayout: "NHWC" }`.
+   *
    * Naming one explicitly also opts into a `console.warn` when this browser
    * cannot offer it, instead of falling back in silence.
    */
-  readonly providers?: readonly string[];
+  readonly providers?: readonly ProviderSpec[];
+  /**
+   * Keep a URL model in the browser's Cache Storage between page loads.
+   *
+   * `true` uses the {@link DEFAULT_MODEL_CACHE} bucket; a string names the
+   * bucket. A later `create` with the same URL reads the bytes from the cache
+   * instead of the network — for a model of several megabytes, the bulk of
+   * what a returning visitor waits for. Defaults to `false`.
+   *
+   * The URL is the cache key and nothing expires it: publish a changed model
+   * under a new URL (`yolo.v2.onnx`, `?v=2`) or a new bucket name, or delete
+   * the bucket with `caches.delete(name)`. Ignored for models passed as bytes,
+   * and silently skipped where Cache Storage is unavailable (non-secure
+   * contexts, blocked site data).
+   */
+  readonly cache?: boolean | string;
   /** Optional ORT session options forwarded to `InferenceSession.create`. */
   readonly sessionOptions?: ort.InferenceSession.SessionOptions;
   /**
@@ -82,7 +170,8 @@ export interface OrtSessionOptions {
    * which means a URL model is fetched here and handed to ORT as bytes instead
    * of letting ORT fetch it. That is the same single download either way, and
    * it is what lets a task resolve its labels off the model. Set to `false` to
-   * keep the URL path untouched and leave {@link OrtSession.metadata} empty.
+   * keep the URL path untouched (unless {@link cache} is set, which needs the
+   * bytes) and leave {@link OrtSession.metadata} empty.
    *
    * `false` is also the escape hatch when a device cannot afford the bytes: the
    * fetched buffer is dropped before ORT builds the graph (see
@@ -240,6 +329,17 @@ export class OrtSession {
    * it — on a phone that was the difference between a session and
    * `Can't create a session. failed to allocate a buffer of size N`.
    *
+   * The provider probe and the model download run concurrently: neither
+   * depends on the other, and on a real GPU `requestAdapter()` is not free.
+   *
+   * A model whose metadata carries {@link GRAPH_OPTIMIZATION_KEY} was already
+   * optimized offline by the Python SDK's `optimize_model`, so it is loaded
+   * with `graphOptimizationLevel: "disabled"` instead of paying the optimizer a
+   * second time — measured on a YOLO11n-seg under WASM, 29 ms of session
+   * creation down to 12 ms with unchanged inference time. An explicit
+   * `graphOptimizationLevel` in `sessionOptions` always wins. The mark is read
+   * with the rest of the metadata, so `readMetadata: false` skips it too.
+   *
    * @param model Either a URL string, or a `Uint8Array`/`ArrayBuffer` containing the model bytes.
    * @param options Provider list, pass-through `SessionOptions`, and whether to
    *   read the model's metadata map (see {@link OrtSessionOptions.readMetadata}).
@@ -250,20 +350,30 @@ export class OrtSession {
     options: OrtSessionOptions = {},
   ): Promise<OrtSession> {
     const requested = resolveProviders(options.providers);
-    const detected = await detectProviders(requested);
-    const providers = detected.length > 0 ? detected : [FALLBACK_PROVIDER];
-    if (options.providers !== undefined && options.providers.length > 0) {
-      warnOnDroppedProviders(requested, providers);
-    }
-    const sessionOptions: ort.InferenceSession.SessionOptions = {
-      ...(options.sessionOptions ?? {}),
-      executionProviders: providers as ort.InferenceSession.SessionOptions["executionProviders"],
-    };
     const wantsMetadata = options.readMetadata !== false;
-    const source =
-      typeof model === "string" && wantsMetadata ? await fetchModel(model) : model;
+    const cacheName =
+      options.cache === true ? DEFAULT_MODEL_CACHE : options.cache ? options.cache : null;
+    const shouldFetch = typeof model === "string" && (wantsMetadata || cacheName !== null);
+    const [detected, source] = await Promise.all([
+      detectProviders(requested),
+      shouldFetch ? fetchModel(model, cacheName) : Promise.resolve(model),
+    ]);
+    const specs = detected.length > 0 ? detected : [FALLBACK_PROVIDER];
+    const requestedNames = requested.map(providerName);
+    const providers = specs.map(providerName);
+    if (options.providers !== undefined && options.providers.length > 0) {
+      warnOnDroppedProviders(requestedNames, providers);
+    }
     const metadata =
       wantsMetadata && typeof source !== "string" ? readModelMetadata(source) : {};
+    const preOptimized =
+      metadata[GRAPH_OPTIMIZATION_KEY] !== undefined &&
+      options.sessionOptions?.graphOptimizationLevel === undefined;
+    const sessionOptions: ort.InferenceSession.SessionOptions = {
+      ...(preOptimized ? { graphOptimizationLevel: "disabled" as const } : {}),
+      ...(options.sessionOptions ?? {}),
+      executionProviders: specs as ort.InferenceSession.SessionOptions["executionProviders"],
+    };
     const inputTypes =
       typeof source !== "string" ? declaredInputTypes(source) : {};
     if (typeof source !== "string" && Object.keys(inputTypes).length === 0) {
@@ -290,7 +400,7 @@ export class OrtSession {
       );
     }
 
-    return new OrtSession(session, providers, metadata, requested, inputTypes);
+    return new OrtSession(session, providers, metadata, requestedNames, inputTypes);
   }
 
   /**

@@ -44,6 +44,7 @@ EQUIVALENTS: dict[str, str] = {
     "FUSION_KIND_DETECT_SEGMENT_CLASSIFY": "FUSION_KIND_DETECT_SEGMENT_CLASSIFY",
     "FusionError": "FusionError",
     "FusionSpec": "FusionSpec",
+    "GRAPH_OPTIMIZATION_KEY": "GRAPH_OPTIMIZATION_KEY",
     "IDENTITY_MEAN": "IDENTITY_MEAN",
     "IDENTITY_STD": "IDENTITY_STD",
     "IMAGENET_MEAN": "IMAGENET_MEAN",
@@ -72,6 +73,7 @@ EQUIVALENTS: dict[str, str] = {
     "OrtVisionError": "OrtVisionError",
     "Probs": "Probs",
     "ProviderNotAvailableError": "ProviderNotAvailableError",
+    "ProviderSpec": "ProviderSpec",
     "SegmentationResult": "SegmentationResult",
     "SegmentationResults": "SegmentationResults",
     "Segmenter": "Segmenter",
@@ -135,6 +137,8 @@ WEB_ONLY: dict[str, str] = {
     "DecodedDetection": "TS return-shape alias; Python returns a documented tuple.",
     "ModelSource": "Union of browser model sources; Python takes a path or bytes.",
     "DEFAULT_PROVIDERS": "ORT web needs a static provider list; Python asks the runtime.",
+    "DEFAULT_MODEL_CACHE": "Cache Storage bucket for URL models; Python loads from disk, "
+    "where there is no download to cache.",
     "DeclaredDim": "TypeScript shape aliases; Python annotates with int | None inline.",
     "DeclaredShape": "TypeScript shape aliases; Python annotates with tuple inline.",
     "FusedLetterboxResult": "Reusable-buffer pipeline, browser-only.",
@@ -170,6 +174,8 @@ PYTHON_ONLY: dict[str, str] = {
     "it module-private.",
     "STAGES": "Stage-name tuple; the web SDK expresses it as the Speed interface keys.",
     "Stage": "Literal of stage names; paired with the web Speed interface.",
+    "optimize_model": "Build-time step that runs ONNX Runtime's native graph optimizer, "
+    "which ORT-Web does not expose; the web SDK only reads the mark it leaves.",
     "add_batch_dim": "NumPy layout helper; the browser builds the batch axis in the "
     "pipeline buffer.",
     "reduction_factor": "Box-reduction step of the NumPy resize; the browser resamples "

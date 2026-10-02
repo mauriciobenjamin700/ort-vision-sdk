@@ -25,15 +25,33 @@ export const DEFAULT_PROVIDERS: readonly string[] = ["webgpu", "wasm"];
 export const FALLBACK_PROVIDER = "wasm";
 
 /**
+ * One execution provider: its name, or ORT's config object for it.
+ *
+ * The object form carries provider options straight through to
+ * `InferenceSession.create` — `{ name: "webgpu", preferredLayout: "NHWC" }`,
+ * `{ name: "wasm" }` — which a bare name cannot express.
+ */
+export type ProviderSpec = string | { readonly name: string; readonly [option: string]: unknown };
+
+/**
+ * The provider name a spec refers to.
+ *
+ * @param spec A provider name or config object.
+ */
+export function providerName(spec: ProviderSpec): string {
+  return typeof spec === "string" ? spec : spec.name;
+}
+
+/**
  * Resolve the execution providers to pass to `InferenceSession.create`.
  *
- * @param requested Explicit provider list in preference order; `undefined` returns the default.
+ * @param requested Explicit provider list in preference order, as names or
+ *   config objects; `undefined` or empty returns the default.
  */
-export function resolveProviders(requested?: readonly string[]): string[] {
-  if (requested === undefined) {
-    return [...DEFAULT_PROVIDERS];
-  }
-  if (requested.length === 0) {
+export function resolveProviders<T extends ProviderSpec = string>(
+  requested?: readonly T[],
+): (T | string)[] {
+  if (requested === undefined || requested.length === 0) {
     return [...DEFAULT_PROVIDERS];
   }
   return [...requested];
@@ -57,15 +75,23 @@ export function resolveProviders(requested?: readonly string[]): string[] {
  * kept rather than dropped: guessing a provider away would be worse than
  * admitting ignorance about it.
  *
- * @param requested Providers in preference order, already resolved.
- * @returns The subset that is not ruled out, in the same order.
+ * The WebGPU adapter is only requested when `webgpu` is in the list. Asking
+ * unconditionally cost every WASM-only session a `requestAdapter()` round trip
+ * and, on a machine without a GPU, a "No available adapters" console warning
+ * per `create`.
+ *
+ * @param requested Providers in preference order, already resolved, as names
+ *   or config objects.
+ * @returns The subset that is not ruled out, in the same order and form.
  */
-export async function detectProviders(
-  requested: readonly string[],
-): Promise<string[]> {
-  const webgpu = await hasWebGpuAdapter();
-  return requested.filter((provider) => {
-    switch (provider) {
+export async function detectProviders<T extends ProviderSpec>(
+  requested: readonly T[],
+): Promise<T[]> {
+  const webgpu = requested.some((spec) => providerName(spec) === "webgpu")
+    ? await hasWebGpuAdapter()
+    : false;
+  return requested.filter((spec) => {
+    switch (providerName(spec)) {
       case "webgpu":
         return webgpu;
       case "webnn":

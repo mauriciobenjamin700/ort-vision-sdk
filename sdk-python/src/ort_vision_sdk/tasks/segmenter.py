@@ -10,6 +10,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from ort_vision_sdk.core.backend import read_metadata
+from ort_vision_sdk.core.providers import ProviderSpec
 from ort_vision_sdk.core.timing import SpeedTimer
 from ort_vision_sdk.graph import model_names, resolve_input_size
 from ort_vision_sdk.io.image import ImageInput, load_image
@@ -30,7 +31,6 @@ if TYPE_CHECKING:
 
     from ort_vision_sdk.core.backend import InferenceBackend
 
-SegmenterHead = Literal["yolo-seg"]
 _DEFAULT_MASK_COEFS = 32
 """Mask coefficients per anchor when the prototype shape does not say.
 
@@ -38,6 +38,7 @@ Every Ultralytics seg head (v8, v11) emits 32. Used only when the prototype
 output's channel axis is dynamic or no output shapes are available.
 """
 
+SegmenterHead = Literal["yolo-seg"]
 """Decoder family for the segmentation head.
 
 - ``"yolo-seg"``: YOLO instance-segmentation head with two outputs —
@@ -88,7 +89,7 @@ class Segmenter(VisionTask):
         *,
         head: SegmenterHead = "yolo-seg",
         labels: LabelSpec = None,
-        providers: list[str] | None = None,
+        providers: list[ProviderSpec] | None = None,
         session_options: ort.SessionOptions | None = None,
         backend: InferenceBackend | None = None,
         input_size: tuple[int, int] | None = None,
@@ -112,8 +113,10 @@ class Segmenter(VisionTask):
                 COCO preset when the model carries none. Pass a spec to override
                 what the model declares.
             providers: Execution providers in preference order. Accepts short
-                aliases (``"cuda"``, ``"cpu"``, ...) or canonical ORT names.
-                Auto if ``None``. Ignored when ``backend`` is provided.
+                aliases (``"cuda"``, ``"cpu"``, ...) or canonical ORT names,
+                or ``(name, options)`` pairs to pass provider options (see
+                :data:`ProviderSpec`). Auto if ``None``. Ignored when
+                ``backend`` is provided.
             session_options: Optional ORT session options. Ignored when
                 ``backend`` is provided.
             backend: An explicit

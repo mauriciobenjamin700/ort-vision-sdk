@@ -18,6 +18,8 @@ from typing import Any
 import onnxruntime as ort
 import pytest
 
+from ort_vision_sdk.core.exceptions import ProviderNotAvailableError
+from ort_vision_sdk.core.providers import resolve_providers
 from ort_vision_sdk.core.session import OrtSession
 
 MODEL = Path(__file__).parent / "fixtures" / "models" / "tiny_identity.onnx"
@@ -46,6 +48,8 @@ class _Value:
 
 
 class _FallbackSession:
+    last: _FallbackSession | None = None
+
     """An ``InferenceSession`` that registers fewer providers than it was given.
 
     Deliberately pure Python: it starts no ONNX Runtime session at all. An
@@ -63,7 +67,8 @@ class _FallbackSession:
             *args: Positional arguments ORT would take; ignored.
             **kwargs: Keyword arguments ORT would take; ignored.
         """
-        self.requested: list[str] = list(kwargs.get("providers") or [])
+        self.requested: list[Any] = list(kwargs.get("providers") or [])
+        _FallbackSession.last = self
 
     def get_providers(self) -> list[str]:
         """Report the CPU fallback, whatever was asked for."""
@@ -119,3 +124,39 @@ class TestProviderReconciliation:
 
         assert session.providers == ["CPUExecutionProvider"]
         assert not [w for w in recwarn if issubclass(w.category, UserWarning)]
+
+
+class TestProviderSpecs:
+    """``(name, options)`` pairs reach ORT intact; names are what the session reports."""
+
+    def test_resolve_expands_the_alias_and_keeps_the_options(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            ort, "get_available_providers", lambda: ["CUDAExecutionProvider", "CPUExecutionProvider"]
+        )
+        options = {"cudnn_conv_algo_search": "HEURISTIC"}
+
+        resolved = resolve_providers([("cuda", options), "cpu"])
+
+        assert resolved == [("CUDAExecutionProvider", options), "CPUExecutionProvider"]
+        assert resolved[0][1] is options
+
+    def test_resolve_refuses_a_pair_naming_a_missing_provider(self) -> None:
+        with pytest.raises(ProviderNotAvailableError, match="NoSuchExecutionProvider"):
+            resolve_providers([("NoSuchExecutionProvider", {})])
+
+    def test_session_hands_the_pair_to_ort(self, pretend_cuda: None) -> None:
+        options = {"device_id": 0}
+        with pytest.warns(UserWarning):
+            session = OrtSession(MODEL, providers=[("cuda", options)])
+
+        assert _FallbackSession.last is not None
+        assert _FallbackSession.last.requested == [("CUDAExecutionProvider", options)]
+        assert session.requested_providers == ["CUDAExecutionProvider"]
+
+    def test_a_pair_runs_on_a_real_session(self) -> None:
+        session = OrtSession(MODEL, providers=[("cpu", {})])
+
+        assert session.providers == ["CPUExecutionProvider"]
+        assert session.requested_providers == ["CPUExecutionProvider"]

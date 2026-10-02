@@ -17,6 +17,7 @@ import numpy as np
 
 from ort_vision_sdk.core.backend import InferenceBackend
 from ort_vision_sdk.core.exceptions import NoDetectionsError
+from ort_vision_sdk.core.providers import ProviderSpec
 from ort_vision_sdk.core.session import OrtSession
 from ort_vision_sdk.dtypes import as_float32, numpy_dtype_for
 
@@ -51,7 +52,7 @@ class VisionTask:
         self,
         model_path: str | Path,
         *,
-        providers: list[str] | None = None,
+        providers: list[ProviderSpec] | None = None,
         session_options: ort.SessionOptions | None = None,
         backend: InferenceBackend | None = None,
     ) -> None:
@@ -60,7 +61,8 @@ class VisionTask:
         Args:
             model_path: Path to the ``.onnx`` model file. Ignored when
                 ``backend`` is provided.
-            providers: Execution providers in preference order. ``None``
+            providers: Execution providers in preference order, as names or
+                ``(name, options)`` pairs (see :data:`ProviderSpec`). ``None``
                 (default) auto-selects the best available accelerator. Ignored
                 when ``backend`` is provided.
             session_options: Optional ORT session options. Ignored when

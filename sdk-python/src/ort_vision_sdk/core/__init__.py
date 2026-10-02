@@ -15,7 +15,7 @@ from ort_vision_sdk.core.exceptions import (
     OrtVisionError,
     ProviderNotAvailableError,
 )
-from ort_vision_sdk.core.providers import available_providers, resolve_providers
+from ort_vision_sdk.core.providers import ProviderSpec, available_providers, resolve_providers
 from ort_vision_sdk.core.session import OrtSession
 from ort_vision_sdk.core.timing import STAGES, SpeedTimer, Stage
 
@@ -32,6 +32,7 @@ __all__: list[str] = [
     "OrtSession",
     "OrtVisionError",
     "ProviderNotAvailableError",
+    "ProviderSpec",
     "SpeedTimer",
     "Stage",
     "available_providers",

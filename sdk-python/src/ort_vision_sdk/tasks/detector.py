@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Literal
 import numpy as np
 
 from ort_vision_sdk.core.backend import read_metadata
+from ort_vision_sdk.core.providers import ProviderSpec
 from ort_vision_sdk.core.timing import SpeedTimer
 from ort_vision_sdk.graph import model_names, resolve_input_size
 from ort_vision_sdk.io.image import ImageInput, load_image
@@ -69,7 +70,7 @@ class Detector(VisionTask):
         *,
         head: DetectorHead = "yolo",
         labels: LabelSpec = None,
-        providers: list[str] | None = None,
+        providers: list[ProviderSpec] | None = None,
         session_options: ort.SessionOptions | None = None,
         backend: InferenceBackend | None = None,
         input_size: tuple[int, int] | None = None,
@@ -92,8 +93,9 @@ class Detector(VisionTask):
                 what the model declares.
             providers: Execution providers in preference order. Accepts short
                 aliases (``"cuda"``, ``"cpu"``, ``"tensorrt"``, ...) as well
-                as canonical ORT names. Auto if ``None``. Ignored when
-                ``backend`` is provided.
+                as canonical ORT names, or ``(name, options)`` pairs to pass
+                provider options (see :data:`ProviderSpec`). Auto if ``None``.
+                Ignored when ``backend`` is provided.
             session_options: Optional ORT session options. Ignored when
                 ``backend`` is provided.
             backend: An explicit

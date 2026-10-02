@@ -20,7 +20,7 @@ const calls: string[] = [];
 /** What each `InferenceSession.create` call was handed as its model. */
 const sources: unknown[] = [];
 
-const createSession = vi.fn((model: unknown) => {
+const createSession = vi.fn((model: unknown, _options?: unknown) => {
   calls.push("create");
   sources.push(model);
   return Promise.resolve({
@@ -154,5 +154,143 @@ describe("OrtSession.create", () => {
     expect(fetchSpy).not.toHaveBeenCalled();
     expect(calls).toEqual(["create"]);
     expect(sources[0]).toBe("/models/detect.onnx");
+  });
+});
+
+/**
+ * A stand-in for the Cache Storage API, backed by a `Map`.
+ *
+ * @param seed URL → bytes already in the bucket.
+ * @returns The fake `caches` global, plus the bucket names opened and the URLs put.
+ */
+function fakeCaches(seed: Readonly<Record<string, Uint8Array>> = {}) {
+  const store = new Map<string, Uint8Array>(Object.entries(seed));
+  const opened: string[] = [];
+  const put: string[] = [];
+  const cache = {
+    match: (url: string) => {
+      const hit = store.get(url);
+      return Promise.resolve(
+        hit === undefined ? undefined : { arrayBuffer: () => Promise.resolve(hit.buffer) },
+      );
+    },
+    put: (url: string) => {
+      put.push(url);
+      return Promise.resolve();
+    },
+  };
+  return {
+    global: { open: (name: string) => (opened.push(name), Promise.resolve(cache)) },
+    opened,
+    put,
+  };
+}
+
+describe("OrtSession.create with cache", () => {
+  it("reads a cached model without touching the network", async () => {
+    const caches = fakeCaches({ "/models/detect.onnx": modelProto({ task: "detect" }) });
+    vi.stubGlobal("caches", caches.global);
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const session = await OrtSession.create("/models/detect.onnx", { cache: true });
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(caches.opened).toEqual(["ort-vision-sdk-models"]);
+    expect(session.metadata.task).toBe("detect");
+  });
+
+  it("fetches and stores a model the bucket does not hold yet", async () => {
+    const caches = fakeCaches();
+    vi.stubGlobal("caches", caches.global);
+    const model = modelProto({ task: "detect" });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() =>
+        Promise.resolve({
+          ok: true,
+          arrayBuffer: () => Promise.resolve(model.buffer),
+        }),
+      ),
+    );
+
+    await OrtSession.create("/models/detect.onnx", { cache: "my-models" });
+
+    expect(caches.opened).toEqual(["my-models"]);
+    expect(caches.put).toEqual(["/models/detect.onnx"]);
+  });
+
+  it("still fetches the bytes when metadata is off but caching is on", async () => {
+    const caches = fakeCaches();
+    vi.stubGlobal("caches", caches.global);
+    serveModel(modelProto({}));
+
+    await OrtSession.create("/models/detect.onnx", { cache: true, readMetadata: false });
+
+    expect(sources[0]).toBeInstanceOf(Uint8Array);
+  });
+
+  it("falls back to the network where Cache Storage does not exist", async () => {
+    serveModel(modelProto({ task: "detect" }));
+
+    const session = await OrtSession.create("/models/detect.onnx", { cache: true });
+
+    expect(session.metadata.task).toBe("detect");
+  });
+});
+
+describe("OrtSession.create with a pre-optimized model", () => {
+  /** The session options ORT was handed on the latest `create`. */
+  function lastSessionOptions(): Record<string, unknown> {
+    const call = createSession.mock.calls.at(-1) as unknown[] | undefined;
+    return (call?.[1] ?? {}) as Record<string, unknown>;
+  }
+
+  it("pins the metadata key the Python optimize_model writes", async () => {
+    const { GRAPH_OPTIMIZATION_KEY } = await import("../src/core/session.js");
+    expect(GRAPH_OPTIMIZATION_KEY).toBe("ort_vision_sdk.graph_optimization");
+  });
+
+  it("skips ORT's optimizer when the model says it was optimized offline", async () => {
+    serveModel(modelProto({ "ort_vision_sdk.graph_optimization": "extended" }));
+
+    await OrtSession.create("/models/detect.onnx");
+
+    expect(lastSessionOptions().graphOptimizationLevel).toBe("disabled");
+  });
+
+  it("lets an explicit optimization level win over the mark", async () => {
+    serveModel(modelProto({ "ort_vision_sdk.graph_optimization": "extended" }));
+
+    await OrtSession.create("/models/detect.onnx", {
+      sessionOptions: { graphOptimizationLevel: "all" },
+    });
+
+    expect(lastSessionOptions().graphOptimizationLevel).toBe("all");
+  });
+
+  it("leaves an unmarked model on ORT's default level", async () => {
+    serveModel(modelProto({ task: "detect" }));
+
+    await OrtSession.create("/models/detect.onnx");
+
+    expect(lastSessionOptions().graphOptimizationLevel).toBeUndefined();
+  });
+});
+
+describe("OrtSession.create with provider config objects", () => {
+  it("hands ORT the config objects and reports provider names", async () => {
+    serveModel(modelProto({}));
+
+    const session = await OrtSession.create("/models/detect.onnx", {
+      providers: [{ name: "wasm", custom: 1 }],
+    });
+
+    const call = createSession.mock.calls.at(-1) as unknown[];
+    expect((call[1] as Record<string, unknown>).executionProviders).toEqual([
+      { name: "wasm", custom: 1 },
+    ]);
+    expect(session.providers).toEqual(["wasm"]);
+    expect(session.requestedProviders).toEqual(["wasm"]);
   });
 });

@@ -30,6 +30,7 @@ from ort_vision_sdk.core import NoDetectionsError as NoDetectionsError
 from ort_vision_sdk.core import OrtSession as OrtSession
 from ort_vision_sdk.core import OrtVisionError as OrtVisionError
 from ort_vision_sdk.core import ProviderNotAvailableError as ProviderNotAvailableError
+from ort_vision_sdk.core import ProviderSpec as ProviderSpec
 from ort_vision_sdk.core import SpeedTimer as SpeedTimer
 from ort_vision_sdk.core import Stage as Stage
 from ort_vision_sdk.core import available_providers as available_providers
@@ -73,6 +74,8 @@ from ort_vision_sdk.normalization import NORMALIZATION_PRESETS as NORMALIZATION_
 from ort_vision_sdk.normalization import Normalization as Normalization
 from ort_vision_sdk.normalization import is_ultralytics_classifier as is_ultralytics_classifier
 from ort_vision_sdk.normalization import resolve_normalization as resolve_normalization
+from ort_vision_sdk.optimize import GRAPH_OPTIMIZATION_KEY as GRAPH_OPTIMIZATION_KEY
+from ort_vision_sdk.optimize import optimize_model as optimize_model
 from ort_vision_sdk.postprocess import DecodedSegmentation as DecodedSegmentation
 from ort_vision_sdk.postprocess import batched_nms as batched_nms
 from ort_vision_sdk.postprocess import decode_yolo as decode_yolo
@@ -119,6 +122,7 @@ __all__: list[str] = [
     "CUSTOM_NORMALIZATION",
     "FUSION_KIND_DETECT_CLASSIFY",
     "FUSION_KIND_DETECT_SEGMENT_CLASSIFY",
+    "GRAPH_OPTIMIZATION_KEY",
     "IDENTITY_MEAN",
     "IDENTITY_STD",
     "IMAGENET_MEAN",
@@ -168,6 +172,7 @@ __all__: list[str] = [
     "OrtVisionError",
     "Probs",
     "ProviderNotAvailableError",
+    "ProviderSpec",
     "SegmentationResult",
     "SegmentationResults",
     "Segmenter",
@@ -192,6 +197,7 @@ __all__: list[str] = [
     "nms",
     "normalize",
     "numpy_dtype_for",
+    "optimize_model",
     "parse_names",
     "read_metadata",
     "reduction_factor",

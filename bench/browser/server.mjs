@@ -15,6 +15,11 @@
  *   node bench/browser/server.mjs                 # http://localhost:8765/bench/browser/run.html
  *   node bench/browser/server.mjs --port 9000
  *   node bench/browser/server.mjs --bandwidth 5   # MB/s
+ *   node bench/browser/server.mjs --results ""    # desliga a gravação
+ *
+ * A página faz POST do JSON em `/result?label=<nome>` ao terminar, e o
+ * resultado vai para `bench/browser/results/<nome>.json`. Num celular isso
+ * evita ter de copiar o JSON da tela do aparelho.
  *
  * Binds 127.0.0.1. Reach it from an Android phone with
  * `adb reverse tcp:8765 tcp:8765` and open `http://localhost:8765/...` there:
@@ -22,7 +27,7 @@
  */
 
 import { createServer } from "node:http";
-import { readFile, stat } from "node:fs/promises";
+import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { dirname, extname, join, normalize, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -55,9 +60,28 @@ function flag(name, fallback) {
 
 const port = Number(flag("port", "8765"));
 const bandwidthMBps = Number(flag("bandwidth", "0"));
+const resultsDir = flag("results", join(ROOT, "bench", "browser", "results"));
 
 createServer(async (request, response) => {
-  const pathname = decodeURIComponent(new URL(request.url ?? "/", "http://x").pathname);
+  const url = new URL(request.url ?? "/", "http://x");
+  const pathname = decodeURIComponent(url.pathname);
+
+  if (request.method === "POST" && pathname === "/result") {
+    if (!resultsDir) {
+      response.writeHead(404).end("gravação de resultado desligada");
+      return;
+    }
+    const label = (url.searchParams.get("label") ?? "sem-rotulo").replace(/[^a-z0-9_.-]/gi, "_");
+    const chunks = [];
+    for await (const chunk of request) chunks.push(chunk);
+    const file = join(resultsDir, `${label}.json`);
+    await mkdir(resultsDir, { recursive: true });
+    await writeFile(file, Buffer.concat(chunks));
+    console.log(`resultado: ${file}`);
+    response.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: true }));
+    return;
+  }
+
   const file = join(ROOT, normalize(pathname).replace(/^(\.\.[/\\])+/, ""));
   if (!file.startsWith(ROOT)) {
     response.writeHead(403).end();

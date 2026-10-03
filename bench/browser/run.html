@@ -12,7 +12,7 @@
 </style></head>
 <body>
 <h1>Bancada ort-vision-sdk</h1>
-<p class="muted">Parâmetros na URL: <code>?task=segment|detect|classify</code>, <code>?size=640</code>, <code>?threads=N</code>, <code>?proxy=1</code>, <code>?quick=1</code>. Deixe a aba visível até terminar. Modelos em <code>bench/browser/models/</code> — veja o README ao lado.</p>
+<p class="muted">Parâmetros na URL: <code>?task=segment|detect|classify</code>, <code>?size=640</code>, <code>?threads=N</code>, <code>?proxy=1</code>, <code>?quick=1</code>, <code>?ramp=400</code>, <code>?timeout=180000</code>. Deixe a aba visível até terminar — a página avisa se ela não ficou. Modelos em <code>bench/browser/models/</code> — veja o README ao lado.</p>
 <button id="copy" disabled>Copiar JSON</button>
 <pre id="log">iniciando…</pre>
 <script type="module">
@@ -25,6 +25,22 @@ const quick = params.get("quick") === "1";
 const SIZE = Number(params.get("size") ?? 640);
 const TASK = params.get("task") ?? "segment";
 const REPS = quick ? 3 : 7;
+// Aba oculta é a principal fonte de número errado nesta bancada: o Chrome
+// trata janela coberta como oculta, e aba oculta faz ele suspender o trabalho
+// de WebGPU. Isso trava a bateria, e — pior — às vezes só a deixa lenta, o que
+// produz um JSON plausível. O flag registra para a rodada se autodenunciar.
+let everHidden = document.hidden;
+addEventListener("visibilitychange", () => { if (document.hidden) everHidden = true; });
+// GPU e CPU ociosas entram em clock baixo, e 7 iterações de poucos ms acabam
+// antes da frequência subir. Descarta inferências por `ramp` ms antes de abrir
+// a janela de medição.
+const RAMP_MS = params.get("ramp") === null ? 400 : Number(params.get("ramp"));
+// Uma medição travada não pode parar a bateria inteira em silêncio.
+const TIMEOUT_MS = Number(params.get("timeout")) || 180000;
+const withTimeout = (p, what) => Promise.race([
+  p,
+  new Promise((_, reject) => setTimeout(() => reject(new Error(`TIMEOUT apos ${TIMEOUT_MS}ms em ${what}`)), TIMEOUT_MS)),
+]);
 const SDK = await import("/sdk-js-web/dist/index.js");
 const M = "/bench/browser/models/";
 const Task = { segment: SDK.Segmenter, detect: SDK.Detector, classify: SDK.Classifier }[TASK];
@@ -36,6 +52,7 @@ const median = (xs) => { const s = [...xs].sort((a, b) => a - b); return +s[Math
 out.env = {
   task: TASK, size: SIZE, userAgent: navigator.userAgent, cores: navigator.hardwareConcurrency, memoryGB: navigator.deviceMemory ?? null,
   isolated: crossOriginIsolated, secure: isSecureContext, threads: params.get("threads") ?? "default", proxy: !!params.get("proxy"),
+  visibility: document.visibilityState, rampMs: RAMP_MS, reps: REPS,
 };
 if (navigator.gpu) {
   const adapter = await navigator.gpu.requestAdapter();
@@ -43,8 +60,11 @@ if (navigator.gpu) {
 } else out.env.webgpu = "sem navigator.gpu";
 show("ambiente lido");
 
-const input = new ort.Tensor("float32", new Float32Array(3 * SIZE * SIZE).fill(0.5), [1, 3, SIZE, SIZE]);
-async function raw(label, model, providers, opts = {}) {
+// Um tensor por execução. Com `?proxy=1` o ArrayBuffer do feed é transferido
+// para o worker e fica destacado — reusar o mesmo falha com DataCloneError a
+// partir da segunda `run`, que era o que deixava `?proxy=1` inutilizável.
+const newInput = () => new ort.Tensor("float32", new Float32Array(3 * SIZE * SIZE).fill(0.5), [1, 3, SIZE, SIZE]);
+async function rawInner(label, model, providers, opts = {}) {
   show("ORT puro: " + label);
   try {
     const response = await fetch(model);
@@ -53,12 +73,18 @@ async function raw(label, model, providers, opts = {}) {
     const t0 = performance.now();
     const s = await ort.InferenceSession.create(bytes, { executionProviders: providers, ...opts });
     const create = performance.now() - t0;
-    const t1 = performance.now(); await s.run({ [s.inputNames[0]]: input }); const first = performance.now() - t1;
+    const t1 = performance.now(); await s.run({ [s.inputNames[0]]: newInput() }); const first = performance.now() - t1;
+    const ramp = performance.now();
+    while (performance.now() - ramp < RAMP_MS) await s.run({ [s.inputNames[0]]: newInput() });
     const xs = [];
-    for (let i = 0; i < REPS; i++) { const t = performance.now(); await s.run({ [s.inputNames[0]]: input }); xs.push(performance.now() - t); }
+    for (let i = 0; i < REPS; i++) { const t = performance.now(); await s.run({ [s.inputNames[0]]: newInput() }); xs.push(performance.now() - t); }
     await s.release();
-    out.raw[label] = { mb: +(bytes.length / 1e6).toFixed(1), createMs: +create.toFixed(1), firstMs: +first.toFixed(1), medianMs: median(xs) };
+    out.raw[label] = { mb: +(bytes.length / 1e6).toFixed(1), createMs: +create.toFixed(1), firstMs: +first.toFixed(1), medianMs: median(xs), minMs: +Math.min(...xs).toFixed(1), maxMs: +Math.max(...xs).toFixed(1) };
   } catch (e) { out.raw[label] = { error: String(e).slice(0, 200) }; }
+}
+async function raw(...args) {
+  try { await withTimeout(rawInner(...args), `raw:${args[0]}`); }
+  catch (e) { out.raw[args[0]] = { error: String(e).slice(0, 200) }; }
 }
 const hasGpu = typeof out.env.webgpu === "object";
 await raw("wasm_fp32", M + "model.onnx", ["wasm"]);
@@ -74,7 +100,7 @@ if (hasGpu) {
 const img = new Image(); img.src = M + "image.jpg"; await img.decode();
 const frame = document.createElement("canvas"); frame.width = 1920; frame.height = 1080;
 frame.getContext("2d").drawImage(img, 0, 0, 1920, 1080);
-async function sdk(label, model, providers) {
+async function sdkInner(label, model, providers) {
   show("SDK predict 1080p: " + label);
   if (!(await fetch(model, { method: "HEAD" })).ok) { out.sdk[label] = { skipped: model + " não encontrado" }; return; }
   try {
@@ -82,12 +108,18 @@ async function sdk(label, model, providers) {
     const seg = await Task.create(model, { providers });
     const create = performance.now() - t0;
     await seg.warmup();
+    const ramp = performance.now();
+    while (performance.now() - ramp < RAMP_MS) await seg.predict(frame);
     const speeds = [], totals = [];
     for (let i = 0; i < REPS; i++) { const t = performance.now(); const r = (await seg.predict(frame))[0]; totals.push(performance.now() - t); speeds.push(r.speed); }
     const stage = (k) => median(speeds.map((s) => s[k]));
-    out.sdk[label] = { providers: seg.session.providers, createMs: +create.toFixed(1), totalMs: median(totals), load: stage("load"), preprocess: stage("preprocess"), inference: stage("inference"), postprocess: stage("postprocess") };
+    out.sdk[label] = { providers: seg.session.providers, createMs: +create.toFixed(1), totalMs: median(totals), totalMinMs: +Math.min(...totals).toFixed(1), load: stage("load"), preprocess: stage("preprocess"), inference: stage("inference"), postprocess: stage("postprocess") };
     await seg.session.release();
   } catch (e) { out.sdk[label] = { error: String(e).slice(0, 200) }; }
+}
+async function sdk(...args) {
+  try { await withTimeout(sdkInner(...args), `sdk:${args[0]}`); }
+  catch (e) { out.sdk[args[0]] = { error: String(e).slice(0, 200) }; }
 }
 await sdk("wasm_fp32", M + "model.onnx", ["wasm"]);
 await sdk("wasm_int8", M + "model.int8.onnx", ["wasm"]);
@@ -99,6 +131,8 @@ if (hasGpu) {
 async function inflight(n, providers) {
   const seg = await Task.create(M + "model.onnx", { providers });
   await seg.warmup(2);
+  const ramp = performance.now();
+  while (performance.now() - ramp < RAMP_MS) await seg.predict(frame);
   const frames = quick ? 8 : 20;
   let next = 0;
   const t0 = performance.now();
@@ -110,10 +144,27 @@ async function inflight(n, providers) {
 }
 for (const [label, providers] of [["wasm", ["wasm"]], ...(hasGpu ? [["webgpu", ["webgpu"]]] : [])]) {
   show("pipelining: " + label);
-  out.pipelining[label] = { inflight1_msPerFrame: await inflight(1, providers), inflight2_msPerFrame: await inflight(2, providers) };
+  try {
+    out.pipelining[label] = {
+      inflight1_msPerFrame: await withTimeout(inflight(1, providers), `pipelining1:${label}`),
+      inflight2_msPerFrame: await withTimeout(inflight(2, providers), `pipelining2:${label}`),
+    };
+  } catch (e) { out.pipelining[label] = { error: String(e).slice(0, 200) }; }
 }
 
-show("PRONTO ✅");
+out.env.everHidden = everHidden;
+show(everHidden ? "PRONTO ⚠️ — a aba ficou oculta durante a bateria; os tempos não valem" : "PRONTO ✅");
+
+// Entrega o JSON ao servidor quando ele aceita (ver `--results`). No celular
+// isso evita ter de copiar o resultado da tela do aparelho.
+try {
+  const label = params.get("label") ?? `${TASK}-${new Date().toISOString().replace(/[:.]/g, "-")}`;
+  const sent = await fetch(`/result?label=${encodeURIComponent(label)}`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(out, null, 1),
+  });
+  if (sent.ok) show(`resultado enviado ao servidor como ${label}.json`);
+} catch { /* servidor sem --results: o botão Copiar JSON continua valendo */ }
+
 const copy = document.getElementById("copy");
 copy.disabled = false;
 copy.onclick = () => navigator.clipboard.writeText(JSON.stringify(out, null, 1)).then(() => (copy.textContent = "Copiado!"));

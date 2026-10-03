@@ -89,7 +89,7 @@ jobs:
           mkdir -p /tmp/web-smoke && cd /tmp/web-smoke
           npm init -y >/dev/null
           npm pkg set type=module >/dev/null
-          npm install --silent "$GITHUB_WORKSPACE/sdk-js-web/$TARBALL" onnxruntime-web@^1.17
+          npm install --silent "$GITHUB_WORKSPACE/sdk-js-web/$TARBALL" onnxruntime-web@^1.22
           PKG_NAME="$PKG_NAME" node -e "import(process.env.PKG_NAME).then(m => { \
             if (!m.Detector || !m.Segmenter || !m.Classifier) throw new Error('tasks missing'); \
             if (!m.Boxes || !m.Probs || !m.Masks) throw new Error('result envelopes missing'); \

@@ -30,7 +30,7 @@ serves the same way as `python3 -m http.server`.
 ## Notes
 
 - The page loads `onnxruntime-web` from the jsDelivr CDN
-  (`onnxruntime-web@1.17`). The matching `.wasm` files are fetched from the
+  (`onnxruntime-web@1.22.0`, the `ort.webgpu.min.mjs` bundle). The matching `.wasm` files are fetched from the
   same CDN via `ort.env.wasm.wasmPaths`, so no local install of WASM
   artifacts is required.
 - WebGPU is preferred when available (Chromium-based browsers); ORT-Web

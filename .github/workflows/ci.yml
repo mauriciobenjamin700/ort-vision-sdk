@@ -101,7 +101,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node-version: ["18", "20", "22"]
+        node-version: ["20", "22", "24"]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -137,10 +137,44 @@ jobs:
           mkdir -p /tmp/web-smoke && cd /tmp/web-smoke
           npm init -y >/dev/null
           npm pkg set type=module >/dev/null
-          npm install --silent "$GITHUB_WORKSPACE/sdk-js-web/$TARBALL" onnxruntime-web@^1.17
+          npm install --silent "$GITHUB_WORKSPACE/sdk-js-web/$TARBALL" onnxruntime-web@^1.22
           PKG_NAME="$PKG_NAME" node -e "import(process.env.PKG_NAME).then(m => { \
             if (!m.Detector || !m.Segmenter || !m.Classifier) throw new Error('tasks missing'); \
             if (!m.Boxes || !m.Probs || !m.Masks) throw new Error('result envelopes missing'); \
             if (!m.VERSION) throw new Error('no VERSION'); \
             console.log('Smoke OK · VERSION =', m.VERSION); \
           })"
+
+  web-ort:
+    name: Web e2e (onnxruntime-web ${{ matrix.ort }})
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sdk-js-web
+    strategy:
+      fail-fast: false
+      matrix:
+        ort: ["1.22.0", "latest"]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: sdk-js-web/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Swap in onnxruntime-web ${{ matrix.ort }}
+        run: |
+          npm install --no-save "onnxruntime-web@${{ matrix.ort }}"
+          node -p "'onnxruntime-web ' + require('onnxruntime-web/package.json').version" 2>/dev/null \
+            || grep '"version"' node_modules/onnxruntime-web/package.json
+
+      - name: Run the end-to-end suite against a real runtime
+        run: npx vitest run test/e2e

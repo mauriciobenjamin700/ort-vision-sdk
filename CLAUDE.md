@@ -140,9 +140,9 @@ confirme pelo índice simples.
 
   Vale para qualquer script auxiliar, inclusive um `python3 - <<EOF` de uma
   linha. Rode da raiz do repo com caminho absoluto/relativo.
-- **`Float16Array` não existe no Node do CI.** Chegou no V8 no Node 24; a matriz
-  do CI roda 18, 20 e 22. Teste que constrói tensor half passa na sua máquina e
-  **quebra no CI** — aconteceu no release do `web-v0.9.0`, que só não publicou
+- **`Float16Array` só existe no Node 24.** A matriz do CI roda 20, 22 e 24, então
+  dois dos três jobs não têm o global. Teste que constrói tensor half passa na
+  sua máquina e **quebra no CI** — aconteceu no release do `web-v0.9.0`, que só não publicou
   errado porque o workflow roda os testes antes do `npm publish`. Teste de
   caminho half stuba o construtor; teste de recusa remove o global. Para
   conferir localmente antes de empurrar, rode a suíte com ele apagado:
@@ -191,6 +191,21 @@ confirme pelo índice simples.
 - `tests/fixtures/models/*.onnx` vêm de `make fixtures-models` (precisa de
   `onnx`). Os valores esperados nos testes e2e são hard-coded de propósito: se
   uma fixture muda, o teste tem que ser atualizado deliberadamente.
+- `sdk-js-web/test/e2e/` roda as tasks contra o `onnxruntime-web` **real**, sobre
+  os mesmos `tiny_*.onnx` e os mesmos números fixos do `test_e2e_onnx.py`. O
+  resto da suíte web mocka o ORT, e foi assim que três bugs passaram (FP16 #50,
+  grafo de 1 MB #54, coeficientes de máscara contados como classes). Em Node
+  falta canvas e thread WASM: o `test/e2e/setup.ts` põe o `@napi-rs/canvas`
+  (devDependency) como `OffscreenCanvas` e fixa `env.wasm.numThreads = 1` — sem
+  isso o ORT até 1.20 nem instancia (`memory import must be a WebAssembly.Memory
+  object`). Para rodar contra outra versão do ORT:
+  `npm install --no-save onnxruntime-web@<v> && npx vitest run test/e2e`, e
+  `npm ci` depois para voltar ao lock. O job `web-ort` do CI faz isso no piso
+  (1.22.0) e na `latest`.
+- **Abaixo de 1.22 o `onnxruntime-web` não informa shapes de sessão**
+  (`inputMetadata`/`outputMetadata` vêm `undefined`; medido de 1.17.3 a 1.21.0).
+  O `OrtSession` cai nos shapes lidos do próprio `.onnx` (`readModelShapes`); sem
+  os bytes (`readMetadata: false`), não há shape nenhum.
 - Modelo fundido: para provar o que o grafo realmente faz, exponha o tensor
   intermediário como saída extra (`model.graph.output.append(...)`) e rode. Foi
   assim que a divergência entre `boxes` e a ROI do `RoiAlign` ficou visível.

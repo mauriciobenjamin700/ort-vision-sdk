@@ -7,6 +7,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **`onnxruntime-web` peer floor: `>=1.17.0` → `>=1.22.0`.** Below 1.22 the
+  runtime reports no input or output shapes for a session
+  (`inputMetadata` / `outputMetadata` are `undefined`; measured on 1.17.3,
+  1.18.0, 1.19.2, 1.20.1 and 1.21.0). 1.22 is now the lowest version the test
+  suite runs against a real runtime, on every PR. See *Migration* below.
+
+- **`engines.node`: `>=18` → `>=20`.** Node 18 has been out of support since
+  April 2025. CI now runs Node 20, 22 and 24; 24 is the only one with
+  `Float16Array`, so the half-precision path finally runs unstubbed in CI.
+
+### Fixed
+
+- **Input size and class count no longer fall back to defaults on
+  `onnxruntime-web` < 1.22.** The tasks read both off the shapes the session
+  declares, and those runtimes declared none: a 64x64 detector was fed
+  640x640 and ORT aborted with `Got invalid dimensions for input`, a 32x32
+  classifier got 224x224, and a model without baked-in names was labelled with
+  the 80 COCO classes. `OrtSession` now reads the shapes from the `.onnx`
+  itself when the runtime reports none — the same bytes it already walks for
+  the metadata and the input types, keyed by value name so an initializer
+  listed among the graph inputs does not shift them. A URL model loaded with
+  `readMetadata: false` still has no bytes to read and declares nothing.
+
+### Internal
+
+- **End-to-end tests against a real `onnxruntime-web`** (`test/e2e/`). Every
+  other web test mocks the runtime, which is how three defects shipped: FP16
+  feeds (#50), the 1 MB graph read (#54) and mask coefficients counted as
+  segmentation classes (0.11.0). The new suite runs the tasks on the same tiny
+  `.onnx` fixtures as `sdk-python/tests/test_e2e_onnx.py` and asserts the same
+  hard-coded numbers; reintroducing the 0.11.0 segmenter bug fails it with
+  `Resolved 3 labels but the model has 35 classes.` A new CI job runs it on
+  `onnxruntime-web` 1.22.0 and on the latest release. Node gets a canvas from
+  `@napi-rs/canvas`, a dev dependency only.
+
+### Migration
+
+```bash
+npm install onnxruntime-web@latest   # any version >= 1.22.0
+```
+
+Serve the `.wasm` files of the same version. Nothing changes for code already
+on `onnxruntime-web` >= 1.22 and Node 20+.
+
 ## [0.11.0] - 2026-10-03
 
 ### Added

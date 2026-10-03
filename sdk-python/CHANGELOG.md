@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-10-03
+
 ### Added
 
 - **`optimize_model(model, output, level="extended")`.** Runs ONNX Runtime's
@@ -926,7 +928,8 @@ print(r.boxes.xyxy.shape, r.boxes.cls, r.boxes.conf, r.names)
 - Public types: `BoundingBox`, `ClassProbability`, `ClassificationResult`, `DetectionResult`, `ImageArray`.
 - Optional extras: `gpu` (onnxruntime-gpu), `opencv` (opencv-python), `dev` (test/lint tooling).
 
-[Unreleased]: https://github.com/mauriciobenjamin700/ort-vision-sdk/compare/v0.11.0...HEAD
+[Unreleased]: https://github.com/mauriciobenjamin700/ort-vision-sdk/compare/v0.12.0...HEAD
+[0.12.0]: https://github.com/mauriciobenjamin700/ort-vision-sdk/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/mauriciobenjamin700/ort-vision-sdk/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/mauriciobenjamin700/ort-vision-sdk/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/mauriciobenjamin700/ort-vision-sdk/compare/v0.8.0...v0.9.0

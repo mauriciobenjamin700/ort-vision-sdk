@@ -113,7 +113,13 @@ jobs:
         run: |
           VERSION="${{ steps.version.outputs.version }}"
           PKG_NAME=$(node -p "require('./package.json').name")
-          for attempt in 1 2 3 4 5 6; do
+          # Five minutes, not ninety seconds. web-v0.12.0 published at 16:09:17
+          # and `npm view` still answered nothing at 16:10:49, when six 15-second
+          # attempts ran out; the registry served it by 16:11:43. The release
+          # had succeeded, but the job failed and skipped the GitHub Release step,
+          # and re-running it cannot help: `npm publish` refuses a version that
+          # already exists.
+          for attempt in $(seq 1 20); do
             PUBLISHED=$(npm view --prefer-online "${PKG_NAME}@${VERSION}" version 2>/dev/null || true)
             [ -n "$PUBLISHED" ] && break
             echo "· registry has not caught up yet (attempt ${attempt}); retrying in 15s"

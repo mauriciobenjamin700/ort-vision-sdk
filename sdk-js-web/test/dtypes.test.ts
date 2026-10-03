@@ -14,7 +14,7 @@
  * rather than a hope.
  *
  * `Float16Array` is not a constant of the environment — it reached V8 in
- * Node 24, and the CI matrix runs 18, 20 and 22 — which is the whole reason
+ * Node 24, and the CI matrix also runs 20 and 22 — which is the whole reason
  * this SDK refuses such a model up front. So the tests never assume it is
  * there: the half-precision path is exercised against whichever constructor
  * exists (the native one where it does, a stand-in where it does not) and the

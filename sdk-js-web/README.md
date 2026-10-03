@@ -19,7 +19,7 @@ Mirrors the Python [`ort-vision-sdk`](https://pypi.org/project/ort-vision-sdk/) 
 npm install @mauriciobenjamin700/ort-vision-sdk-web onnxruntime-web
 ```
 
-`onnxruntime-web` is a peer dependency — you bring your own version and ship the matching `.wasm` files yourself.
+`onnxruntime-web` is a peer dependency (`>=1.22.0`) — you bring your own version and ship the matching `.wasm` files yourself. Node.js 20+ where the SDK runs outside a browser. **Upgrading from 0.11.x:** the peer floor moved from 1.17 to 1.22 and `engines` from Node 18 to 20; below 1.22 ORT reports no tensor shapes, which made the tasks fall back to default input sizes.
 
 ## Quick start
 

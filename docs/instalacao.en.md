@@ -87,9 +87,32 @@ reachable — install it, or point `LD_LIBRARY_PATH` at where it lives.
 npm install @mauriciobenjamin700/ort-vision-sdk-web onnxruntime-web
 ```
 
-`onnxruntime-web` is a **peer dependency** (accepted range: `>=1.17.0`). You pick
+`onnxruntime-web` is a **peer dependency** (accepted range: `>=1.22.0`). You pick
 the version and ship the matching `.wasm` files — the SDK does not bundle the
-runtime so that you stay in control of the version and the bundle.
+runtime so that you stay in control of the version and the bundle. The SDK
+requires **Node.js 20 or newer** wherever it runs outside the browser (tests,
+SSR, build).
+
+!!! warning "Upgrading from 0.11.x: `onnxruntime-web` >= 1.22 and Node >= 20"
+    From 0.12.0 the peer moves from `>=1.17.0` to `>=1.22.0`, and `engines`
+    from `>=18` to `>=20`.
+
+    **Why ORT:** below 1.22, `onnxruntime-web` does not report a session's input
+    and output shapes. The tasks read the input size and the class count from
+    there and, getting no answer, silently fell back to their defaults (640 for
+    detection, 224 for classification): a model exported at another size broke
+    on `predict()` with `Got invalid dimensions for input`. Measured on 1.17.3,
+    1.18.0, 1.19.2, 1.20.1 and 1.21.0.
+
+    0.12.0 also reads those shapes from the `.onnx` itself, so an older version
+    no longer breaks that way — but 1.22 onward is what the test suite runs
+    against a real runtime, on every PR.
+
+    **Why Node:** Node 18 has been out of support since April 2025.
+
+    **What to do:** `npm install onnxruntime-web@latest` (and serve the `.wasm`
+    files of the same version). Anyone already on 1.22+ and Node 20+ changes
+    nothing.
 
 !!! tip ".wasm files and WebGPU"
     For WebGPU to actually engage (the default provider order is

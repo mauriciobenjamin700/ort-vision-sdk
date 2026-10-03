@@ -13,7 +13,7 @@ import {
 } from "./dtypes.js";
 import { InferenceError, ModelLoadError } from "./exceptions.js";
 import { type DeclaredShape, declaredShapesFrom } from "./graph.js";
-import { readModelInputTypes, readModelMetadata } from "./metadata.js";
+import { readModelInputTypes, readModelMetadata, readModelShapes } from "./metadata.js";
 import {
   FALLBACK_PROVIDER,
   type ProviderSpec,
@@ -417,6 +417,17 @@ export class OrtSession {
      * feed is built as float32, the behaviour before this existed.
      */
     private readonly _inputTypes: Readonly<Record<string, string>> = {},
+    /**
+     * Shapes the model file declares, keyed by value name.
+     *
+     * The fallback for {@link inputShapes} and {@link outputShapes} when the
+     * runtime reports none, which `onnxruntime-web` does below 1.22. Empty when
+     * the bytes were never in hand (a URL loaded with `readMetadata: false`).
+     */
+    private readonly _fileShapes: {
+      readonly inputs: Readonly<Record<string, DeclaredShape>>;
+      readonly outputs: Readonly<Record<string, DeclaredShape>>;
+    } = { inputs: {}, outputs: {} },
   ) {}
 
   /**
@@ -495,6 +506,8 @@ export class OrtSession {
     };
     const inputTypes =
       typeof source !== "string" ? declaredInputTypes(source) : {};
+    const fileShapes =
+      typeof source !== "string" ? readModelShapes(source) : { inputs: {}, outputs: {} };
     if (typeof source !== "string" && Object.keys(inputTypes).length === 0) {
       warnOnUnreadableTypes();
     }
@@ -519,7 +532,7 @@ export class OrtSession {
       );
     }
 
-    return new OrtSession(session, providers, metadata, requestedNames, inputTypes);
+    return new OrtSession(session, providers, metadata, requestedNames, inputTypes, fileShapes);
   }
 
   /**
@@ -560,15 +573,18 @@ export class OrtSession {
   /**
    * Shapes the graph declares for its inputs, in declaration order.
    *
-   * Dynamic (symbolic) axes appear as `null`. Empty shapes mean the runtime
-   * reported no metadata — either a non-tensor input, or an `onnxruntime-web`
-   * older than 1.21, which predates input metadata.
+   * Dynamic (symbolic) axes appear as `null`. Read from the runtime when it
+   * reports them (`onnxruntime-web` >= 1.22), otherwise from the model file. An
+   * empty shape means neither source declared one: a non-tensor input, or a URL
+   * model loaded with `readMetadata: false` on a runtime that reports nothing.
    */
   get inputShapes(): readonly DeclaredShape[] {
-    return declaredShapesFrom(
+    return this._shapesOf(
       this._session.inputMetadata as
         | readonly ort.InferenceSession.ValueMetadata[]
         | undefined,
+      this._session.inputNames,
+      this._fileShapes.inputs,
     );
   }
 
@@ -585,14 +601,35 @@ export class OrtSession {
    * Shapes the graph declares for its outputs, in declaration order.
    *
    * Dynamic (symbolic) axes appear as `null`. Reading them is how a task can
-   * tell how many classes a head emits without being told.
+   * tell how many classes a head emits without being told. Same sources as
+   * {@link inputShapes}.
    */
   get outputShapes(): readonly DeclaredShape[] {
-    return declaredShapesFrom(
+    return this._shapesOf(
       this._session.outputMetadata as
         | readonly ort.InferenceSession.ValueMetadata[]
         | undefined,
+      this._session.outputNames,
+      this._fileShapes.outputs,
     );
+  }
+
+  /**
+   * Pick the runtime's declared shapes, or the file's when the runtime has none.
+   *
+   * @param metadata What the runtime reports, `undefined` below 1.22.
+   * @param names The session's value names, in its own order.
+   * @param fromFile Shapes the model file declares, keyed by name.
+   * @returns One shape per name, in the session's order.
+   */
+  private _shapesOf(
+    metadata: readonly ort.InferenceSession.ValueMetadata[] | undefined,
+    names: readonly string[],
+    fromFile: Readonly<Record<string, DeclaredShape>>,
+  ): readonly DeclaredShape[] {
+    const reported = declaredShapesFrom(metadata);
+    if (reported.length > 0) return reported;
+    return names.map((name) => fromFile[name] ?? []);
   }
 
   /**

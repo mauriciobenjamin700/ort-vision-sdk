@@ -29,16 +29,17 @@
     "prepublishOnly": "npm run clean && npm run build"
   },
   "peerDependencies": {
-    "onnxruntime-web": ">=1.17.0"
+    "onnxruntime-web": ">=1.22.0"
   },
   "devDependencies": {
+    "@napi-rs/canvas": "^1.0.10",
     "@types/node": "^20.11.0",
-    "onnxruntime-web": "^1.17.0",
+    "onnxruntime-web": "^1.22.0",
     "typescript": "^5.4.0",
     "vitest": "^2.1.9"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=20"
   },
   "keywords": [
     "onnx",

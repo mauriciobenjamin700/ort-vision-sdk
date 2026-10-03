@@ -25,7 +25,8 @@ export type DeclaredShape = readonly DeclaredDim[];
  * Convert ORT value metadata into declared shapes.
  *
  * @param metadata Metadata as reported by `InferenceSession.inputMetadata`, or
- *   `undefined` on ORT builds that predate it (added in onnxruntime 1.21).
+ *   `undefined` on ORT builds that predate it (`onnxruntime-web` < 1.22,
+ *   measured). The session then falls back to the shapes in the model file.
  * @returns One shape per value, in declaration order. Non-tensor values and
  *   builds without metadata yield empty shapes, which read as "nothing
  *   declared" everywhere downstream.

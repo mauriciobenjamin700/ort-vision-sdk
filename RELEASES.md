@@ -6,6 +6,7 @@ _Gerado automaticamente por `make releases-md` a partir das git tags._
 
 | Tag | Data | Commit |
 | --- | ---- | ------ |
+| v0.12.0 | 2026-10-03 | 8dfaba1 |
 | v0.11.0 | 2026-09-13 | 2da3c5f |
 | v0.10.0 | 2026-09-13 | 3ca2a22 |
 | v0.9.0 | 2026-09-04 | f12b3b4 |
@@ -24,6 +25,7 @@ _Gerado automaticamente por `make releases-md` a partir das git tags._
 
 | Tag | Data | Commit |
 | --- | ---- | ------ |
+| web-v0.11.0 | 2026-10-03 | 8f6cb34 |
 | web-v0.10.0 | 2026-09-13 | badb6fb |
 | web-v0.9.1 | 2026-09-13 | 7ecdbe5 |
 | web-v0.9.0 | 2026-09-13 | d63977a |

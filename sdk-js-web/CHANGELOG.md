@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-10-03
+
 ### Changed
 
 - **`onnxruntime-web` peer floor: `>=1.17.0` → `>=1.22.0`.** Below 1.22 the
@@ -897,7 +899,8 @@ console.log(r.boxes.xyxy, r.boxes.cls, r.boxes.conf, r.names);
 - Execution-provider resolution defaulting to `["webgpu", "wasm"]`.
 - Public types mirroring the Python SDK: `BoundingBox`, `ClassProbability`, `ClassificationResult`, `DetectionResult`, `RGBImage`.
 
-[Unreleased]: https://github.com/mauriciobenjamin700/ort-vision-sdk/compare/web-v0.11.0...HEAD
+[Unreleased]: https://github.com/mauriciobenjamin700/ort-vision-sdk/compare/web-v0.12.0...HEAD
+[0.12.0]: https://github.com/mauriciobenjamin700/ort-vision-sdk/compare/web-v0.11.0...web-v0.12.0
 [0.11.0]: https://github.com/mauriciobenjamin700/ort-vision-sdk/compare/web-v0.10.0...web-v0.11.0
 [0.10.0]: https://github.com/mauriciobenjamin700/ort-vision-sdk/compare/web-v0.9.1...web-v0.10.0
 [0.9.1]: https://github.com/mauriciobenjamin700/ort-vision-sdk/compare/web-v0.9.0...web-v0.9.1

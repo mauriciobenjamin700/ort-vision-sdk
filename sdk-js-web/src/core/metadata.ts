@@ -14,6 +14,8 @@
  * "the model says nothing", falling back to what it was given.
  */
 
+import type { DeclaredDim, DeclaredShape } from "./graph.js";
+
 /** Field number of `metadata_props` in `ModelProto` (repeated StringStringEntryProto). */
 const MODEL_METADATA_PROPS_FIELD = 14;
 
@@ -22,6 +24,9 @@ const MODEL_GRAPH_FIELD = 7;
 
 /** Field number of `input` in `GraphProto` (repeated ValueInfoProto). */
 const GRAPH_INPUT_FIELD = 11;
+
+/** Field number of `output` in `GraphProto` (repeated ValueInfoProto). */
+const GRAPH_OUTPUT_FIELD = 12;
 
 /** Field numbers of `name` and `type` in `ValueInfoProto`. */
 const VALUE_INFO_NAME_FIELD = 1;
@@ -32,6 +37,15 @@ const TYPE_TENSOR_FIELD = 1;
 
 /** Field number of `elem_type` in `TypeProto.Tensor` (a `TensorProto.DataType`). */
 const TENSOR_ELEM_TYPE_FIELD = 1;
+
+/** Field number of `shape` in `TypeProto.Tensor` (TensorShapeProto). */
+const TENSOR_SHAPE_FIELD = 2;
+
+/** Field number of `dim` in `TensorShapeProto` (repeated Dimension). */
+const SHAPE_DIM_FIELD = 1;
+
+/** Field number of `dim_value` in `TensorShapeProto.Dimension` (int64). */
+const DIM_VALUE_FIELD = 1;
 
 /** Field numbers of `key` and `value` in `StringStringEntryProto`. */
 const ENTRY_KEY_FIELD = 1;
@@ -209,24 +223,35 @@ export function readModelMetadata(
   return metadata;
 }
 
+/** What a graph value declares about itself: its element type and its shape. */
+interface DeclaredTensor {
+  readonly elemType: number | null;
+  readonly shape: DeclaredShape;
+}
+
+/** A graph value with nothing readable declared. */
+const UNDECLARED: DeclaredTensor = { elemType: null, shape: [] };
+
 /**
- * Read the element type of a `TypeProto.Tensor` message.
+ * Read one `TensorShapeProto.Dimension`.
  *
  * @param bytes The whole model buffer.
  * @param start Offset of the message's first byte.
  * @param end Offset one past its last byte.
- * @returns The `TensorProto.DataType` value, or `null` when the message
- *   carries none or cannot be walked.
+ * @returns The size when the graph pins it to a positive integer, `null` for a
+ *   symbolic (`dim_param`) or absent one — the same convention as
+ *   `declaredShapesFrom`, so both sources read alike downstream.
  */
-function readTensorElemType(bytes: Uint8Array, start: number, end: number): number | null {
+function readDimension(bytes: Uint8Array, start: number, end: number): DeclaredDim {
   const cursor: Cursor = { bytes, end, pos: start };
   while (cursor.pos < cursor.end) {
     const tag = readVarint(cursor);
     if (tag === null) return null;
     const field = tag >>> 3;
     const wireType = tag & 0x07;
-    if (field === TENSOR_ELEM_TYPE_FIELD && wireType === WIRE_VARINT) {
-      return readVarint(cursor);
+    if (field === DIM_VALUE_FIELD && wireType === WIRE_VARINT) {
+      const value = readVarint(cursor);
+      return value !== null && Number.isSafeInteger(value) && value > 0 ? value : null;
     }
     if (!skipField(cursor, wireType)) return null;
   }
@@ -234,47 +259,109 @@ function readTensorElemType(bytes: Uint8Array, start: number, end: number): numb
 }
 
 /**
- * Read the element type out of a `TypeProto`, which wraps the tensor type.
+ * Read a `TensorShapeProto` into a declared shape.
  *
  * @param bytes The whole model buffer.
  * @param start Offset of the message's first byte.
  * @param end Offset one past its last byte.
- * @returns The `TensorProto.DataType` value, or `null` for a non-tensor type
- *   (sequence, map, optional) or an unreadable message.
+ * @returns One entry per dimension, or an empty shape when the message cannot
+ *   be walked — a half-read shape would claim the wrong rank.
  */
-function readTypeElemType(bytes: Uint8Array, start: number, end: number): number | null {
+function readShape(bytes: Uint8Array, start: number, end: number): DeclaredShape {
+  const cursor: Cursor = { bytes, end, pos: start };
+  const dims: DeclaredDim[] = [];
+  while (cursor.pos < cursor.end) {
+    const tag = readVarint(cursor);
+    if (tag === null) return [];
+    const field = tag >>> 3;
+    const wireType = tag & 0x07;
+    if (field === SHAPE_DIM_FIELD && wireType === WIRE_LENGTH_DELIMITED) {
+      const range = readLengthDelimited(cursor);
+      if (range === null) return [];
+      dims.push(readDimension(bytes, range.start, range.end));
+      continue;
+    }
+    if (!skipField(cursor, wireType)) return [];
+  }
+  return dims;
+}
+
+/**
+ * Read a `TypeProto.Tensor` message.
+ *
+ * @param bytes The whole model buffer.
+ * @param start Offset of the message's first byte.
+ * @param end Offset one past its last byte.
+ * @returns Its element type and shape; either is left undeclared when the
+ *   message carries none or cannot be walked.
+ */
+function readTensorType(bytes: Uint8Array, start: number, end: number): DeclaredTensor {
+  const cursor: Cursor = { bytes, end, pos: start };
+  let elemType: number | null = null;
+  let shape: DeclaredShape = [];
+  while (cursor.pos < cursor.end) {
+    const tag = readVarint(cursor);
+    if (tag === null) break;
+    const field = tag >>> 3;
+    const wireType = tag & 0x07;
+    if (field === TENSOR_ELEM_TYPE_FIELD && wireType === WIRE_VARINT) {
+      elemType = readVarint(cursor);
+      continue;
+    }
+    if (field === TENSOR_SHAPE_FIELD && wireType === WIRE_LENGTH_DELIMITED) {
+      const range = readLengthDelimited(cursor);
+      if (range === null) break;
+      shape = readShape(bytes, range.start, range.end);
+      continue;
+    }
+    if (!skipField(cursor, wireType)) break;
+  }
+  return { elemType, shape };
+}
+
+/**
+ * Read a `TypeProto`, which wraps the tensor type.
+ *
+ * @param bytes The whole model buffer.
+ * @param start Offset of the message's first byte.
+ * @param end Offset one past its last byte.
+ * @returns The tensor's declarations, or {@link UNDECLARED} for a non-tensor
+ *   type (sequence, map, optional) or an unreadable message.
+ */
+function readType(bytes: Uint8Array, start: number, end: number): DeclaredTensor {
   const cursor: Cursor = { bytes, end, pos: start };
   while (cursor.pos < cursor.end) {
     const tag = readVarint(cursor);
-    if (tag === null) return null;
+    if (tag === null) return UNDECLARED;
     const field = tag >>> 3;
     const wireType = tag & 0x07;
     if (field === TYPE_TENSOR_FIELD && wireType === WIRE_LENGTH_DELIMITED) {
       const range = readLengthDelimited(cursor);
-      if (range === null) return null;
-      return readTensorElemType(bytes, range.start, range.end);
+      if (range === null) return UNDECLARED;
+      return readTensorType(bytes, range.start, range.end);
     }
-    if (!skipField(cursor, wireType)) return null;
+    if (!skipField(cursor, wireType)) return UNDECLARED;
   }
-  return null;
+  return UNDECLARED;
 }
 
 /**
- * Read one `ValueInfoProto` into a name/element-type pair.
+ * Read one `ValueInfoProto`.
  *
  * @param bytes The whole model buffer.
  * @param start Offset of the message's first byte.
  * @param end Offset one past its last byte.
- * @returns The pair, or `null` when either half is missing or unreadable.
+ * @returns The value's name and declarations, or `null` when the name is
+ *   missing or the message is unreadable.
  */
 function readValueInfo(
   bytes: Uint8Array,
   start: number,
   end: number,
-): readonly [string, number] | null {
+): (DeclaredTensor & { readonly name: string }) | null {
   const cursor: Cursor = { bytes, end, pos: start };
   let name: string | null = null;
-  let elemType: number | null = null;
+  let declared: DeclaredTensor = UNDECLARED;
   while (cursor.pos < cursor.end) {
     const tag = readVarint(cursor);
     if (tag === null) return null;
@@ -288,14 +375,66 @@ function readValueInfo(
           bytes.subarray(range.start, range.end),
         );
       } else if (field === VALUE_INFO_TYPE_FIELD) {
-        elemType = readTypeElemType(bytes, range.start, range.end);
+        declared = readType(bytes, range.start, range.end);
       }
       continue;
     }
     if (!skipField(cursor, wireType)) return null;
   }
-  if (name === null || elemType === null) return null;
-  return [name, elemType];
+  if (name === null) return null;
+  return { name, ...declared };
+}
+
+/** The graph's declared inputs and outputs, each in declaration order. */
+interface GraphValues {
+  readonly inputs: readonly (DeclaredTensor & { readonly name: string })[];
+  readonly outputs: readonly (DeclaredTensor & { readonly name: string })[];
+}
+
+/**
+ * Walk the `GraphProto` and collect what its inputs and outputs declare.
+ *
+ * @param model The `.onnx` file contents.
+ * @returns Both lists, empty when the file carries no readable graph.
+ */
+function readGraphValues(model: Uint8Array | ArrayBufferLike): GraphValues {
+  const bytes = model instanceof Uint8Array ? model : new Uint8Array(model);
+  const cursor: Cursor = { bytes, end: bytes.length, pos: 0 };
+  const inputs: (DeclaredTensor & { readonly name: string })[] = [];
+  const outputs: (DeclaredTensor & { readonly name: string })[] = [];
+
+  while (cursor.pos < cursor.end) {
+    const tag = readVarint(cursor);
+    if (tag === null) break;
+    const field = tag >>> 3;
+    const wireType = tag & 0x07;
+    if (field === MODEL_GRAPH_FIELD && wireType === WIRE_LENGTH_DELIMITED) {
+      const graph = readLengthDelimited(cursor, bytes.length);
+      if (graph === null) break;
+      const inner: Cursor = { bytes, end: graph.end, pos: graph.start };
+      while (inner.pos < inner.end) {
+        const innerTag = readVarint(inner);
+        if (innerTag === null) break;
+        const innerField = innerTag >>> 3;
+        const innerWire = innerTag & 0x07;
+        if (
+          (innerField === GRAPH_INPUT_FIELD || innerField === GRAPH_OUTPUT_FIELD) &&
+          innerWire === WIRE_LENGTH_DELIMITED
+        ) {
+          const range = readLengthDelimited(inner);
+          if (range === null) break;
+          const info = readValueInfo(bytes, range.start, range.end);
+          if (info) (innerField === GRAPH_INPUT_FIELD ? inputs : outputs).push(info);
+          continue;
+        }
+        if (!skipField(inner, innerWire)) break;
+      }
+      continue;
+    }
+    if (!skipField(cursor, wireType)) break;
+  }
+
+  return { inputs, outputs };
 }
 
 /**
@@ -315,39 +454,42 @@ function readValueInfo(
 export function readModelInputTypes(
   model: Uint8Array | ArrayBufferLike,
 ): Readonly<Record<string, number>> {
-  const bytes = model instanceof Uint8Array ? model : new Uint8Array(model);
-  const cursor: Cursor = { bytes, end: bytes.length, pos: 0 };
   const types: Record<string, number> = {};
-
-  while (cursor.pos < cursor.end) {
-    const tag = readVarint(cursor);
-    if (tag === null) break;
-    const field = tag >>> 3;
-    const wireType = tag & 0x07;
-    if (field === MODEL_GRAPH_FIELD && wireType === WIRE_LENGTH_DELIMITED) {
-      const graph = readLengthDelimited(cursor, bytes.length);
-      if (graph === null) break;
-      const inner: Cursor = { bytes, end: graph.end, pos: graph.start };
-      while (inner.pos < inner.end) {
-        const innerTag = readVarint(inner);
-        if (innerTag === null) break;
-        const innerField = innerTag >>> 3;
-        const innerWire = innerTag & 0x07;
-        if (innerField === GRAPH_INPUT_FIELD && innerWire === WIRE_LENGTH_DELIMITED) {
-          const range = readLengthDelimited(inner);
-          if (range === null) break;
-          const info = readValueInfo(bytes, range.start, range.end);
-          if (info) types[info[0]] = info[1];
-          continue;
-        }
-        if (!skipField(inner, innerWire)) break;
-      }
-      continue;
-    }
-    if (!skipField(cursor, wireType)) break;
+  for (const input of readGraphValues(model).inputs) {
+    if (input.elemType !== null) types[input.name] = input.elemType;
   }
-
   return types;
+}
+
+/**
+ * Read the shape each graph input and output declares, straight from the file.
+ *
+ * `onnxruntime-web` reports these through `inputMetadata` / `outputMetadata`
+ * only from 1.22 on. Below that the session answers nothing, and a task that
+ * reads its input size or class count off the session silently fell back to
+ * its defaults: a 64x64 detector was fed 640x640 and ORT aborted with
+ * `Got invalid dimensions for input` (measured on 1.17.3, 1.18.0, 1.19.2,
+ * 1.20.1 and 1.21.0). The
+ * file carries the same declarations, in the same `ValueInfoProto` the element
+ * types are read from.
+ *
+ * Keyed by name rather than position: in an older IR the graph's `input` list
+ * also carries the initializers, so its order does not line up with the
+ * session's `inputNames`.
+ *
+ * @param model The `.onnx` file contents.
+ * @returns Input and output name → shape, dynamic axes as `null`. Both maps
+ *   are empty when the file carries no readable graph.
+ */
+export function readModelShapes(model: Uint8Array | ArrayBufferLike): {
+  readonly inputs: Readonly<Record<string, DeclaredShape>>;
+  readonly outputs: Readonly<Record<string, DeclaredShape>>;
+} {
+  const { inputs, outputs } = readGraphValues(model);
+  return {
+    inputs: Object.fromEntries(inputs.map((value) => [value.name, value.shape])),
+    outputs: Object.fromEntries(outputs.map((value) => [value.name, value.shape])),
+  };
 }
 
 /**

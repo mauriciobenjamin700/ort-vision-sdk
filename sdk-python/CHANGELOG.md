@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.1] - 2026-11-20
+
 ### Fixed
 
 - **`quantize_model` no longer zeroes a detector's scores** (#65). A YOLO
@@ -940,7 +942,8 @@ print(r.boxes.xyxy.shape, r.boxes.cls, r.boxes.conf, r.names)
 - Public types: `BoundingBox`, `ClassProbability`, `ClassificationResult`, `DetectionResult`, `ImageArray`.
 - Optional extras: `gpu` (onnxruntime-gpu), `opencv` (opencv-python), `dev` (test/lint tooling).
 
-[Unreleased]: https://github.com/mauriciobenjamin700/ort-vision-sdk/compare/v0.12.0...HEAD
+[Unreleased]: https://github.com/mauriciobenjamin700/ort-vision-sdk/compare/v0.12.1...HEAD
+[0.12.1]: https://github.com/mauriciobenjamin700/ort-vision-sdk/compare/v0.12.0...v0.12.1
 [0.12.0]: https://github.com/mauriciobenjamin700/ort-vision-sdk/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/mauriciobenjamin700/ort-vision-sdk/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/mauriciobenjamin700/ort-vision-sdk/compare/v0.9.0...v0.10.0

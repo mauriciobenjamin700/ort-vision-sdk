@@ -377,6 +377,12 @@ explicam números do `speed`:
   direto do canvas em que a imagem foi decodificada. Medido num frame 1080p, o
   `preprocess` caiu de ~10 ms para ~5 ms. Imagem com **transparência** usa o
   caminho antigo, porque compor o alpha mudaria as cores.
+- **Redimensionamento na GPU.** O canvas em que o letterbox desenha fica
+  acelerado, mesmo sendo lido de volta a cada frame. Medido num celular Android
+  (GPU Mali), desenhar e ler caiu de 16,4–17,7 ms para 11,3–11,7 ms a 320×320,
+  e de 26 para 17,7 ms a 640×640; num desktop, de 3,0 para 2,4 ms. O Chrome pode
+  avisar no console que `willReadFrequently` deixaria a leitura mais rápida:
+  neste caminho, a medição diz o contrário.
 - **`croppedImage` e `segmentedImage` sob demanda.** Os recortes por detecção
   só são montados quando você lê o campo. Se você só usa caixa e classe, eles
   nunca custam nada.

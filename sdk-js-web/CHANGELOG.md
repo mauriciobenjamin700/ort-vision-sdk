@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **The letterbox and resize pipelines keep their target canvas on the GPU**
+  (`willReadFrequently: false`, was `true`). The attribute moves the backing
+  store to software, so the downscale from a full-resolution, GPU-backed
+  source ran on the CPU. Draw plus `getImageData`, measured on the browser
+  bench: 16.4–17.7 → 11.3–11.7 ms at 320×320 and 26.0 → 17.7 ms at 640×640
+  on an Android phone (Mali Bifrost), 3.0 → 2.4 ms on a desktop RTX. Chrome may
+  log a `willReadFrequently` hint for this canvas; on this path the
+  measurement says otherwise.
+
 ## [0.12.0] - 2026-10-03
 
 ### Changed

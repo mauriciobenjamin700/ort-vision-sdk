@@ -26,6 +26,26 @@ import { RGBImage } from "../types.js";
 
 const INV_255 = 1 / 255;
 
+/**
+ * Context attributes of the target canvas both pipelines resize into.
+ *
+ * `willReadFrequently: false` keeps the target on the GPU, even though it is
+ * read back every frame. The opposite looks right — the attribute exists for
+ * canvases read back repeatedly — but it moves the backing store to software,
+ * so the downscale from a full-resolution, GPU-backed source runs on the CPU.
+ * Measured on the browser bench (`bench/browser`, `breakdown` section: letterbox
+ * of a 1080p canvas, then `getImageData`), accelerated against software target:
+ * 11.3–11.7 ms vs 16.4–17.7 ms on an Android phone (Mali Bifrost, 320×320),
+ * 17.7 vs 26.0 ms at 640×640 on the same phone, 2.4 vs 3.0 ms on a desktop
+ * RTX. The resize pipeline does the same draw and read and was not measured
+ * separately.
+ *
+ * Chrome may log "Multiple readback operations using getImageData are faster
+ * with the willReadFrequently attribute set to true" for this canvas. On this
+ * path the measurement says otherwise.
+ */
+const TARGET_CONTEXT: CanvasRenderingContext2DSettings = { willReadFrequently: false };
+
 /** One claim on a {@link ReusableBuffer}. */
 interface BufferClaim {
   /** The buffer to write into, always `size` long. */
@@ -138,7 +158,7 @@ export class LetterboxPipeline {
     this._targetHeight = targetHeight;
     this._fill = fill;
     this._target = createCanvas(targetWidth, targetHeight);
-    this._targetContext = get2DContext(this._target, { willReadFrequently: true });
+    this._targetContext = get2DContext(this._target, TARGET_CONTEXT);
     this._targetContext.imageSmoothingEnabled = true;
     this._targetContext.imageSmoothingQuality = "high";
     this._buffer = new ReusableBuffer(3 * targetHeight * targetWidth);
@@ -428,7 +448,7 @@ export class ResizePipeline {
   private _ensureTarget(): Context2D {
     if (this._target === null) {
       this._target = createCanvas(this._targetWidth, this._targetHeight);
-      this._targetContext = get2DContext(this._target, { willReadFrequently: true });
+      this._targetContext = get2DContext(this._target, TARGET_CONTEXT);
       this._targetContext.imageSmoothingEnabled = true;
       this._targetContext.imageSmoothingQuality = "high";
     }

@@ -147,6 +147,42 @@ navegador Chromium com WebGPU habilitado e um contexto seguro (`https://` ou
 `localhost`) — ou os cabeçalhos COOP/COEP corretos se também quiser threading
 wasm baseado em `SharedArrayBuffer`.
 
+### Quando o WebGPU aceita o modelo e falha no primeiro run
+
+Criar a sessão no WebGPU prova pouco: os kernels são conferidos contra o grafo
+no **primeiro run**, não na criação. Um export que o WebGPU não roda — o caso
+real foi um YOLO do Ultralytics 8.4.14, opset 12, convertido para float16, que
+falha com `[WebGPU] Kernel "[Resize] /model.11/Resize" failed. Error: Invalid
+data type` numa GPU Mali — é criado sem erro e falha em todo `predict()`.
+
+O SDK cuida disso. Quando um run falha **dentro do backend WebGPU** (o erro
+começa com `[WebGPU]`), a sessão é recriada nos providers restantes (WASM, se
+você não deu outro), o mesmo run é repetido lá, `session.providers` perde o
+`webgpu` e um `console.warn` diz por quê. Acontece uma vez só, e quase sempre
+no `warmup()`, antes de alguém estar esperando:
+
+```typescript
+import { Detector } from "@mauriciobenjamin700/ort-vision-sdk-web";
+
+const det = await Detector.create("/models/detect.onnx", {
+  providers: ["webgpu", "wasm"],
+});
+console.log(det.session.providers); // ["webgpu", "wasm"]
+await det.warmup();
+console.log(det.session.providers); // ["wasm"] se o WebGPU não rodou o modelo
+```
+
+!!! note "Erro que não é do WebGPU continua sendo erro"
+    Uma entrada com shape errado falharia em qualquer provider, então não
+    dispara a troca: o `InferenceError` sobe como antes.
+
+!!! tip "Modelo por URL é baixado de novo, não guardado"
+    Para recriar a sessão, um modelo passado por URL é buscado de novo (do
+    cache HTTP, na prática) em vez de ficar na memória o tempo todo — num
+    celular, os bytes do modelo são justamente o que a criação da sessão se
+    esforça para liberar. Um modelo passado como bytes é o seu buffer, e o SDK
+    guarda a referência.
+
 ## Saindo da main thread (`env.wasm.proxy`)
 
 O backend WASM roda na thread que chamou ele. Como essa é a main thread, tanto a

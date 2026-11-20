@@ -501,3 +501,135 @@ describe("OrtSession.create with a half-precision model", () => {
     expect(session.providers).toEqual(["webgpu", "wasm"]);
   });
 });
+
+describe("OrtSession.run falling back from WebGPU", () => {
+  const KERNEL_ERROR = '[WebGPU] Kernel "[Resize] /model.11/Resize" failed. Error: Invalid data type';
+
+  /** A fake native session whose `run` does what it is told. */
+  function fakeSession(run: () => Promise<unknown>) {
+    return {
+      inputNames: ["images"],
+      outputNames: ["output0"],
+      inputMetadata: undefined,
+      outputMetadata: undefined,
+      run: vi.fn(run),
+      release: vi.fn(() => Promise.resolve()),
+    };
+  }
+
+  /** Make the next `InferenceSession.create` calls hand back these sessions, in order. */
+  function nextSessions(...sessions: ReturnType<typeof fakeSession>[]): void {
+    for (const session of sessions) {
+      createSession.mockImplementationOnce(() => Promise.resolve(session));
+    }
+  }
+
+  function withAdapter(): void {
+    vi.stubGlobal("navigator", { gpu: { requestAdapter: () => Promise.resolve({}) } });
+  }
+
+  function lastProviders(): unknown {
+    const call = createSession.mock.calls.at(-1) as unknown[];
+    return (call[1] as Record<string, unknown>).executionProviders;
+  }
+
+  const outputs = { output0: { dims: [1] } };
+  const feeds = { images: { type: "float32", data: new Float32Array(1), dims: [1] } } as never;
+
+  it("rebuilds on WASM and retries when a run fails inside WebGPU", async () => {
+    withAdapter();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const gpu = fakeSession(() => Promise.reject(new Error(KERNEL_ERROR)));
+    const wasm = fakeSession(() => Promise.resolve(outputs));
+    nextSessions(gpu, wasm);
+    const session = await OrtSession.create(modelProto({ task: "detect" }), {
+      providers: ["webgpu", "wasm"],
+    });
+    expect(session.providers).toEqual(["webgpu", "wasm"]);
+
+    const result = await session.run(feeds);
+
+    expect(result).toBe(outputs);
+    expect(lastProviders()).toEqual(["wasm"]);
+    expect(session.providers).toEqual(["wasm"]);
+    expect(gpu.release).toHaveBeenCalledTimes(1);
+    expect(session.raw).toBe(wasm);
+    expect(warn.mock.calls.some((c) => String(c[0]).includes("failed on WebGPU"))).toBe(true);
+
+    await session.run(feeds);
+    expect(createSession).toHaveBeenCalledTimes(2);
+    expect(wasm.run).toHaveBeenCalledTimes(2);
+    warn.mockRestore();
+  });
+
+  it("falls back to WASM when WebGPU was the only provider asked for", async () => {
+    withAdapter();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    nextSessions(
+      fakeSession(() => Promise.reject(new Error(KERNEL_ERROR))),
+      fakeSession(() => Promise.resolve(outputs)),
+    );
+    const session = await OrtSession.create(modelProto({}), { providers: ["webgpu"] });
+
+    await session.run(feeds);
+
+    expect(lastProviders()).toEqual(["wasm"]);
+    expect(session.providers).toEqual(["wasm"]);
+    warn.mockRestore();
+  });
+
+  it("rebuilds a URL model from its URL, not from bytes kept in memory", async () => {
+    withAdapter();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    serveModel(modelProto({ task: "detect" }));
+    nextSessions(
+      fakeSession(() => Promise.reject(new Error(KERNEL_ERROR))),
+      fakeSession(() => Promise.resolve(outputs)),
+    );
+    const session = await OrtSession.create("/models/detect.onnx", {
+      providers: ["webgpu", "wasm"],
+    });
+
+    await session.run(feeds);
+
+    const call = createSession.mock.calls.at(-1) as unknown[];
+    expect(call[0]).toBe("/models/detect.onnx");
+    warn.mockRestore();
+  });
+
+  it("does not rebuild for an error that is not WebGPU's", async () => {
+    withAdapter();
+    nextSessions(fakeSession(() => Promise.reject(new Error("Got invalid dimensions for input"))));
+    const session = await OrtSession.create(modelProto({}), { providers: ["webgpu", "wasm"] });
+
+    await expect(session.run(feeds)).rejects.toThrow("Got invalid dimensions for input");
+
+    expect(createSession).toHaveBeenCalledTimes(1);
+    expect(session.providers).toEqual(["webgpu", "wasm"]);
+  });
+
+  it("does not rebuild a session that was never on WebGPU", async () => {
+    nextSessions(fakeSession(() => Promise.reject(new Error(KERNEL_ERROR))));
+    const session = await OrtSession.create(modelProto({}), { providers: ["wasm"] });
+
+    await expect(session.run(feeds)).rejects.toThrow("Inference failed");
+
+    expect(createSession).toHaveBeenCalledTimes(1);
+  });
+
+  it("names both failures when the rebuild fails, and does not try again", async () => {
+    withAdapter();
+    const gpu = fakeSession(() => Promise.reject(new Error(KERNEL_ERROR)));
+    nextSessions(gpu);
+    createSession.mockImplementationOnce(() => Promise.reject(new Error("out of memory")));
+    const session = await OrtSession.create(modelProto({}), { providers: ["webgpu", "wasm"] });
+
+    const failure = session.run(feeds);
+    await expect(failure).rejects.toThrow("Resize");
+    await expect(failure).rejects.toThrow("out of memory");
+    await expect(session.run(feeds)).rejects.toThrow("Inference failed");
+
+    expect(createSession).toHaveBeenCalledTimes(2);
+    expect(session.providers).toEqual(["webgpu", "wasm"]);
+  });
+});

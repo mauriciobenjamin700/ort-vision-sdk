@@ -174,6 +174,78 @@ async function keepHalfOffWebGpuWithoutF16(
   return kept.length > 0 ? kept : [FALLBACK_PROVIDER];
 }
 
+/**
+ * Rebuilds a session without `webgpu`, for {@link OrtSession.run}'s fallback.
+ *
+ * Resolves to the new native session and the providers it was given.
+ */
+type WebGpuFallback = () => Promise<{
+  readonly session: ort.InferenceSession;
+  readonly providers: readonly string[];
+}>;
+
+/**
+ * Prepare the rebuild a WebGPU session falls back to when a run fails there.
+ *
+ * Building a session on WebGPU proves little: kernels are compiled and checked
+ * against the graph's types on the first run, not at creation. The FAMACHApp
+ * detector is the case that motivated this — an Ultralytics 8.4.14 export,
+ * opset 12, converted to float16 — which builds on WebGPU and then fails every
+ * run with `[WebGPU] Kernel "[Resize] /model.11/Resize" failed. Error: Invalid
+ * data type`, measured on an Android Mali GPU and on SwiftShader. The same file
+ * runs on WASM. Without a fallback, asking for `["webgpu", "wasm"]` with that
+ * model meant no inference at all on exactly the devices with a GPU.
+ *
+ * A URL model is fetched again on rebuild rather than kept in memory: on a
+ * phone the session's bytes are the allocation the creation path works hardest
+ * to release. A model passed as bytes is the caller's buffer, and this keeps a
+ * reference to it.
+ *
+ * @param model What {@link OrtSession.create} was given.
+ * @param specs Providers the session was built with.
+ * @param sessionOptions Options the session was built with.
+ * @returns The rebuild, or `null` when the session is not on WebGPU.
+ */
+function prepareWebGpuFallback(
+  model: ModelSource,
+  specs: readonly ProviderSpec[],
+  sessionOptions: ort.InferenceSession.SessionOptions,
+): WebGpuFallback | null {
+  if (!specs.some((spec) => providerName(spec) === "webgpu")) return null;
+  const others = specs.filter((spec) => providerName(spec) !== "webgpu");
+  const rest = others.length > 0 ? others : [FALLBACK_PROVIDER];
+  return async () => {
+    const options = {
+      ...sessionOptions,
+      executionProviders: rest as ort.InferenceSession.SessionOptions["executionProviders"],
+    };
+    let session: ort.InferenceSession;
+    if (typeof model === "string") {
+      session = await ortRuntime.InferenceSession.create(model, options);
+    } else if (model instanceof Uint8Array) {
+      session = await ortRuntime.InferenceSession.create(model, options);
+    } else {
+      session = await ortRuntime.InferenceSession.create(model as ArrayBuffer, options);
+    }
+    return { session, providers: rest.map(providerName) };
+  };
+}
+
+/**
+ * Whether a run failed inside ONNX Runtime Web's WebGPU backend.
+ *
+ * The backend prefixes its kernel errors with `[WebGPU]`. Anything else — a
+ * wrong input shape, a missing feed — fails the same way on every provider, so
+ * rebuilding on WASM would only fail again, slower.
+ *
+ * @param err What the run rejected with.
+ * @returns `true` when the message names the WebGPU backend.
+ */
+function isWebGpuFailure(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err);
+  return message.includes("[WebGPU]");
+}
+
 /** Cache Storage bucket used when {@link OrtSessionOptions.cache} is `true`. */
 export const DEFAULT_MODEL_CACHE = "ort-vision-sdk-models";
 
@@ -418,25 +490,9 @@ function assertFeedableTypes(inputTypes: Readonly<Record<string, string>>): void
  */
 export class OrtSession {
   private constructor(
-    private readonly _session: ort.InferenceSession,
-    /**
-     * Execution providers this session is expected to run on.
-     *
-     * The requested list narrowed to what this browser can actually offer — a
-     * `webgpu` entry survives only where an adapter exists. Best-effort: ORT-Web
-     * exposes no way to ask which provider a session ended up on, so an entry
-     * here means "not ruled out", not "confirmed". See
-     * {@link requestedProviders} for what was asked for.
-     *
-     * When nothing survives — a caller asking for `webgpu` alone on a device
-     * without it — this falls back to {@link FALLBACK_PROVIDER}, which ORT-Web
-     * can always run. Handing ORT the unsatisfiable list instead makes
-     * `InferenceSession.create` reject with "no available backend found", so the
-     * page gets no inference at all rather than the slow-but-working fallback
-     * the `console.warn` describes. Measured in a real Chromium, where
-     * `navigator.gpu` exists but yields no adapter.
-     */
-    public readonly providers: readonly string[],
+    private _session: ort.InferenceSession,
+    /** See {@link providers}. */
+    private _providers: readonly string[],
     private readonly _metadata: Readonly<Record<string, string>>,
     /**
      * Execution providers that were asked for, after defaults were applied.
@@ -465,7 +521,36 @@ export class OrtSession {
       readonly inputs: Readonly<Record<string, DeclaredShape>>;
       readonly outputs: Readonly<Record<string, DeclaredShape>>;
     } = { inputs: {}, outputs: {} },
+    /**
+     * Rebuilds this session without `webgpu`, or `null` when there is nothing
+     * to fall back to. Consumed by the first WebGPU failure; see {@link run}.
+     */
+    private _fallback: WebGpuFallback | null = null,
   ) {}
+
+  /**
+   * Execution providers this session runs on.
+   *
+   * The requested list narrowed to what this browser can actually offer — a
+   * `webgpu` entry survives only where an adapter exists. Best-effort: ORT-Web
+   * exposes no way to ask which provider a session ended up on, so an entry
+   * here means "not ruled out", not "confirmed". See
+   * {@link requestedProviders} for what was asked for.
+   *
+   * When nothing survives — a caller asking for `webgpu` alone on a device
+   * without it — this falls back to {@link FALLBACK_PROVIDER}, which ORT-Web
+   * can always run. Handing ORT the unsatisfiable list instead makes
+   * `InferenceSession.create` reject with "no available backend found", so the
+   * page gets no inference at all rather than the slow-but-working fallback
+   * the `console.warn` describes. Measured in a real Chromium, where
+   * `navigator.gpu` exists but yields no adapter.
+   *
+   * Changes once at most: when a run fails inside the WebGPU backend, the
+   * session is rebuilt without it and this drops `webgpu` (see {@link run}).
+   */
+  get providers(): readonly string[] {
+    return this._providers;
+  }
 
   /**
    * Tail of the run queue: settles when the latest queued run has finished.
@@ -572,7 +657,15 @@ export class OrtSession {
       );
     }
 
-    return new OrtSession(session, providers, metadata, requestedNames, inputTypes, fileShapes);
+    return new OrtSession(
+      session,
+      providers,
+      metadata,
+      requestedNames,
+      inputTypes,
+      fileShapes,
+      prepareWebGpuFallback(model, specs, sessionOptions),
+    );
   }
 
   /**
@@ -705,7 +798,12 @@ export class OrtSession {
     await this._session.release().catch(() => undefined);
   }
 
-  /** The underlying `onnxruntime-web` session, for advanced use cases. */
+  /**
+   * The underlying `onnxruntime-web` session, for advanced use cases.
+   *
+   * A different object after a WebGPU fallback (see {@link run}); read it again
+   * rather than keeping it.
+   */
   get raw(): ort.InferenceSession {
     return this._session;
   }
@@ -720,6 +818,15 @@ export class OrtSession {
    * with `env.wasm.proxy`, or on the GPU), the next `predict()` decodes and
    * preprocesses its frame and only waits for its turn at the runtime. A run
    * that fails does not block the ones behind it.
+   *
+   * A session on WebGPU falls back once. When a run fails inside the WebGPU
+   * backend (its errors start with `[WebGPU]`), the session is rebuilt on the
+   * remaining providers — WASM when none was given — the same run is retried
+   * there, {@link providers} drops `webgpu`, and a `console.warn` says why.
+   * Kernels are checked against the graph on the first run, not at creation,
+   * so a model WebGPU cannot run still builds there; `warmup()` is where this
+   * usually happens, before any user is waiting. Errors from anywhere else are
+   * thrown as before, since they would fail on every provider.
    *
    * @param feeds Map of input name to `ort.Tensor`. Keys must match {@link inputNames}.
    * @throws {@link InferenceError} if ORT raises any error during execution.
@@ -739,6 +846,58 @@ export class OrtSession {
   private async _runNow(
     feeds: Record<string, ort.Tensor>,
   ): Promise<Record<string, ort.Tensor>> {
+    try {
+      const result = await this._session.run(this._asDeclaredTypes(feeds));
+      return result as Record<string, ort.Tensor>;
+    } catch (err) {
+      if (this._fallback !== null && isWebGpuFailure(err)) {
+        return this._runAfterFallback(feeds, err);
+      }
+      throw new InferenceError(
+        `Inference failed: ${(err as Error).message}`,
+        { cause: err },
+      );
+    }
+  }
+
+  /**
+   * Rebuild the session without WebGPU after a WebGPU failure, then retry once.
+   *
+   * Runs inside the run queue, so no other run sees the swap half-done. The
+   * fallback is consumed whether or not the rebuild succeeds: a second WebGPU
+   * failure cannot happen on a session that is no longer on WebGPU, and a
+   * rebuild that failed once is not retried on every frame.
+   *
+   * @param feeds The feeds of the run that failed.
+   * @param cause What the WebGPU run rejected with.
+   * @returns The outputs of the retried run.
+   * @throws {@link InferenceError} when the rebuild or the retried run fails.
+   */
+  private async _runAfterFallback(
+    feeds: Record<string, ort.Tensor>,
+    cause: unknown,
+  ): Promise<Record<string, ort.Tensor>> {
+    const fallback = this._fallback as WebGpuFallback;
+    this._fallback = null;
+    const reason = cause instanceof Error ? cause.message : String(cause);
+    let rebuilt: Awaited<ReturnType<WebGpuFallback>>;
+    try {
+      rebuilt = await fallback();
+    } catch (err) {
+      throw new InferenceError(
+        `Inference failed on WebGPU (${reason}) and rebuilding the session without it ` +
+          `failed: ${(err as Error).message}`,
+        { cause: err },
+      );
+    }
+    console.warn(
+      `[@ort-vision-sdk/web] This model failed on WebGPU (${reason}); the session was rebuilt ` +
+        `on ${JSON.stringify(rebuilt.providers)} and the run retried. Later runs stay there.`,
+    );
+    const previous = this._session;
+    this._session = rebuilt.session;
+    this._providers = rebuilt.providers;
+    await previous.release().catch(() => undefined);
     try {
       const result = await this._session.run(this._asDeclaredTypes(feeds));
       return result as Record<string, ort.Tensor>;

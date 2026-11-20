@@ -146,6 +146,42 @@ browser with WebGPU enabled, and a secure context (`https://` or `localhost`) �
 or the right COOP/COEP headers if you also want `SharedArrayBuffer`-based wasm
 threading.
 
+### When WebGPU accepts the model and fails on the first run
+
+Building a session on WebGPU proves little: kernels are checked against the
+graph on the **first run**, not at creation. An export WebGPU cannot run — the
+real case was an Ultralytics 8.4.14 YOLO, opset 12, converted to float16, which
+fails with `[WebGPU] Kernel "[Resize] /model.11/Resize" failed. Error: Invalid
+data type` on a Mali GPU — builds without an error and fails every `predict()`.
+
+The SDK handles it. When a run fails **inside the WebGPU backend** (the error
+starts with `[WebGPU]`), the session is rebuilt on the remaining providers
+(WASM if you gave none), the same run is retried there, `session.providers`
+drops `webgpu`, and a `console.warn` says why. It happens once, almost always
+in `warmup()`, before anyone is waiting:
+
+```typescript
+import { Detector } from "@mauriciobenjamin700/ort-vision-sdk-web";
+
+const det = await Detector.create("/models/detect.onnx", {
+  providers: ["webgpu", "wasm"],
+});
+console.log(det.session.providers); // ["webgpu", "wasm"]
+await det.warmup();
+console.log(det.session.providers); // ["wasm"] if WebGPU could not run the model
+```
+
+!!! note "An error that is not WebGPU's is still an error"
+    A wrongly shaped input would fail on any provider, so it does not trigger
+    the switch: the `InferenceError` is raised as before.
+
+!!! tip "A URL model is fetched again, not kept"
+    To rebuild the session, a model given by URL is fetched again (from the
+    HTTP cache, in practice) instead of staying in memory all along — on a
+    phone, the model's bytes are exactly what session creation works to
+    release. A model given as bytes is your buffer, and the SDK keeps the
+    reference.
+
 ## Getting off the main thread (`env.wasm.proxy`)
 
 The WASM backend runs on whichever thread called it. That thread is the main one,

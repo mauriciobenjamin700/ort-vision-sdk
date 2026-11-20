@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **A session on WebGPU falls back once when a run fails there.** Kernels are
+  checked against the graph on the first run, not at creation, so a model
+  WebGPU cannot run still built on it and then failed every `predict()` — the
+  FAMACHApp detector (Ultralytics 8.4.14, opset 12, float16) fails with
+  `[WebGPU] Kernel "[Resize] /model.11/Resize" failed. Error: Invalid data
+  type` on an Android Mali GPU, and asking for `["webgpu", "wasm"]` meant no
+  inference at all there. Now a run that fails inside the WebGPU backend (its
+  errors start with `[WebGPU]`) rebuilds the session on the remaining
+  providers (WASM when none was given), retries the same run, drops `webgpu`
+  from `session.providers` and warns once. Any other error is raised as
+  before. A URL model is fetched again for the rebuild rather than kept in
+  memory; `session.raw` is a different object afterwards.
+
 ### Changed
 
 - **The letterbox and resize pipelines keep their target canvas on the GPU**

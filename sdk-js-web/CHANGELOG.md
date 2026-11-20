@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-11-20
+
 ### Added
 
 - **A session on WebGPU falls back once when a run fails there.** Kernels are
@@ -941,7 +943,8 @@ console.log(r.boxes.xyxy, r.boxes.cls, r.boxes.conf, r.names);
 - Execution-provider resolution defaulting to `["webgpu", "wasm"]`.
 - Public types mirroring the Python SDK: `BoundingBox`, `ClassProbability`, `ClassificationResult`, `DetectionResult`, `RGBImage`.
 
-[Unreleased]: https://github.com/mauriciobenjamin700/ort-vision-sdk/compare/web-v0.12.0...HEAD
+[Unreleased]: https://github.com/mauriciobenjamin700/ort-vision-sdk/compare/web-v0.13.0...HEAD
+[0.13.0]: https://github.com/mauriciobenjamin700/ort-vision-sdk/compare/web-v0.12.0...web-v0.13.0
 [0.12.0]: https://github.com/mauriciobenjamin700/ort-vision-sdk/compare/web-v0.11.0...web-v0.12.0
 [0.11.0]: https://github.com/mauriciobenjamin700/ort-vision-sdk/compare/web-v0.10.0...web-v0.11.0
 [0.10.0]: https://github.com/mauriciobenjamin700/ort-vision-sdk/compare/web-v0.9.1...web-v0.10.0

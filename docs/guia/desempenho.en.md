@@ -389,6 +389,13 @@ they explain numbers in `speed`:
   from the canvas the image was decoded onto. Measured on a 1080p frame,
   `preprocess` went from ~10 ms to ~5 ms. An image with **transparency** takes
   the old path, because compositing its alpha would change the colours.
+- **Resizing on the GPU.** The canvas the letterbox draws into stays
+  accelerated, even though it is read back every frame. Measured on an Android
+  phone (Mali GPU, 320×320), draw plus read got 4–6 ms faster with inference on
+  WebGPU, in every run; with it on WASM, the difference stayed within noise. On
+  a desktop, from 3.0 to 2.4 ms. The pixels handed to the model are the same.
+  Chrome may warn in the console that `willReadFrequently` would make the read
+  faster: on this path, the measurement says otherwise.
 - **`croppedImage` and `segmentedImage` on demand.** The per-detection crops
   are only built when you read the field. If you only use box and class, they
   never cost anything.

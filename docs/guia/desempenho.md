@@ -221,6 +221,16 @@ Medido no YOLO11n-seg (QDQ por canal, 24 imagens de calibração):
     principal ficou igual (confiança 0,663 → 0,659), mas meça no seu conjunto de
     validação antes de publicar.
 
+??? info "Por que o último nó do grafo fica em FP32"
+    A cabeça de um detector YOLO termina numa `Concat` que junta as caixas, em
+    pixel (0 a 640), com os scores, de 0 a 1. Quantizado, esse tensor ganha uma
+    escala int8 só, de ~2,5 por degrau, e todo score vira 0: o modelo carrega,
+    roda e não detecta nada. O `quantize_model` deixa em FP32 os nós que
+    escrevem as saídas do grafo. Num detector YOLO11n de uma classe, a
+    confiança da detecção principal foi de 0,868 (FP32) para 0,895 (INT8) a
+    640, e de 0,946 para 0,948 a 320, sem mudar o tempo de inferência.
+    Antes dessa correção, os dois davam 0 detecções.
+
 !!! note "No browser, INT8 roda em WASM"
     O backend WebGPU do ONNX Runtime Web não roda os operadores quantizados
     desse formato: o `DequantizeLinear` recusa o bias quantizado. O

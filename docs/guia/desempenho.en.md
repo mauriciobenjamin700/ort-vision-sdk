@@ -222,6 +222,16 @@ Measured on the YOLO11n-seg (per-channel QDQ, 24 calibration images):
     detection stayed the same (confidence 0.663 → 0.659), but measure on your
     validation set before shipping.
 
+??? info "Why the graph's last node stays in FP32"
+    A YOLO detection head ends in one `Concat` that joins boxes in pixels
+    (0 to 640) with scores from 0 to 1. Quantized, that tensor gets a single
+    int8 scale of ~2.5 per step and every score rounds to 0: the model loads,
+    runs and detects nothing. `quantize_model` keeps the nodes that write the
+    graph's outputs in FP32. On a one-class YOLO11n detector, the top
+    detection's confidence went from 0.868 (FP32) to 0.895 (INT8) at 640, and
+    from 0.946 to 0.948 at 320, with unchanged inference time. Before this fix,
+    both returned 0 detections.
+
 !!! note "In the browser, INT8 runs on WASM"
     ONNX Runtime Web's WebGPU backend cannot run this format's quantized
     operators: its `DequantizeLinear` rejects the quantized bias.

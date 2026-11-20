@@ -394,6 +394,103 @@ they explain numbers in `speed`:
     the SDK builds the crops **immediately**. On-demand applies only when the
     SDK allocated the pixels itself.
 
+## At the edge: what weighs on a phone
+
+On a desktop with a GPU, half the frame is copies and JavaScript loops and the
+other half is the model. On a phone the balance is different: **the model is
+nearly everything**, and optimizing the copies pays little. Before touching the
+pipeline, find out which of the two worlds you are in. 📱
+
+The numbers below come from an Android 10 phone with a Mali (Bifrost) GPU,
+running a one-class YOLO11n detector, measured on the
+[browser bench](https://github.com/mauriciobenjamin700/ort-vision-sdk/tree/main/bench/browser).
+
+### First: the input resolution
+
+A model's cost grows with the input's **area**. At 320×320 the image has ¼ of
+the pixels of 640×640, and the time drops almost in proportion:
+
+| Backend | 640×640 | 320×320 | Speedup |
+| --- | --- | --- | --- |
+| WASM FP32 | 2575 ms | 697 ms | 3.7× |
+| WASM INT8 | 1348 ms | 390 ms | 3.5× |
+| **WebGPU FP32** | 1037 ms | **223 ms** | **4.7×** |
+| WebGPU FP16 | 1469 ms | 489 ms | 3.0× |
+
+No other lever comes close. But a smaller resolution is an **accuracy**
+decision, not only a speed one: re-export (and retrain if needed) at the new
+resolution and validate on your test set before switching. On this detector,
+the model trained at 320 tied with the 640 one.
+
+!!! warning "Compare models in the same page"
+    A phone's clock changes from one measurement to the next. On this device,
+    the same WebGPU run varied 2.4× between pages opened minutes apart. Two
+    separate pages measure the device's state, not the models. The bench
+    alternates the models in one page:
+    `run.html?task=detect&compare=model-640,model-320&only=compare`.
+
+### Then: the backend
+
+With the model at 320, ask for WebGPU and keep WASM as the fallback:
+
+```typescript
+import { Detector } from "@mauriciobenjamin700/ort-vision-sdk-web";
+
+const det = await Detector.create("/models/detect-320.onnx", {
+  providers: ["webgpu", "wasm"],
+  cache: true,
+});
+await det.warmup(2);
+
+const input = document.querySelector<HTMLInputElement>("input[type=file]")!;
+input.addEventListener("change", async () => {
+  const file = input.files?.[0];
+  if (!file) return;
+  const result = (await det.predict(file))[0];
+  console.log(det.session.providers, result.length, result.speed);
+});
+```
+
+`det.session.providers` tells which backend the session ended up on. On a phone
+without WebGPU it falls back to WASM on its own.
+
+Three things the measurement showed:
+
+- **WebGPU FP32 won.** On this Mali, FP16 was **slower** than FP32 (489 vs
+  223 ms), even with `shader-f16` available. Measure on your device before
+  shipping an FP16 export for speed.
+- **On WASM, INT8 nearly doubles the speed** (697 → 390 ms). It is the best
+  fallback for a phone without WebGPU, as long as you validate accuracy. Until
+  the fix for [#65](https://github.com/mauriciobenjamin700/ort-vision-sdk/issues/65),
+  `quantize_model` produced YOLO detectors with every score at 0.
+- **FP16 on WASM does not help latency**: it shrinks the download.
+
+### What did not pay off
+
+At 320×320 on WebGPU, each stage of the frame measured on its own:
+
+| Stage | ms |
+| --- | --- |
+| Letterbox + pixel readback | 11–18 |
+| Conversion to CHW float32 | 6–7 |
+| Input upload | ~12 |
+| GPU inference | ~200 |
+| Output download (42 KB) | ~6 |
+
+That is why three ideas that work on paper paid little here:
+
+- **Graph capture** (`enableGraphCapture`): −20 ms (9%), and it needs input
+  and output on the GPU.
+- **Preprocessing inside the graph**: at most the conversion and part of the
+  upload, ~15 ms.
+- **Shrinking the output inside the graph**: the output is already 42 KB; the
+  download is fixed latency.
+
+!!! tip "On another device, measure again"
+    A phone with a strong GPU and a weak CPU shifts the balance. The bench's
+    `breakdown` section gives this same table on your device:
+    `run.html?set=your-model&task=detect&only=breakdown`.
+
 ## Recap
 
 - **Creation:** `cache: true` takes the network out of the way from the second
@@ -408,6 +505,9 @@ they explain numbers in `speed`:
   `load` drops ~75%.
 - The SDK already avoids copies in preprocessing and builds crops only when
   you ask for them.
+- **Phone:** lower the input resolution first (320 ran 3–4.7× faster than
+  640), then prefer WebGPU FP32 with WASM as the fallback; compare models in
+  the same page. 📱
 
 ## See also
 

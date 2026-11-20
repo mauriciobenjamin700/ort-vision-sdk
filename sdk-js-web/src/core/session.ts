@@ -13,13 +13,19 @@ import {
 } from "./dtypes.js";
 import { InferenceError, ModelLoadError } from "./exceptions.js";
 import { type DeclaredShape, declaredShapesFrom } from "./graph.js";
-import { readModelInputTypes, readModelMetadata, readModelShapes } from "./metadata.js";
+import {
+  modelHasHalfWeights,
+  readModelInputTypes,
+  readModelMetadata,
+  readModelShapes,
+} from "./metadata.js";
 import {
   FALLBACK_PROVIDER,
   type ProviderSpec,
   detectProviders,
   providerName,
   resolveProviders,
+  webGpuHasShaderF16,
 } from "./providers.js";
 
 /** Anything `InferenceSession.create` accepts. */
@@ -133,6 +139,37 @@ function keepQuantizedOffWebGpu(
   console.warn(
     `[@ort-vision-sdk/web] This model was quantized by quantize_model (${metadata[QUANTIZATION_KEY]}); ` +
       "ONNX Runtime Web's WebGPU backend cannot run its quantized operators, so it runs on WASM.",
+  );
+  return kept.length > 0 ? kept : [FALLBACK_PROVIDER];
+}
+
+/**
+ * Drop `webgpu` for a half-precision model when the adapter lacks `shader-f16`.
+ *
+ * The session would build and every run would succeed with an all-zero output
+ * — no boxes, no scores, no error — which is the worst way for a model to be
+ * wrong. See {@link webGpuHasShaderF16} for the measurement. WASM runs the same
+ * file correctly, so the session goes there and says so. Only models whose bytes
+ * the SDK holds are checked: a URL passed through with `readMetadata: false` and
+ * no cache is never read here.
+ *
+ * @param specs Providers left after the earlier checks.
+ * @param source The model's bytes, or the URL ORT will fetch itself.
+ * @returns `specs` without `webgpu` when the model is half and the adapter
+ *   cannot run it; the WASM fallback when nothing else is left.
+ */
+async function keepHalfOffWebGpuWithoutF16(
+  specs: readonly ProviderSpec[],
+  source: ModelSource,
+): Promise<ProviderSpec[]> {
+  if (!specs.some((spec) => providerName(spec) === "webgpu")) return [...specs];
+  if (typeof source === "string" || !modelHasHalfWeights(source)) return [...specs];
+  if (await webGpuHasShaderF16()) return [...specs];
+  const kept = specs.filter((spec) => providerName(spec) !== "webgpu");
+  console.warn(
+    "[@ort-vision-sdk/web] This model stores its weights in float16 and this device's WebGPU " +
+      "adapter has no shader-f16, where ONNX Runtime Web returns all-zero outputs without an " +
+      "error; it runs on WASM instead. Use a float32 export to run on this device's GPU.",
   );
   return kept.length > 0 ? kept : [FALLBACK_PROVIDER];
 }
@@ -487,7 +524,10 @@ export class OrtSession {
     ]);
     const metadata =
       wantsMetadata && typeof source !== "string" ? readModelMetadata(source) : {};
-    const specs = keepQuantizedOffWebGpu(detected, metadata);
+    const specs = await keepHalfOffWebGpuWithoutF16(
+      keepQuantizedOffWebGpu(detected, metadata),
+      source,
+    );
     const requestedNames = requested.map(providerName);
     const providers = specs.map(providerName);
     if (options.providers !== undefined && options.providers.length > 0) {

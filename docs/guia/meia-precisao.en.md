@@ -159,6 +159,26 @@ precision inside a `BoundingBox`.
     download or memory, not when it is inference time. WebGPU is a different
     question — and where there is no adapter, there is no better answer.
 
+!!! danger "WebGPU without `shader-f16`: an all-zero output, no error"
+    On a WebGPU adapter without the `shader-f16` feature, ONNX Runtime Web runs
+    an FP16 model and returns **all zeros**: no boxes, no scores, no exception.
+    Measured on `onnxruntime-web` 1.25.1 with a half-precision YOLO11n detector
+    (float32 inputs and outputs). The same file on WASM matched FP32.
+
+    The SDK handles it: when the model's weights are float16 and the adapter
+    does not offer `shader-f16`, it drops `webgpu` from the providers, runs on
+    WASM and warns in the console. To use that device's GPU, ship the FP32
+    export.
+
+    ```typescript
+    import { Detector } from "@mauriciobenjamin700/ort-vision-sdk-web";
+
+    const det = await Detector.create("/models/detect-fp16.onnx", {
+      providers: ["webgpu", "wasm"],
+    });
+    console.log(det.session.providers); // ["wasm"] on an adapter without shader-f16
+    ```
+
 !!! note "Where the difference really shows"
     Half-precision **weights** change the activations, and therefore the
     confidences, in the decimals. The predicted class rarely moves; the number
@@ -175,3 +195,5 @@ precision inside a `BoundingBox`.
   `create()`, with a message saying so.
 - In a fused pipeline the stages are float16 and the bridge is float32 —
   `NonMaxSuppression` accepts nothing else.
+- WebGPU without `shader-f16` returns zeros for an FP16 model; the SDK sends
+  that case to WASM and warns.

@@ -435,3 +435,69 @@ describe("OrtSession.create with a quantized model", () => {
     expect(session.providers).toEqual(["webgpu", "wasm"]);
   });
 });
+
+describe("OrtSession.create with a half-precision model", () => {
+  /**
+   * A model whose graph holds one float16 initializer, plus a metadata map.
+   *
+   * Float32 at the edges is the case that matters: the declared input types say
+   * float32, so only the weights give the model away.
+   */
+  function halfModelProto(): Uint8Array {
+    const tensor = [8, 1, 16, 10];
+    const graph = lengthDelimited(5, tensor);
+    return new Uint8Array([...lengthDelimited(7, graph), ...modelProto({ task: "detect" })]);
+  }
+
+  /** A navigator whose WebGPU adapter lists the given features. */
+  function adapterWith(features: readonly string[]): void {
+    vi.stubGlobal("navigator", {
+      gpu: { requestAdapter: () => Promise.resolve({ features: new Set(features) }) },
+    });
+  }
+
+  it("keeps it off WebGPU when the adapter has no shader-f16, and says why", async () => {
+    adapterWith([]);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    serveModel(halfModelProto());
+
+    const session = await OrtSession.create("/models/half.onnx", { providers: ["webgpu", "wasm"] });
+
+    const call = createSession.mock.calls.at(-1) as unknown[];
+    expect((call[1] as Record<string, unknown>).executionProviders).toEqual(["wasm"]);
+    expect(session.providers).toEqual(["wasm"]);
+    const messages = warn.mock.calls.map((c) => String(c[0]));
+    expect(messages.some((m) => m.includes("shader-f16"))).toBe(true);
+    expect(messages.some((m) => m.includes("This browser cannot offer"))).toBe(false);
+    warn.mockRestore();
+  });
+
+  it("falls back to WASM when WebGPU was the only provider asked for", async () => {
+    adapterWith([]);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    serveModel(halfModelProto());
+
+    const session = await OrtSession.create("/models/half.onnx", { providers: ["webgpu"] });
+
+    expect(session.providers).toEqual(["wasm"]);
+    warn.mockRestore();
+  });
+
+  it("leaves it on WebGPU when the adapter offers shader-f16", async () => {
+    adapterWith(["shader-f16"]);
+    serveModel(halfModelProto());
+
+    const session = await OrtSession.create("/models/half.onnx", { providers: ["webgpu", "wasm"] });
+
+    expect(session.providers).toEqual(["webgpu", "wasm"]);
+  });
+
+  it("leaves a float32 model on WebGPU whatever the adapter offers", async () => {
+    adapterWith([]);
+    serveModel(modelProto({ task: "detect" }));
+
+    const session = await OrtSession.create("/models/fp32.onnx", { providers: ["webgpu", "wasm"] });
+
+    expect(session.providers).toEqual(["webgpu", "wasm"]);
+  });
+});

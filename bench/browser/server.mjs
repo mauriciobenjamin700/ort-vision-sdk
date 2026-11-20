@@ -24,6 +24,14 @@
  * Binds 127.0.0.1. Reach it from an Android phone with
  * `adb reverse tcp:8765 tcp:8765` and open `http://localhost:8765/...` there:
  * `localhost` is a secure context, which WebGPU and Cache Storage require.
+ *
+ * Without adb, `--host 0.0.0.0` exposes it on the LAN. The whole repository is
+ * then readable by anyone on that network while it runs, and the phone sees an
+ * insecure origin: no WebGPU, no Cache Storage, no cross-origin isolation (so
+ * one WASM thread) until the origin is listed in Chrome's
+ * `chrome://flags/#unsafely-treat-insecure-origin-as-secure`.
+ *
+ *   node bench/browser/server.mjs --host 0.0.0.0
  */
 
 import { createServer } from "node:http";
@@ -103,7 +111,7 @@ createServer(async (request, response) => {
   } catch {
     response.writeHead(404).end("not found");
   }
-}).listen(port, "127.0.0.1", () => {
+}).listen(port, flag("host", "127.0.0.1"), () => {
   const cap = bandwidthMBps > 0 ? `, .onnx/.wasm capped at ${bandwidthMBps} MB/s` : "";
   console.log(`http://localhost:${port}/bench/browser/run.html${cap}`);
 });

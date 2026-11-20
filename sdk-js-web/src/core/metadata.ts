@@ -28,6 +28,24 @@ const GRAPH_INPUT_FIELD = 11;
 /** Field number of `output` in `GraphProto` (repeated ValueInfoProto). */
 const GRAPH_OUTPUT_FIELD = 12;
 
+/** Field number of `initializer` in `GraphProto` (repeated TensorProto). */
+const GRAPH_INITIALIZER_FIELD = 5;
+
+/** Field number of `data_type` in `TensorProto`. */
+const TENSOR_DATA_TYPE_FIELD = 2;
+
+/** Field number of `node` in `GraphProto` (repeated NodeProto). */
+const GRAPH_NODE_FIELD = 1;
+
+/** Field number of `attribute` in `NodeProto` (repeated AttributeProto). */
+const NODE_ATTRIBUTE_FIELD = 5;
+
+/** Field number of `t` in `AttributeProto` (a single TensorProto). */
+const ATTRIBUTE_TENSOR_FIELD = 5;
+
+/** `TensorProto.DataType.FLOAT16`. */
+const TENSOR_FLOAT16 = 10;
+
 /** Field numbers of `name` and `type` in `ValueInfoProto`. */
 const VALUE_INFO_NAME_FIELD = 1;
 const VALUE_INFO_TYPE_FIELD = 2;
@@ -566,4 +584,90 @@ function unescapeQuoted(text: string): string {
     if (char === "t") return "\t";
     return char;
   });
+}
+
+/**
+ * Read one `TensorProto`'s `data_type`.
+ *
+ * @param bytes The model buffer.
+ * @param start Offset the tensor's payload starts at.
+ * @param end Offset the tensor's payload ends at.
+ * @returns The `TensorProto.DataType` value, or `null` when the field is absent
+ *   or unreadable.
+ */
+function readTensorDataType(bytes: Uint8Array, start: number, end: number): number | null {
+  const cursor: Cursor = { bytes, end, pos: start };
+  while (cursor.pos < cursor.end) {
+    const tag = readVarint(cursor);
+    if (tag === null) return null;
+    if (tag >>> 3 === TENSOR_DATA_TYPE_FIELD && (tag & 0x07) === WIRE_VARINT) {
+      return readVarint(cursor);
+    }
+    if (!skipField(cursor, tag & 0x07)) return null;
+  }
+  return null;
+}
+
+/**
+ * Whether a length-delimited message holds a float16 tensor at `path`.
+ *
+ * Walks one level per entry of `path`, following only that field number, and
+ * reads the tensor's `data_type` at the end. Everything else is skipped.
+ *
+ * @param bytes The model buffer.
+ * @param start Offset the message's payload starts at.
+ * @param end Offset the message's payload ends at.
+ * @param path Field numbers from this message down to the `TensorProto`.
+ * @returns `true` when some tensor along `path` is float16.
+ */
+function holdsHalfTensor(
+  bytes: Uint8Array,
+  start: number,
+  end: number,
+  path: readonly number[],
+): boolean {
+  if (path.length === 0) return readTensorDataType(bytes, start, end) === TENSOR_FLOAT16;
+  const [next, ...rest] = path;
+  const cursor: Cursor = { bytes, end, pos: start };
+  while (cursor.pos < cursor.end) {
+    const tag = readVarint(cursor);
+    if (tag === null) return false;
+    const wireType = tag & 0x07;
+    if (tag >>> 3 === next && wireType === WIRE_LENGTH_DELIMITED) {
+      const range = readLengthDelimited(cursor, bytes.length);
+      if (range === null) return false;
+      if (holdsHalfTensor(bytes, range.start, range.end, rest)) return true;
+      continue;
+    }
+    if (!skipField(cursor, wireType)) return false;
+  }
+  return false;
+}
+
+/**
+ * Whether the graph stores any of its weights in float16.
+ *
+ * That is what a half-precision export looks like from the outside, including
+ * one whose inputs and outputs were kept in float32 (`keep_io_types`,
+ * Ultralytics' `half=True` before 8.4.106): the weights are half, the edges are
+ * not, so {@link readModelInputTypes} alone cannot tell. Weights live in two
+ * places, and both are checked: the graph's initializers, and the `value`
+ * tensor of `Constant` nodes, which some exporters use instead. Tensor
+ * payloads are skipped, not read — only each tensor's type field is decoded.
+ *
+ * @param model The `.onnx` file contents.
+ * @returns `true` on the first float16 weight; `false` when there is none or
+ *   the file carries no readable graph.
+ */
+export function modelHasHalfWeights(model: Uint8Array | ArrayBufferLike): boolean {
+  const bytes = model instanceof Uint8Array ? model : new Uint8Array(model);
+  return (
+    holdsHalfTensor(bytes, 0, bytes.length, [MODEL_GRAPH_FIELD, GRAPH_INITIALIZER_FIELD]) ||
+    holdsHalfTensor(bytes, 0, bytes.length, [
+      MODEL_GRAPH_FIELD,
+      GRAPH_NODE_FIELD,
+      NODE_ATTRIBUTE_FIELD,
+      ATTRIBUTE_TENSOR_FIELD,
+    ])
+  );
 }

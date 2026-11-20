@@ -138,6 +138,7 @@ def quantize_model(
     with tempfile.TemporaryDirectory() as scratch:
         prepared = Path(scratch) / "prepared.onnx"
         quant_pre_process(str(source), str(prepared), skip_symbolic_shape=True)
+        excluded = _name_output_producers(prepared)
         quantize_static(
             str(prepared),
             str(destination),
@@ -146,11 +147,57 @@ def quantize_model(
             per_channel=per_channel,
             activation_type=QuantType.QUInt8,
             weight_type=QuantType.QInt8,
+            nodes_to_exclude=excluded,
         )
     scheme = "qdq-u8s8-per-channel" if per_channel else "qdq-u8s8-per-tensor"
     with destination.open("ab") as handle:
         handle.write(_metadata_entry(QUANTIZATION_KEY, scheme))
     return destination
+
+
+def _name_output_producers(model: Path) -> list[str]:
+    """Name the nodes that produce the graph's outputs, and return those names.
+
+    These nodes stay in float32. An Ultralytics detection head ends in one
+    ``Concat`` that joins boxes in pixels (``[0, 640]``) with sigmoid scores
+    (``[0, 1]``); quantized, that tensor gets a single int8 scale sized by the
+    boxes, about 2.5 per step, and every score rounds to 0 — the model loads,
+    runs and detects nothing (#65). Keeping the last node out costs one
+    operator at the end of the graph, and the tensors feeding it are still
+    quantized, each with its own range.
+
+    ``quantize_static`` excludes nodes by name, and exported graphs often leave
+    nodes unnamed, so any unnamed producer gets a name first and the model is
+    rewritten in place.
+
+    Args:
+        model: The pre-processed model about to be quantized. Modified when a
+            producer had no name.
+
+    Returns:
+        The names of every node that writes a graph output.
+    """
+    import onnx
+
+    proto = onnx.load(str(model))
+    outputs = {value.name for value in proto.graph.output}
+    taken = {node.name for node in proto.graph.node if node.name}
+    names: list[str] = []
+    renamed = False
+    for index, node in enumerate(proto.graph.node):
+        if not outputs.intersection(node.output):
+            continue
+        if not node.name:
+            candidate = f"ort_vision_sdk_output_{index}"
+            while candidate in taken:
+                candidate += "_"
+            node.name = candidate
+            taken.add(candidate)
+            renamed = True
+        names.append(node.name)
+    if renamed:
+        onnx.save(proto, str(model))
+    return names
 
 
 def _task_preprocess(

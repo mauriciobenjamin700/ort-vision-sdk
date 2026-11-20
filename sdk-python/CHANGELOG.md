@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **`quantize_model` no longer zeroes a detector's scores** (#65). A YOLO
+  detection head ends in one `Concat` joining boxes in pixels (`[0, 640]`)
+  with sigmoid scores (`[0, 1]`); quantized, that tensor got a single int8
+  scale of ~2.5 per step and every score rounded to 0, so the model loaded,
+  ran and detected nothing, with no error. The nodes that write the graph's
+  outputs now stay in float32. Measured on a one-class YOLO11n detector: 0
+  detections before, top confidence 0.895 after (0.868 in FP32) at 640, and
+  0.948 (0.946) at 320, at the same CPU latency. The YOLO11n-seg in the
+  benchmark was not affected, which is why its numbers never showed it.
+
 ## [0.12.0] - 2026-10-03
 
 ### Added

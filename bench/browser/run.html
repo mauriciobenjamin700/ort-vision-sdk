@@ -12,7 +12,7 @@
 </style></head>
 <body>
 <h1>Bancada ort-vision-sdk</h1>
-<p class="muted">Parâmetros na URL: <code>?task=segment|detect|classify</code>, <code>?size=640</code>, <code>?threads=N</code>, <code>?proxy=1</code>, <code>?quick=1</code>, <code>?ramp=400</code>, <code>?timeout=180000</code>. Deixe a aba visível até terminar — a página avisa se ela não ficou. Modelos em <code>bench/browser/models/</code> — veja o README ao lado.</p>
+<p class="muted">Parâmetros na URL: <code>?task=segment|detect|classify</code>, <code>?size=640</code>, <code>?threads=N</code>, <code>?proxy=1</code>, <code>?quick=1</code>, <code>?only=check,raw,sdk,breakdown,pipelining</code>, <code>?set=nome</code>, <code>?ramp=400</code>, <code>?timeout=180000</code>. Deixe a aba visível até terminar — a página avisa se ela não ficou. Modelos em <code>bench/browser/models/</code> — veja o README ao lado.</p>
 <button id="copy" disabled>Copiar JSON</button>
 <pre id="log">iniciando…</pre>
 <script type="module">
@@ -23,8 +23,11 @@ if (params.get("threads")) ort.env.wasm.numThreads = Number(params.get("threads"
 if (params.get("proxy")) ort.env.wasm.proxy = true;
 const quick = params.get("quick") === "1";
 const SIZE = Number(params.get("size") ?? 640);
+const PAGE_SIZE = SIZE;
 const TASK = params.get("task") ?? "segment";
 const REPS = quick ? 3 : 7;
+const ONLY = params.get("only") ? new Set(params.get("only").split(",")) : null;
+const runs = (section) => ONLY === null || ONLY.has(section);
 // Aba oculta é a principal fonte de número errado nesta bancada: o Chrome
 // trata janela coberta como oculta, e aba oculta faz ele suspender o trabalho
 // de WebGPU. Isso trava a bateria, e — pior — às vezes só a deixa lenta, o que
@@ -42,17 +45,18 @@ const withTimeout = (p, what) => Promise.race([
   new Promise((_, reject) => setTimeout(() => reject(new Error(`TIMEOUT apos ${TIMEOUT_MS}ms em ${what}`)), TIMEOUT_MS)),
 ]);
 const SDK = await import("/sdk-js-web/dist/index.js");
-const M = "/bench/browser/models/";
+const SET = params.get("set");
+const M = SET ? `/bench/browser/models/${encodeURIComponent(SET)}/` : "/bench/browser/models/";
 const Task = { segment: SDK.Segmenter, detect: SDK.Detector, classify: SDK.Classifier }[TASK];
-const out = { env: {}, raw: {}, sdk: {}, pipelining: {} };
+const out = { env: {}, check: {}, raw: {}, sdk: {}, compare: {}, breakdown: {}, pipelining: {} };
 const logEl = document.getElementById("log");
 const show = (msg) => { logEl.textContent = (msg ? msg + "\n\n" : "") + JSON.stringify(out, null, 1); };
 const median = (xs) => { const s = [...xs].sort((a, b) => a - b); return +s[Math.floor(s.length / 2)].toFixed(1); };
 
 out.env = {
-  task: TASK, size: SIZE, userAgent: navigator.userAgent, cores: navigator.hardwareConcurrency, memoryGB: navigator.deviceMemory ?? null,
+  task: TASK, set: SET, size: SIZE, userAgent: navigator.userAgent, cores: navigator.hardwareConcurrency, memoryGB: navigator.deviceMemory ?? null,
   isolated: crossOriginIsolated, secure: isSecureContext, threads: params.get("threads") ?? "default", proxy: !!params.get("proxy"),
-  visibility: document.visibilityState, rampMs: RAMP_MS, reps: REPS,
+  visibility: document.visibilityState, rampMs: RAMP_MS, reps: REPS, compare: params.get("compare"), rounds: params.get("rounds"),
 };
 if (navigator.gpu) {
   const adapter = await navigator.gpu.requestAdapter();
@@ -87,6 +91,60 @@ async function raw(...args) {
   catch (e) { out.raw[args[0]] = { error: String(e).slice(0, 200) }; }
 }
 const hasGpu = typeof out.env.webgpu === "object";
+// Uma variante rápida que devolve lixo não é variante: os tempos abaixo só
+// valem para as que passam aqui. Cada variante roda a mesma entrada
+// determinística e a primeira saída é comparada com a do FP32 no WASM. Foi o
+// que faltou para ver dois defeitos que saíam rápidos e calados: o INT8 de
+// detector com todo score 0 (#65) e o FP16 no WebGPU devolvendo saída toda
+// zero num adapter sem `shader-f16`. `scoreRatio` compara o maior valor fora
+// das 4 primeiras linhas (os scores de uma cabeça YOLO); perto de 1 é o
+// esperado, 0 é o modelo mudo.
+async function checkOne(file, provider, reference) {
+  const response = await fetch(M + file);
+  if (!response.ok) return { skipped: file + " não encontrado" };
+  const s = await ort.InferenceSession.create(new Uint8Array(await response.arrayBuffer()), { executionProviders: [provider] });
+  const name = s.inputNames[0];
+  const shape = (s.inputMetadata?.[0]?.shape ?? [1, 3, SIZE, SIZE]).map((d) => (typeof d === "number" ? d : 1));
+  const x = new Float32Array(shape.reduce((a, b) => a * b, 1));
+  for (let i = 0; i < x.length; i++) x[i] = ((i * 2654435761) % 1000) / 1000;
+  const o = (await s.run({ [name]: new ort.Tensor("float32", x, shape) }))[s.outputNames[0]];
+  await s.release();
+  const data = Float32Array.from(o.data, Number);
+  const rows = o.dims.length === 3 ? o.dims[2] : 0;
+  let scoreMax = -Infinity, nan = 0, allZero = true;
+  for (let i = 0; i < data.length; i++) {
+    const v = data[i];
+    if (Number.isNaN(v)) { nan++; continue; }
+    if (v !== 0) allZero = false;
+    if (i >= 4 * rows) scoreMax = Math.max(scoreMax, v);
+  }
+  const result = { scoreMax: +scoreMax.toFixed(4), nan, allZero };
+  if (reference) {
+    let maxAbs = 0;
+    for (let i = 0; i < data.length; i++) maxAbs = Math.max(maxAbs, Math.abs(data[i] - reference.data[i]));
+    result.maxAbsDiff = +maxAbs.toFixed(4);
+    result.scoreRatio = reference.scoreMax !== 0 ? +(scoreMax / reference.scoreMax).toFixed(3) : null;
+  }
+  return Object.assign(result, { data });
+}
+if (runs("check")) {
+  show("conferindo saídas");
+  const variants = [["wasm_int8", "model.int8.onnx", "wasm"], ["wasm_fp16", "model.fp16.onnx", "wasm"]];
+  if (hasGpu) variants.push(["webgpu_fp32", "model.onnx", "webgpu"], ["webgpu_fp16", "model.fp16.onnx", "webgpu"]);
+  try {
+    const reference = await withTimeout(checkOne("model.onnx", "wasm", null), "check:reference");
+    out.check.wasm_fp32 = { scoreMax: reference.scoreMax, nan: reference.nan, allZero: reference.allZero };
+    for (const [label, file, provider] of variants) {
+      try {
+        const { data, ...summary } = await withTimeout(checkOne(file, provider, reference), `check:${label}`);
+        out.check[label] = summary;
+      } catch (e) { out.check[label] = { error: String(e).slice(0, 200) }; }
+      show("conferindo saídas: " + label);
+    }
+  } catch (e) { out.check.wasm_fp32 = { error: String(e).slice(0, 200) }; }
+}
+
+if (runs("raw")) {
 await raw("wasm_fp32", M + "model.onnx", ["wasm"]);
 await raw("wasm_int8", M + "model.int8.onnx", ["wasm"]);
 await raw("wasm_preopt", M + "model.opt.onnx", ["wasm"], { graphOptimizationLevel: "disabled" });
@@ -95,6 +153,7 @@ if (hasGpu) {
   await raw("webgpu_fp32_nhwc", M + "model.onnx", [{ name: "webgpu", preferredLayout: "NHWC" }]);
   await raw("webgpu_fp16", M + "model.fp16.onnx", ["webgpu"]);
   await raw("webgpu_preopt", M + "model.opt.onnx", ["webgpu"], { graphOptimizationLevel: "disabled" });
+}
 }
 
 const img = new Image(); img.src = M + "image.jpg"; await img.decode();
@@ -121,12 +180,211 @@ async function sdk(...args) {
   try { await withTimeout(sdkInner(...args), `sdk:${args[0]}`); }
   catch (e) { out.sdk[args[0]] = { error: String(e).slice(0, 200) }; }
 }
+// Comparação entre conjuntos de modelos na MESMA página, em rounds alternados.
+// No celular o clock muda entre rodadas: medido num Mali Bifrost, o WebGPU —
+// que o número de threads do WASM não afeta — variou 2,4x entre páginas
+// abertas com minutos de diferença. Duas páginas separadas comparam o estado
+// do aparelho, não os modelos. Aqui os dois modelos ficam carregados e se
+// revezam a cada round, então a deriva atinge os dois igualmente, e a mediana
+// de cada round vai no JSON para a deriva aparecer em vez de sumir.
+const COMPARE = (params.get("compare") ?? "").split(",").filter(Boolean);
+const ROUNDS = Number(params.get("rounds")) || (quick ? 2 : 4);
+async function compareInner(label, file, providers) {
+  show("comparação alternada: " + label);
+  const tasks = [];
+  for (const set of COMPARE) {
+    const url = `/bench/browser/models/${encodeURIComponent(set)}/${file}`;
+    if (!(await fetch(url, { method: "HEAD" })).ok) { out.compare[label] = { skipped: url + " não encontrado" }; return; }
+    const task = await Task.create(url, { providers });
+    await task.warmup(2);
+    tasks.push([set, task]);
+  }
+  const perRound = Object.fromEntries(COMPARE.map((set) => [set, []]));
+  const all = Object.fromEntries(COMPARE.map((set) => [set, { inference: [], total: [] }]));
+  for (let round = 0; round < ROUNDS; round++) {
+    const order = round % 2 === 0 ? tasks : [...tasks].reverse();
+    for (const [set, task] of order) {
+      show(`comparação alternada: ${label} · round ${round + 1}/${ROUNDS} · ${set}`);
+      const ramp = performance.now();
+      while (performance.now() - ramp < RAMP_MS) await task.predict(frame);
+      const xs = [];
+      for (let i = 0; i < REPS; i++) {
+        const t = performance.now();
+        const r = (await task.predict(frame))[0];
+        all[set].total.push(performance.now() - t);
+        all[set].inference.push(r.speed.inference);
+        xs.push(r.speed.inference);
+      }
+      perRound[set].push(median(xs));
+    }
+  }
+  const result = { providers: tasks[0][1].session.providers };
+  for (const set of COMPARE) {
+    result[set] = { inference: median(all[set].inference), totalMs: median(all[set].total), inferencePerRound: perRound[set] };
+  }
+  const [base, ...others] = COMPARE;
+  for (const set of others) {
+    result[`speedup_${set}_vs_${base}`] = +(result[base].inference / result[set].inference).toFixed(2);
+  }
+  out.compare[label] = result;
+  for (const [, task] of tasks) await task.session.release();
+}
+async function compare(...args) {
+  try { await withTimeout(compareInner(...args), `compare:${args[0]}`); }
+  catch (e) { out.compare[args[0]] = { error: String(e).slice(0, 200) }; }
+}
+if (COMPARE.length > 0) {
+  await compare("wasm_fp32", "model.onnx", ["wasm"]);
+  await compare("wasm_int8", "model.int8.onnx", ["wasm"]);
+  if (hasGpu) {
+    await compare("webgpu_fp32", "model.onnx", ["webgpu"]);
+    await compare("webgpu_fp16", "model.fp16.onnx", ["webgpu"]);
+  }
+}
+
+if (runs("sdk")) {
 await sdk("wasm_fp32", M + "model.onnx", ["wasm"]);
 await sdk("wasm_int8", M + "model.int8.onnx", ["wasm"]);
 if (hasGpu) {
   await sdk("webgpu_fp32", M + "model.onnx", ["webgpu"]);
   await sdk("webgpu_fp16", M + "model.fp16.onnx", ["webgpu"]);
 }
+}
+
+// Quebra de um quadro 1080p em cada fronteira de cópia, refazendo à mão o
+// caminho rápido do SDK (LetterboxPipeline: canvas alvo com
+// willReadFrequently, drawImage "high", getImageData, laço CHW). O `speed` do
+// SDK junta desenho+readback+normalização em `preprocess` e upload+modelo+
+// download em `inference`; aqui cada um sai separado, que é o que decide se
+// pré-processar no grafo, reduzir a saída no grafo ou manter IO na GPU paga.
+//
+// O Chrome adia o `drawImage` e só o executa no `getImageData` seguinte, então
+// desenho e readback saem juntos: cronometrados à parte, o desenho dava 0 ms.
+//
+// No WebGPU, `run` com saída `gpu-buffer` pode resolver antes da GPU terminar.
+// Por isso `gpuDrainMs` espera `onSubmittedWorkDone()` à parte, e
+// `downloadMs` fica só com o mapeamento e a cópia de volta.
+//
+// `runGraphMs` é a mesma execução com `enableGraphCapture`: o ORT grava os
+// comandos da GPU na primeira `run` e depois só os reexecuta, sem a CPU
+// despachar kernel por kernel. Num celular, esse despacho (`runGpuOutMs`) foi
+// mais da metade da inferência. Exige IO na GPU e shapes fixos; quando o
+// modelo não suporta, o motivo vai em `graphCaptureError` e o resto segue.
+const timed = async (fn) => { const t = performance.now(); const v = await fn(); return [performance.now() - t, v]; };
+async function breakdownInner(label, model, providers) {
+  show("quebra do quadro: " + label);
+  const response = await fetch(model);
+  if (!response.ok) { out.breakdown[label] = { skipped: model + " não encontrado" }; return; }
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  const gpu = providers.some((p) => (p.name ?? p) === "webgpu");
+  const s = await ort.InferenceSession.create(bytes, { executionProviders: providers });
+  const sGpuOut = gpu ? await ort.InferenceSession.create(bytes, { executionProviders: providers, preferredOutputLocation: "gpu-buffer" }) : null;
+  let sGraph = null, graphError = null, graphMaxAbsDiff = null;
+  if (gpu) {
+    try {
+      sGraph = await ort.InferenceSession.create(bytes, { executionProviders: providers, preferredOutputLocation: "gpu-buffer", enableGraphCapture: true });
+    } catch (e) { graphError = "create: " + String(e).slice(0, 200); }
+  }
+  const input = s.inputNames[0];
+  const declared = s.inputMetadata?.[0]?.shape?.[2];
+  const SIZE = typeof declared === "number" ? declared : PAGE_SIZE;
+  const plane = SIZE * SIZE;
+  const dims = [1, 3, SIZE, SIZE];
+
+  const scale = Math.min(SIZE / frame.width, SIZE / frame.height);
+  const w = Math.round(frame.width * scale), h = Math.round(frame.height * scale);
+  const left = Math.floor((SIZE - w) / 2), top = Math.floor((SIZE - h) / 2);
+  const mk = (wrf) => {
+    const c = document.createElement("canvas"); c.width = SIZE; c.height = SIZE;
+    const ctx = c.getContext("2d", { willReadFrequently: wrf });
+    ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = "high";
+    return ctx;
+  };
+  const cpuCtx = mk(true), gpuCtx = mk(false);
+  const letterbox = (ctx) => {
+    ctx.fillStyle = "rgb(114,114,114)"; ctx.fillRect(0, 0, SIZE, SIZE);
+    ctx.drawImage(frame, 0, 0, frame.width, frame.height, left, top, w, h);
+  };
+  const toChw = (rgba) => {
+    const data = new Float32Array(3 * plane);
+    for (let p = 0, o = 0; p < plane; p++, o += 4) {
+      data[p] = rgba[o] / 255; data[plane + p] = rgba[o + 1] / 255; data[2 * plane + p] = rgba[o + 2] / 255;
+    }
+    return data;
+  };
+
+  let device = null, gpuInput = null;
+  if (gpu) {
+    device = await ort.env.webgpu.device;
+    gpuInput = device.createBuffer({ size: 3 * plane * 4, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST });
+    device.queue.writeBuffer(gpuInput, 0, new Float32Array(3 * plane).fill(0.5));
+  }
+
+  const rec = { drawReadback: [], drawReadbackGpuCanvas: [], normalize: [], runCpuIo: [], runGpuOut: [], gpuDrain: [], download: [], runGpuIo: [], downloadGpuIo: [], runGraph: [], downloadGraph: [] };
+  let outputBytes = 0;
+  let canvasDiff = null;
+  const once = async () => {
+    const [rb, img] = await timed(() => { letterbox(cpuCtx); return cpuCtx.getImageData(0, 0, SIZE, SIZE).data; });
+    rec.drawReadback.push(rb);
+    const [rbg, gpuImg] = await timed(() => { letterbox(gpuCtx); return gpuCtx.getImageData(0, 0, SIZE, SIZE).data; });
+    rec.drawReadbackGpuCanvas.push(rbg);
+    let maxDiff = 0, sumDiff = 0, changed = 0;
+    for (let o = 0; o < img.length; o++) {
+      if ((o & 3) === 3) continue;
+      const d = Math.abs(img[o] - gpuImg[o]);
+      if (d > 0) changed++;
+      sumDiff += d;
+      if (d > maxDiff) maxDiff = d;
+    }
+    canvasDiff = { maxAbs: maxDiff, meanAbs: +(sumDiff / (plane * 3)).toFixed(3), changedFraction: +(changed / (plane * 3)).toFixed(4) };
+    const [nm, chw] = await timed(() => toChw(img));
+    rec.normalize.push(nm);
+    const [rc, outs] = await timed(() => s.run({ [input]: new ort.Tensor("float32", chw, dims) }));
+    rec.runCpuIo.push(rc);
+    outputBytes = Object.values(outs).reduce((n, t) => n + t.data.byteLength, 0);
+    if (!gpu) return;
+    const [rg, gouts] = await timed(() => sGpuOut.run({ [input]: new ort.Tensor("float32", toChw(img), dims) }));
+    rec.runGpuOut.push(rg);
+    rec.gpuDrain.push((await timed(() => device.queue.onSubmittedWorkDone()))[0]);
+    rec.download.push((await timed(() => Promise.all(Object.values(gouts).map((t) => t.getData(true)))))[0]);
+    const feed = ort.Tensor.fromGpuBuffer(gpuInput, { dataType: "float32", dims });
+    const [ri, iouts] = await timed(async () => { const o = await sGpuOut.run({ [input]: feed }); await device.queue.onSubmittedWorkDone(); return o; });
+    rec.runGpuIo.push(ri);
+    const [dgi, ioData] = await timed(() => Promise.all(Object.values(iouts).map((t) => t.getData(true))));
+    rec.downloadGpuIo.push(dgi);
+    if (sGraph === null) return;
+    try {
+      const [rgc, couts] = await timed(async () => { const o = await sGraph.run({ [input]: feed }); await device.queue.onSubmittedWorkDone(); return o; });
+      rec.runGraph.push(rgc);
+      const [dg, graphData] = await timed(() => Promise.all(Object.values(couts).map((t) => t.getData())));
+      rec.downloadGraph.push(dg);
+      graphMaxAbsDiff = graphData.reduce((m, a, k) => a.reduce((mm, v, j) => Math.max(mm, Math.abs(v - ioData[k][j])), m), 0);
+    } catch (e) { graphError = "run: " + String(e).slice(0, 200); await sGraph.release().catch(() => undefined); sGraph = null; }
+  };
+
+  await once();
+  const ramp = performance.now();
+  while (performance.now() - ramp < RAMP_MS) await once();
+  for (const k of Object.keys(rec)) rec[k] = [];
+  for (let i = 0; i < REPS; i++) await once();
+
+  const result = { inputSize: SIZE, inputBytes: 3 * plane * 4, outputBytes };
+  for (const [k, xs] of Object.entries(rec)) if (xs.length > 0) result[k + "Ms"] = median(xs);
+  result.canvasPixelDiff = canvasDiff;
+  if (graphError !== null) result.graphCaptureError = graphError;
+  if (graphMaxAbsDiff !== null) result.graphMaxAbsDiff = graphMaxAbsDiff;
+  out.breakdown[label] = result;
+  gpuInput?.destroy();
+  await s.release();
+  await sGpuOut?.release();
+  await sGraph?.release();
+}
+async function breakdown(...args) {
+  try { await withTimeout(breakdownInner(...args), `breakdown:${args[0]}`); }
+  catch (e) { out.breakdown[args[0]] = { error: String(e).slice(0, 200) }; }
+}
+if (runs("breakdown")) await breakdown("wasm_fp32", M + "model.onnx", ["wasm"]);
+if (runs("breakdown") && hasGpu) await breakdown("webgpu_fp32", M + "model.onnx", ["webgpu"]);
 
 async function inflight(n, providers) {
   const seg = await Task.create(M + "model.onnx", { providers });
@@ -142,7 +400,7 @@ async function inflight(n, providers) {
   await seg.session.release();
   return +ms.toFixed(1);
 }
-for (const [label, providers] of [["wasm", ["wasm"]], ...(hasGpu ? [["webgpu", ["webgpu"]]] : [])]) {
+for (const [label, providers] of runs("pipelining") ? [["wasm", ["wasm"]], ...(hasGpu ? [["webgpu", ["webgpu"]]] : [])] : []) {
   show("pipelining: " + label);
   try {
     out.pipelining[label] = {

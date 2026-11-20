@@ -221,6 +221,16 @@ Medido no YOLO11n-seg (QDQ por canal, 24 imagens de calibração):
     principal ficou igual (confiança 0,663 → 0,659), mas meça no seu conjunto de
     validação antes de publicar.
 
+??? info "Por que o último nó do grafo fica em FP32"
+    A cabeça de um detector YOLO termina numa `Concat` que junta as caixas, em
+    pixel (0 a 640), com os scores, de 0 a 1. Quantizado, esse tensor ganha uma
+    escala int8 só, de ~2,5 por degrau, e todo score vira 0: o modelo carrega,
+    roda e não detecta nada. O `quantize_model` deixa em FP32 os nós que
+    escrevem as saídas do grafo. Num detector YOLO11n de uma classe, a
+    confiança da detecção principal foi de 0,868 (FP32) para 0,895 (INT8) a
+    640, e de 0,946 para 0,948 a 320, sem mudar o tempo de inferência.
+    Antes dessa correção, os dois davam 0 detecções.
+
 !!! note "No browser, INT8 roda em WASM"
     O backend WebGPU do ONNX Runtime Web não roda os operadores quantizados
     desse formato: o `DequantizeLinear` recusa o bias quantizado. O
@@ -400,6 +410,103 @@ explicam números do `speed`:
     chamador, o SDK monta os recortes **na hora**. O modo sob demanda vale só
     quando o próprio SDK alocou os pixels.
 
+## Na borda: o que pesa num celular
+
+Num desktop com GPU, metade do quadro é cópia e laço em JavaScript, e a outra
+metade é o modelo. Num celular, a conta é outra: **o modelo é quase tudo**, e
+otimizar as cópias rende pouco. Antes de mexer no pipeline, descubra em qual dos
+dois mundos você está. 📱
+
+Os números abaixo são de um celular Android 10 com GPU Mali (Bifrost), num
+detector YOLO11n de uma classe, medidos na
+[bancada de browser](https://github.com/mauriciobenjamin700/ort-vision-sdk/tree/main/bench/browser).
+
+### Primeiro: a resolução de entrada
+
+O custo do modelo cresce com a **área** da entrada. A 320×320 a imagem tem ¼ dos
+pixels de 640×640, e o tempo cai quase nessa proporção:
+
+| Backend | 640×640 | 320×320 | Ganho |
+| --- | --- | --- | --- |
+| WASM FP32 | 2575 ms | 697 ms | 3,7× |
+| WASM INT8 | 1348 ms | 390 ms | 3,5× |
+| **WebGPU FP32** | 1037 ms | **223 ms** | **4,7×** |
+| WebGPU FP16 | 1469 ms | 489 ms | 3,0× |
+
+Nenhuma outra alavanca chega perto. Mas resolução menor é decisão de
+**precisão**, não só de velocidade: reexporte (e, se preciso, retreine) na
+resolução nova e valide no seu conjunto de teste antes de trocar. Neste
+detector, o modelo treinado a 320 empatou com o de 640.
+
+!!! warning "Compare modelos na mesma página"
+    O clock do celular muda de uma medição para outra. Neste aparelho, o mesmo
+    WebGPU variou 2,4× entre páginas abertas com minutos de diferença. Duas
+    páginas separadas medem o estado do aparelho, não os modelos. A bancada
+    alterna os modelos na mesma página:
+    `run.html?task=detect&compare=modelo-640,modelo-320&only=compare`.
+
+### Depois: o backend
+
+Com o modelo a 320, peça WebGPU e deixe o WASM como reserva:
+
+```typescript
+import { Detector } from "@mauriciobenjamin700/ort-vision-sdk-web";
+
+const det = await Detector.create("/models/detect-320.onnx", {
+  providers: ["webgpu", "wasm"],
+  cache: true,
+});
+await det.warmup(2);
+
+const input = document.querySelector<HTMLInputElement>("input[type=file]")!;
+input.addEventListener("change", async () => {
+  const file = input.files?.[0];
+  if (!file) return;
+  const result = (await det.predict(file))[0];
+  console.log(det.session.providers, result.length, result.speed);
+});
+```
+
+`det.session.providers` diz em qual backend a sessão ficou. Num celular sem
+WebGPU, ela cai no WASM sozinha.
+
+Três coisas que a medição mostrou:
+
+- **WebGPU FP32 venceu.** Neste Mali, o FP16 foi **mais lento** que o FP32
+  (489 contra 223 ms), mesmo com `shader-f16` disponível. Meça no seu aparelho
+  antes de publicar um export FP16 pensando em velocidade.
+- **No WASM, INT8 quase dobra a velocidade** (697 → 390 ms). É a melhor reserva
+  para celular sem WebGPU, desde que você valide a precisão. Até a correção do
+  [#65](https://github.com/mauriciobenjamin700/ort-vision-sdk/issues/65), o
+  `quantize_model` gerava detector YOLO com todos os scores em 0.
+- **O FP16 no WASM não ajuda a latência**: serve para encolher o download.
+
+### O que não pagou
+
+A 320×320 com WebGPU, cada etapa do quadro medida separadamente:
+
+| Etapa | ms |
+| --- | --- |
+| Letterbox + leitura dos pixels | 11–18 |
+| Conversão para CHW float32 | 6–7 |
+| Upload da entrada | ~12 |
+| Inferência na GPU | ~200 |
+| Download da saída (42 KB) | ~6 |
+
+Por isso, três ideias que funcionam no papel renderam pouco aqui:
+
+- **Graph capture** (`enableGraphCapture`): −20 ms (9%), e exige entrada e
+  saída na GPU.
+- **Pré-processar dentro do grafo**: no máximo a conversão e parte do upload,
+  ~15 ms.
+- **Reduzir a saída dentro do grafo**: a saída já tem 42 KB; o download é
+  latência fixa.
+
+!!! tip "Em outro aparelho, meça de novo"
+    Um celular com GPU forte e CPU fraca muda o equilíbrio. A seção `breakdown`
+    da bancada dá esta mesma tabela no seu aparelho:
+    `run.html?set=seu-modelo&task=detect&only=breakdown`.
+
 ## Recapitulando
 
 - **Criação:** `cache: true` tira a rede do caminho a partir da segunda visita;
@@ -414,6 +521,9 @@ explicam números do `speed`:
   o `load` cai ~75%.
 - O SDK já evita cópias no pré-processamento e monta os recortes só quando
   você pede.
+- **Celular:** reduza a resolução de entrada primeiro (320 rodou 3–4,7×
+  mais rápido que 640), depois prefira WebGPU FP32 com WASM de reserva;
+  compare modelos na mesma página. 📱
 
 ## Veja também
 

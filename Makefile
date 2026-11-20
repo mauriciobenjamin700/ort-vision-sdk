@@ -182,10 +182,24 @@ validate-web: ## Typecheck + testes + build + pack do sdk-js-web
 	./scripts/validate.sh web
 
 # ---------------------------------------------------------------------------
+# Docs (GitHub Pages pela branch gh-pages)
+# ---------------------------------------------------------------------------
+
+.PHONY: docs-build docs-deploy
+
+MKDOCS := uv run --no-project --with-requirements docs/requirements.txt mkdocs
+
+docs-build: ## Builda o site de docs (pt + en) com --strict, num ambiente efêmero do uv
+	$(MKDOCS) build --strict
+
+docs-deploy: ## Publica o site no GitHub Pages pela branch gh-pages (local, sem Actions)
+	$(MKDOCS) gh-deploy --strict --force --message "docs: deploy {sha} with mkdocs {version}"
+
+# ---------------------------------------------------------------------------
 # Release pipeline
 # ---------------------------------------------------------------------------
 
-.PHONY: release release-python release-web
+.PHONY: release release-python release-web publish
 
 release: _require-project _require-tag ## Pipeline completo: make release PROJECT=python|web TAG=0.3.0
 	@DRY_RUN=$(DRY_RUN) SKIP_VALIDATE=$(SKIP_VALIDATE) BASE_BRANCH=$(BASE_BRANCH) \
@@ -198,6 +212,9 @@ release-python: _require-tag ## Release do sdk-python (use TAG=0.3.0)
 release-web: _require-tag ## Release do sdk-js-web (use TAG=0.3.0)
 	@DRY_RUN=$(DRY_RUN) SKIP_VALIDATE=$(SKIP_VALIDATE) BASE_BRANCH=$(BASE_BRANCH) \
 	  ./scripts/release.sh web "$(TAG)"
+
+publish: _require-project _require-tag ## Só publica (local, sem Actions) uma tag já criada: make publish PROJECT=python|web TAG=0.3.0
+	@./scripts/publish.sh "$(PROJECT)" "$(TAG)"
 
 # ---------------------------------------------------------------------------
 # Guards (uso interno)

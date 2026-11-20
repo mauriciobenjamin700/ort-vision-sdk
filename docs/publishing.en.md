@@ -8,162 +8,151 @@ directory:
 | `ort-vision-sdk` | PyPI | `sdk-python/` | `v<MAJOR.MINOR.PATCH>` |
 | `@mauriciobenjamin700/ort-vision-sdk-web` | npm | `sdk-js-web/` | `web-v<MAJOR.MINOR.PATCH>` |
 
-The release flows are automated in
-[.github/workflows/release-pypi.yml](https://github.com/mauriciobenjamin700/ort-vision-sdk/blob/main/.github/workflows/release-pypi.yml)
-and
-[.github/workflows/release-npm.yml](https://github.com/mauriciobenjamin700/ort-vision-sdk/blob/main/.github/workflows/release-npm.yml).
-You publish by pushing a tag — GitHub Actions does the rest.
+**Everything is published from your machine**, through `Makefile` targets: the
+packages by
+[`scripts/publish.sh`](https://github.com/mauriciobenjamin700/ort-vision-sdk/blob/main/scripts/publish.sh),
+the site by `mkdocs gh-deploy`. This repository does not use GitHub Actions — the
+workflows under `.github/workflows/` are disabled and kept only as history.
+Pushing a tag **publishes nothing**.
 
-There are two stages: **initial setup** (once per package) and **release** (every
+There are two stages: **credentials** (once per machine) and **release** (every
 time a new version ships).
 
 !!! note
-    This is the English mirror of the Portuguese
-    [Publicação](publishing.md) page, which is the source of truth and carries
-    the full step-by-step (Trusted Publishing on PyPI, npm provenance, the
-    `make release` flow, rollback/yank, and troubleshooting).
+    This is the English mirror of the Portuguese [Publicação](publishing.md)
+    page, which is the source of truth.
 
 ## Prerequisites
 
-- GitHub repository: `https://github.com/mauriciobenjamin700/ort-vision-sdk`.
+- `git`, [`uv`](https://docs.astral.sh/uv/), `node >= 20` with `npm`, and an
+  authenticated [`gh`](https://cli.github.com).
 - An account with 2FA on [pypi.org](https://pypi.org) and
-  [npmjs.com](https://www.npmjs.com).
-- Locally: `python >= 3.10`, `node >= 18`, `git`.
+  [npmjs.com](https://www.npmjs.com), allowed to publish both packages.
 
-## PyPI — Trusted Publishing
+## Credentials
 
-Trusted Publishing uses OIDC: GitHub Actions authenticates directly to PyPI with
-no stored token. Add a **pending publisher** at
-<https://pypi.org/manage/account/publishing/> with the project name
-`ort-vision-sdk`, owner `mauriciobenjamin700`, repository `ort-vision-sdk`,
-workflow `release-pypi.yml`, environment `pypi`. Validate first on
-[test.pypi.org](https://test.pypi.org). Create the `pypi` environment under
-**Settings → Environments** (optionally with required reviewers) — no secret is
-needed, OIDC handles authentication.
+No credential enters the repository. `publish.sh` checks both **before** creating
+any branch or tag, and stops with a message naming what is missing.
 
-## npm — Trusted Publishing
+- **PyPI:** create a token scoped to the `ort-vision-sdk` project only at
+  <https://pypi.org/manage/account/token/> and export it in the shell that runs
+  the release: `export UV_PUBLISH_TOKEN="pypi-..."`. `uv publish` reads it.
+- **npm:** `npm login`, then `npm whoami` must answer your user.
 
-The published package is `@mauriciobenjamin700/ort-vision-sdk-web` (a personal
-scope, which already exists since it is your username). The workflow publishes
-over **OIDC**, exactly like PyPI: no token is stored in the repository.
+!!! warning "Trusted Publishing and provenance are gone"
+    OIDC (Trusted Publishing on PyPI, `--provenance` on npm) only exists inside
+    a CI runner. Publishing locally authenticates with a token/session, and the
+    npm package page no longer shows a provenance attestation.
 
-Register the Trusted Publisher on npmjs — this is the step that is **currently
-missing**, and the only reason the npm workflow fails with `E404`:
-
-1. Go to the package page → **Settings** → **Trusted publisher** → **GitHub
-   Actions**.
-2. Organization or user `mauriciobenjamin700`, repository `ort-vision-sdk`,
-   workflow filename `release-npm.yml`, environment empty (the job uses none).
-
-!!! danger "Without this, publish fails with an error that reads like permissions"
-    With no Trusted Publisher and no `NODE_AUTH_TOKEN`, the registry answers
-    `npm error code E404` on the `PUT`. The whole build stays green up to that
-    step, so it is easy to read as network trouble. It is authentication.
-
-Registering an `NPM_TOKEN` secret instead also works, but it keeps a long-lived
-credential in the repository and loses the provenance attestation. The workflow
-passes `--provenance`, which with OIDC needs no extra setup: a public repo and a
-correct `repository.url`, both already in place.
-
-## Release flow with `make` (recommended)
+## Release flow with `make`
 
 The [Makefile](https://github.com/mauriciobenjamin700/ort-vision-sdk/blob/main/Makefile)
-(delegating to
-[scripts/release.sh](https://github.com/mauriciobenjamin700/ort-vision-sdk/blob/main/scripts/release.sh))
-automates the whole flow: it creates a dedicated release branch, bumps the
-version, validates locally, commits, tags, pushes the branch + tag, and opens a
-PR to `main`. `main` never gets a direct push.
+delegates to
+[scripts/release.sh](https://github.com/mauriciobenjamin700/ort-vision-sdk/blob/main/scripts/release.sh):
+it creates a release branch, bumps the version, validates, commits, tags,
+**publishes**, pushes branch and tag, and opens a PR to `main`.
 
 ```bash
-make help                                # list every target
+make help                                # every target
 make releases                            # tag history per project
 
-make release PROJECT=python TAG=0.3.0    # Python release
-make release PROJECT=web    TAG=0.3.0    # Web release
-make release-python TAG=0.3.0            # shortcut
-make release-web    TAG=0.3.0            # shortcut
+make release PROJECT=python TAG=0.3.0    # full release
+make release PROJECT=web    TAG=0.3.0
+make publish PROJECT=python TAG=0.3.0    # publish a tag that already exists locally
+
+make docs-build                          # build the site, publish nothing
+make docs-deploy                         # build and push the gh-pages branch
 ```
 
-`TAG` is just the version number (e.g. `0.3.0`); the Makefile adds the right
-prefix (`v` for Python, `web-v` for npm). Use `DRY_RUN=1` to do everything
-locally without pushing or opening a PR.
+`TAG` is just the version number (e.g. `0.3.0`); the prefix (`v` for Python,
+`web-v` for npm) is added for you.
 
 ### Steps for a release
 
-1. **Update the CHANGELOG** — move `## [Unreleased]` to
-   `## [0.3.0] - YYYY-MM-DD` in the package's `CHANGELOG.md` (the only manual
-   step).
-2. Commit the changelog (the Makefile requires a clean working tree).
-3. (Recommended) Run a dry-run: `make release PROJECT=python TAG=0.3.0 DRY_RUN=1`.
-4. Run the real release: `make release PROJECT=python TAG=0.3.0`.
-5. **The tag triggers the workflow** — track it under **GitHub → Actions**.
-   Publishing runs independently of the PR merge (the tag is the source of
-   truth).
+1. **Date the CHANGELOG** — move `## [Unreleased]` to `## [0.3.0] - YYYY-MM-DD`,
+   add the link at the bottom, and commit to `main` (the script requires a clean
+   working tree).
+2. **Rehearse the publish** — no credential, no tag, nothing leaves the machine:
+   `REHEARSAL=1 scripts/publish.sh python <current version>`. It runs the same
+   guards, build and smoke-install as the real publish and stops before the
+   upload.
+3. (Optional) **Dry-run the release**: `make release PROJECT=python TAG=0.3.0 DRY_RUN=1`
+   creates the branch, bump and tag without publishing, pushing or opening a PR.
+4. **Run the release**: `make release PROJECT=python TAG=0.3.0`. In order it
+   checks the tag, warns if the CHANGELOG lacks `[0.3.0]`, **checks the publish
+   credential**, creates the branch, bumps, validates
+   ([`scripts/validate.sh`](https://github.com/mauriciobenjamin700/ort-vision-sdk/blob/main/scripts/validate.sh)),
+   commits, tags, regenerates `RELEASES.md`, **publishes**, pushes and opens the
+   PR.
+5. **Merge the PR** — it brings the bump and `RELEASES.md` to `main`. The version
+   is already published by then.
 
-    !!! danger "No approval stands between the tag and the registry"
-        This repository's `pypi` environment has **no required reviewers**, so the
-        publish job never pauses: pushing the tag *is* publishing. npm works the
-        same way by construction. Neither registry lets a version be replaced, so
-        treat `make release` as irreversible — add required reviewers to the
-        `pypi` environment first if you want that brake.
-
-6. Merge the PR when ready to propagate the version bump to `main`.
+!!! danger "Publishing is irreversible"
+    Neither PyPI nor npm lets a version be published twice. If the publish fails
+    **before** the upload, branch and tag stay local and the script prints how
+    to discard them. After the upload, the way back is yank/deprecate and a new
+    PATCH.
 
 ### Accepted variables
 
 | Variable | Description |
 | --- | --- |
-| `PROJECT=python\|web` | Which SDK to release (required for `make release`). |
+| `PROJECT=python\|web` | Which SDK (required for `make release` and `make publish`). |
 | `TAG=0.3.0` | Version without prefix, semver format. |
-| `DRY_RUN=1` | Do everything locally (branch + commit + tag) but skip push and PR. |
-| `SKIP_VALIDATE=1` | Skip lint/typecheck/build (only if just validated manually). |
+| `DRY_RUN=1` | Local branch + commit + tag; skip publish, push and PR. |
+| `SKIP_VALIDATE=1` | Skip lint/typecheck/build (only if just validated). |
 | `BASE_BRANCH=...` | Target branch of the PR (default `main`). |
+| `REHEARSAL=1` | `publish.sh` only: guards, build and smoke-install, no upload. |
 
-### What the workflow does on its own once the tag lands
+### What `publish.sh` does
 
-Pushing the tag is the last manual step. From there GitHub Actions, in order:
+The same guards as the old workflows, in the same order, each there because of a
+defect that already happened:
 
-1. **Checks version against tag.** `web-v0.4.0` only publishes if `sdk-js-web/package.json` says `0.4.0`; `v0.6.0` only publishes if both `pyproject.toml` and `__version__` say `0.6.0`. A mismatch aborts **before** the upload — PyPI never lets a version be replaced, so this guard has to run before, not after.
-2. **Validates.** Typecheck, tests, build, and a smoke-install of the packed artifact in a clean project (web imports it with `onnxruntime-web`; Python installs the wheel in a fresh venv). Python also checks the wheel did not come out empty.
-3. **Publishes** over OIDC — provenance on npm, Trusted Publishing on PyPI.
-4. **Reads back from the registry.** Confirms the registry really serves that version and that it is `latest`. A publish that landed under a different dist-tag, or an index that never propagated, fails here instead of passing as a green release.
-5. **Creates (or updates) the GitHub Release.** Notes from the matching CHANGELOG section, artifacts attached (tarball for web, sdist + wheel for Python), titled `ort-vision-sdk (Python) X.Y.Z` / `@mauriciobenjamin700/ort-vision-sdk-web X.Y.Z`. Idempotent — re-running a tag edits the existing Release instead of failing.
+1. **Checks version against tag**, before anything is uploaded.
+2. **Validates the artifact**: build, `twine check` (Python) or typecheck + tests
+   (web), and a smoke-install in a clean venv/project that imports the tasks,
+   the result envelopes and the graph helpers. Python also checks the wheel is
+   not empty.
+3. **Publishes** with `uv publish` or `npm publish --access public`.
+4. **Reads back from the registry**: PyPI through the simple index, npm through
+   `npm view --prefer-online` (version and the `latest` dist-tag), each for up
+   to five minutes — both caches lie right after an upload.
+5. **Creates or updates the GitHub Release** for the tag, with the CHANGELOG
+   section as notes and the artifact attached. A `gh` API call, not Actions.
 
 !!! tip "Reconciling what was left behind"
-    Old releases that never got a GitHub Release can be backfilled at once:
+    `make releases-sync-dry`, `make releases-sync` and `make releases-check`
+    (tags × published versions × Releases, exits non-zero on a mismatch). Tags
+    deliberately never published are recorded in
+    [`scripts/never-published.tsv`](https://github.com/mauriciobenjamin700/ort-vision-sdk/blob/main/scripts/never-published.tsv).
 
-    ```bash
-    make releases-sync-dry   # list what is missing, create nothing
-    make releases-sync       # create the missing Releases
-    make releases-check      # tags x published versions x Releases, side by side
-    ```
+### When something goes wrong
 
-    `releases-check` is the quick way to spot a tag with no published package — or the other way around. It **exits non-zero** on a mismatch, so it works as a gate.
+- **`UV_PUBLISH_TOKEN vazio` / `npm sem sessão`** → see Credentials. Nothing was
+  created.
+- **Validation failed midway** → `git checkout -- sdk-python/` (or `sdk-js-web/`),
+  fix, run again.
+- **Publish failed before the upload** → branch and tag are local; fix and run
+  `make publish PROJECT=... TAG=...`.
+- **Read-back failed but the version is on the registry** → the publish worked
+  and only propagation lagged. Do **not** run `make publish` again (the upload
+  would be refused as a duplicate): push branch and tag by hand, create the
+  GitHub Release with `make releases-sync`, and open the PR.
 
-!!! note "Tags whose publish never happened"
-    A tag can exist without the version ever reaching the registry — that is the
-    case for `web-v0.2.0` and `web-v0.2.2`, whose publish jobs failed in May 2026
-    and were never retried. Those absences are **expected**, and they are
-    recorded in [`scripts/never-published.tsv`](https://github.com/mauriciobenjamin700/ort-vision-sdk/blob/main/scripts/never-published.tsv),
-    one line per tag with the reason:
+## Docs site
 
-    ```text
-    web-v0.2.0	publish nunca rodou — o job falhou antes, no smoke-install do tarball (run …)
-    ```
-
-    `releases-check` then reports `nunca publicada` instead of `DESSINCRONIZADO`
-    and does not fail on it. **The point is making the audit useful again**: while
-    those two lines stayed red forever, a new red line drew no attention at all.
-
-    Two rules: do not record a broken release here while publishing it is still
-    possible — publish it. And if a listed tag shows up in the registry, the check
-    reports `LEDGER OBSOLETO`, because at that point the file is lying.
+The bilingual site is published to GitHub Pages from the `gh-pages` branch:
+`make docs-build` builds it with `--strict`, `make docs-deploy` builds and pushes.
+Both run in an ephemeral `uv` environment built from `docs/requirements.txt`. A
+docs-only change gets no version: a `docs:` commit on `main` and
+`make docs-deploy`.
 
 ## Versioning
 
 Both packages follow [SemVer](https://semver.org). Keep them in **lockstep** when
-a change affects both (e.g. a new public type), independent otherwise. Version is
-carried in two files per package and must stay in sync:
+a change affects both (e.g. a new public type), independent otherwise. The version
+lives in two files per package, kept in sync by `release.sh`:
 
 - Python: `sdk-python/pyproject.toml` (`project.version`) and
   `sdk-python/src/ort_vision_sdk/__init__.py` (`__version__`).
@@ -172,16 +161,21 @@ carried in two files per package and must stay in sync:
 
 ## Rollback / yank
 
-- **PyPI:** you cannot delete a published version — **yank** it
-  (`twine yank ort-vision-sdk==0.2.0`) and publish a fixed patch immediately.
-- **npm:** `npm unpublish` within 72 h, then `npm deprecate` afterwards. Never
-  reuse an unpublished version number.
+- **PyPI:** a published version cannot be deleted — **yank** it at
+  <https://pypi.org/manage/project/ort-vision-sdk/releases/> and publish a fixed
+  patch right away.
+- **npm:** `npm unpublish` within 72 h, `npm deprecate` afterwards. Never reuse
+  an unpublished version number.
 
 ## Common problems
 
 - **`twine check` complains about the README** → PyPI uses strict CommonMark;
   use absolute URLs for images/links.
-- **`invalid-publisher`** → the Trusted Publisher fields don't match the
-  workflow/environment/repo.
-- **`npm publish` 403 — name disputed** → the package name is taken; rename.
+- **`uv publish` answers `403 Forbidden`** → the token is not scoped to
+  `ort-vision-sdk`, expired or was revoked.
+- **`npm publish` answers `E404` on the `PUT`** → no valid session; for a scoped
+  package the registry answers 404 instead of 401. `npm whoami`, then
+  `npm login`.
 - **Duplicate version** → both registries refuse a re-upload; bump PATCH.
+- **The site did not change after the merge** → merging does not publish it; run
+  `make docs-deploy`.

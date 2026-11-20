@@ -5,7 +5,14 @@
 #   scripts/release.sh <python|web> <TAG>
 #
 # Variáveis de ambiente:
-#   DRY_RUN=1         cria branch + commit + tag local mas pula push e PR
+#   DRY_RUN=1         cria branch + commit + tag local mas pula publish, push e PR
+#
+# A publicação é local, por scripts/publish.sh: fora da org 7rc este repositório
+# não usa GitHub Actions, e os workflows release-*.yml estão desativados. Antes
+# disso, empurrar a tag disparava o publish; hoje empurrar a tag sozinha não
+# publica nada. Por isso a ordem é: credencial conferida antes de criar
+# qualquer coisa, publish antes do push, e o push só depois de o registry servir
+# a versão.
 #   SKIP_VALIDATE=1   pula validação local (lint/typecheck/build)
 #   BASE_BRANCH=main  branch alvo do PR (default: main)
 
@@ -45,8 +52,7 @@ case "$PROJECT" in
     PKG_DIR="sdk-python"
     REGISTRY="PyPI"
     REGISTRY_LOWER="pypi"
-    WORKFLOW_FILE="release-pypi.yml"
-    DEPLOY_NOTE="- O workflow \`release-pypi.yml\` publica **assim que a tag é pusheada** — o environment \`pypi\` deste repositório não tem required reviewers, então não há aprovação manual no caminho. Tag pusheada já é versão publicada; o PyPI nunca deixa substituir uma versão."
+    DEPLOY_NOTE="- Publicado no PyPI **antes** deste PR, por \`scripts/publish.sh\` rodando localmente (build, twine check, smoke-install do wheel, upload, leitura de volta no índice simples, GitHub Release). O PyPI nunca deixa substituir uma versão."
     ;;
   web|js|node)
     PROJECT="web"
@@ -54,8 +60,7 @@ case "$PROJECT" in
     PKG_DIR="sdk-js-web"
     REGISTRY="npm"
     REGISTRY_LOWER="npm"
-    WORKFLOW_FILE="release-npm.yml"
-    DEPLOY_NOTE="- O workflow \`npm publish\` roda automaticamente assim que a tag é pusheada (sem aprovação manual)."
+    DEPLOY_NOTE="- Publicado no npm **antes** deste PR, por \`scripts/publish.sh\` rodando localmente (typecheck, testes, build, smoke-install do tarball, publish, leitura de volta da versão e do dist-tag \`latest\`, GitHub Release). O npm nunca deixa republicar uma versão."
     ;;
   *)
     echo "ERROR: PROJECT '$PROJECT' inválido (use python ou web)"
@@ -94,6 +99,11 @@ if ! grep -qE "\[$TAG\]" "$CHANGELOG"; then
   echo "AVISO: $CHANGELOG não menciona [$TAG] — atualize antes de continuar."
   echo "       (Ctrl+C para abortar, ENTER para seguir mesmo assim)"
   read -r _
+fi
+
+if [[ "$DRY_RUN" != "1" ]]; then
+  echo "→ Conferindo credenciais de publicação"
+  CHECK_ONLY=1 "$(dirname "${BASH_SOURCE[0]}")/publish.sh" "$PROJECT" "$TAG"
 fi
 
 echo "→ Criando branch $RELEASE_BRANCH (a partir de $(git rev-parse --abbrev-ref HEAD))"
@@ -142,16 +152,26 @@ if [[ "$DRY_RUN" == "1" ]]; then
   echo ""
   echo "✓ DRY_RUN — branch '$RELEASE_BRANCH' e tag '$GIT_TAG' criados localmente"
   echo "  para finalizar manualmente:"
+  echo "    scripts/publish.sh $PROJECT $TAG"
   echo "    git push -u origin $RELEASE_BRANCH"
   echo "    git push origin $GIT_TAG"
   echo "    gh pr create --base $BASE_BRANCH --head $RELEASE_BRANCH --title \"chore($PROJECT): release $GIT_TAG\""
   exit 0
 fi
 
+echo "→ Publicando $GIT_TAG no $REGISTRY (local)"
+if ! "$(dirname "${BASH_SOURCE[0]}")/publish.sh" "$PROJECT" "$TAG"; then
+  echo ""
+  echo "ERROR: publish falhou. Branch '$RELEASE_BRANCH' e tag '$GIT_TAG' ficaram locais."
+  echo "  Se nada chegou ao registry: corrija e rode 'scripts/publish.sh $PROJECT $TAG' de novo."
+  echo "  Para descartar: git checkout $BASE_BRANCH && git branch -D $RELEASE_BRANCH && git tag -d $GIT_TAG"
+  exit 1
+fi
+
 echo "→ Push da branch $RELEASE_BRANCH"
 git push -u origin "$RELEASE_BRANCH"
 
-echo "→ Push da tag $GIT_TAG (dispara workflow $WORKFLOW_FILE)"
+echo "→ Push da tag $GIT_TAG"
 git push origin "$GIT_TAG"
 
 PR_BODY=$(mktemp)
@@ -163,7 +183,7 @@ Tem Script? | Novas Env Vars
 Não | Não
 
 > :warning: **NOTA**
-> - A tag \`$GIT_TAG\` já foi pusheada — o workflow [\`$WORKFLOW_FILE\`](.github/workflows/$WORKFLOW_FILE) está rodando no GitHub Actions, independente do merge deste PR.
+> - A versão $TAG **já está publicada** no $REGISTRY e a tag \`$GIT_TAG\` já foi pusheada, independente do merge deste PR.
 > - O merge propaga para \`$BASE_BRANCH\` o bump de versão e a entrada em \`RELEASES.md\`.
 
 ## Problema
@@ -173,7 +193,7 @@ Liberar a versão $TAG do pacote \`$PKG_DIR\` no $REGISTRY.
 ## Solução
 
 - Bump de versão para $TAG nos arquivos-fonte do pacote
-- Tag \`$GIT_TAG\` criada e pushed → workflow de release disparado
+- Publicado localmente por \`scripts/publish.sh\`, tag \`$GIT_TAG\` pushed e GitHub Release criado
 - \`RELEASES.md\` regenerado a partir das git tags
 
 ## Screenshots
@@ -211,5 +231,5 @@ PR_URL=$(gh pr create \
 
 echo ""
 echo "✓ Release $GIT_TAG iniciada:"
-echo "  - tag pushed → workflow $REGISTRY rodando em GitHub Actions"
+echo "  - publicado no $REGISTRY, tag pushed, GitHub Release criado"
 echo "  - PR aberto: $PR_URL"

@@ -109,8 +109,13 @@ Antes de rodar, o `CHANGELOG.md` do pacote **já precisa** ter a seção
 `## [TAG] - YYYY-MM-DD` (o script avisa se faltar) e a tabela de links no fim do
 arquivo precisa da entrada nova.
 
-⚠️ **O environment `pypi` não tem gate de aprovação.** Empurrar a tag publica
-direto no PyPI — não existe passo manual entre uma coisa e outra.
+⚠️ **A publicação é local e roda dentro do `make release`.** Os workflows de
+`.github/workflows/` estão desativados (regra global: sem Actions fora da `7rc`),
+então empurrar a tag não publica nada. O `release.sh` confere a credencial
+(`UV_PUBLISH_TOKEN` para o PyPI, `npm whoami` para o npm) antes de criar
+qualquer coisa e publica com `scripts/publish.sh` **antes** do push. Ensaio sem
+enviar nada: `REHEARSAL=1 scripts/publish.sh <python|web> <versão atual>`. Site:
+`make docs-deploy` (merge não publica o site).
 
 Depois do push, valide o **artefato publicado**, não a árvore local: venv limpa
 em diretório vazio, `uv pip install --no-cache --index-url https://pypi.org/simple "ort-vision-sdk==<versão>"`,
@@ -140,8 +145,9 @@ confirme pelo índice simples.
 
   Vale para qualquer script auxiliar, inclusive um `python3 - <<EOF` de uma
   linha. Rode da raiz do repo com caminho absoluto/relativo.
-- **`Float16Array` só existe no Node 24.** A matriz do CI roda 20, 22 e 24, então
-  dois dos três jobs não têm o global. Teste que constrói tensor half passa na
+- **`Float16Array` só existe no Node 24.** A matriz do CI rodava 20, 22 e 24, e
+  hoje o `publish.sh` roda a suíte web uma segunda vez com o global apagado, que
+  é o que sobrou dessa guarda. Teste que constrói tensor half passa na
   sua máquina e **quebra no CI** — aconteceu no release do `web-v0.9.0`, que só não publicou
   errado porque o workflow roda os testes antes do `npm publish`. Teste de
   caminho half stuba o construtor; teste de recusa remove o global. Para

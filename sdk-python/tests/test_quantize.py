@@ -77,6 +77,72 @@ def _conv_classifier(path: Path) -> Path:
     return path
 
 
+def _yolo_head_detector(path: Path) -> Path:
+    """Write a detector whose output concatenates pixel boxes with sigmoid scores.
+
+    That is the shape of an Ultralytics detection head, ``[1, 4 + nc, N]``, and
+    the shape that broke quantization (#65): one ``Concat`` joins boxes in
+    ``[0, 640]`` with scores in ``[0, 1]``, so a single int8 scale for the
+    whole tensor is ~2.5 per step and every score rounds to 0. A convolution
+    feeds both branches so the quantizer has real activations to calibrate.
+
+    Args:
+        path: Where to write the model.
+
+    Returns:
+        ``path``.
+    """
+    onnx = pytest.importorskip("onnx")
+    from onnx import TensorProto, helper, numpy_helper
+
+    weights = np.random.default_rng(1).normal(0, 0.5, (5, 3, 1, 1)).astype(np.float32)
+    graph = helper.make_graph(
+        [
+            helper.make_node("Conv", ["images", "w"], ["conv"]),
+            helper.make_node("Reshape", ["conv", "flat_shape"], ["flat"]),
+            helper.make_node("Split", ["flat", "split"], ["raw_boxes", "logits"], axis=1),
+            helper.make_node("Sigmoid", ["raw_boxes"], ["unit_boxes"]),
+            helper.make_node("Mul", ["unit_boxes", "pixels"], ["boxes"]),
+            helper.make_node("Sigmoid", ["logits"], ["scores"]),
+            helper.make_node("Concat", ["boxes", "scores"], ["output0"], axis=1),
+        ],
+        "yolo_head_detector",
+        [helper.make_tensor_value_info("images", TensorProto.FLOAT, [1, 3, 32, 32])],
+        [helper.make_tensor_value_info("output0", TensorProto.FLOAT, [1, 5, 1024])],
+        [
+            numpy_helper.from_array(weights, "w"),
+            numpy_helper.from_array(np.array([1, 5, 1024], dtype=np.int64), "flat_shape"),
+            numpy_helper.from_array(np.array([4, 1], dtype=np.int64), "split"),
+            numpy_helper.from_array(np.array(640.0, dtype=np.float32), "pixels"),
+        ],
+    )
+    model = helper.make_model(graph, opset_imports=[helper.make_opsetid("", 17)])
+    model.ir_version = 8
+    for key, value in {"task": "detect", "names": "{0: 'a'}", "imgsz": "[32, 32]"}.items():
+        entry = model.metadata_props.add()
+        entry.key, entry.value = key, value
+    onnx.save(model, str(path))
+    return path
+
+
+def test_keeps_detection_scores_next_to_pixel_boxes(tmp_path: Path) -> None:
+    source = _yolo_head_detector(tmp_path / "det.onnx")
+    feed = {"images": np.random.default_rng(3).random((1, 3, 32, 32), dtype=np.float32)}
+
+    output = quantize_model(source, tmp_path / "q.onnx", _images(8))
+
+    def scores(model: Path) -> np.ndarray:
+        session = ort.InferenceSession(str(model), providers=["CPUExecutionProvider"])
+        return np.asarray(session.run(None, feed)[0])[0, 4]
+
+    expected = scores(source)
+    quantized = scores(output)
+    assert expected.max() > 0.2
+    assert quantized.max() > 0.2
+    assert float(np.abs(quantized - expected).mean()) < 0.02
+    np.testing.assert_allclose(quantized, expected, atol=0.1)
+
+
 def test_quantizes_a_convolution_to_qdq(tmp_path: Path) -> None:
     source = _conv_classifier(tmp_path / "conv.onnx")
 

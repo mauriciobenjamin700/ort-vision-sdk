@@ -13,7 +13,9 @@ fills that directory from a single export and a few images:
 
 It writes ``model.onnx`` (a copy), ``model.opt.onnx`` (:func:`optimize_model`),
 ``model.int8.onnx`` (:func:`quantize_model`), ``model.fp16.onnx`` and
-``image.jpg``. The FP16 copy keeps float32 inputs and outputs, so the SDK feeds
+``image.jpg``. With ``--set <name>`` they go to ``bench/browser/models/<name>/``
+instead, so several models sit side by side and ``run.html?set=<name>`` picks
+one. The FP16 copy keeps float32 inputs and outputs, so the SDK feeds
 it the same tensors as the original. Quantization and FP16 conversion need
 ``onnx`` (the ``[quantize]`` extra, or the dev environment).
 
@@ -86,25 +88,31 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--image", type=Path, required=True, help="image the benchmark predicts on")
     parser.add_argument("--calibration", type=Path, default=None, help="directory of calibration images")
     parser.add_argument("--task", choices=["detect", "segment", "classify"], default=None)
+    parser.add_argument(
+        "--set",
+        default=None,
+        help="write into bench/browser/models/<set>/ instead; open run.html?set=<set>",
+    )
     args = parser.parse_args(argv)
 
-    OUTPUT.mkdir(parents=True, exist_ok=True)
-    base = OUTPUT / "model.onnx"
+    output = OUTPUT / args.set if args.set else OUTPUT
+    output.mkdir(parents=True, exist_ok=True)
+    base = output / "model.onnx"
     shutil.copyfile(args.model, base)
     print(f"wrote {base}")
 
-    Image.open(args.image).convert("RGB").save(OUTPUT / "image.jpg", quality=95)
-    print(f"wrote {OUTPUT / 'image.jpg'}")
+    Image.open(args.image).convert("RGB").save(output / "image.jpg", quality=95)
+    print(f"wrote {output / 'image.jpg'}")
 
-    optimize_model(base, OUTPUT / "model.opt.onnx")
-    print(f"wrote {OUTPUT / 'model.opt.onnx'}")
+    optimize_model(base, output / "model.opt.onnx")
+    print(f"wrote {output / 'model.opt.onnx'}")
 
     images = calibration_images(args.calibration, args.image)
-    quantize_model(base, OUTPUT / "model.int8.onnx", images, task=args.task)
-    print(f"wrote {OUTPUT / 'model.int8.onnx'} (calibrated on {len(images)} image(s))")
+    quantize_model(base, output / "model.int8.onnx", images, task=args.task)
+    print(f"wrote {output / 'model.int8.onnx'} (calibrated on {len(images)} image(s))")
 
-    to_fp16(base, OUTPUT / "model.fp16.onnx")
-    print(f"wrote {OUTPUT / 'model.fp16.onnx'}")
+    to_fp16(base, output / "model.fp16.onnx")
+    print(f"wrote {output / 'model.fp16.onnx'}")
     return 0
 
 

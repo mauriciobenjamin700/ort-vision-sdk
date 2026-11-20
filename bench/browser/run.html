@@ -269,10 +269,21 @@ async function breakdownInner(label, model, providers) {
 
   const rec = { drawReadback: [], drawReadbackGpuCanvas: [], normalize: [], runCpuIo: [], runGpuOut: [], gpuDrain: [], download: [], runGpuIo: [], downloadGpuIo: [], runGraph: [], downloadGraph: [] };
   let outputBytes = 0;
+  let canvasDiff = null;
   const once = async () => {
     const [rb, img] = await timed(() => { letterbox(cpuCtx); return cpuCtx.getImageData(0, 0, SIZE, SIZE).data; });
     rec.drawReadback.push(rb);
-    rec.drawReadbackGpuCanvas.push((await timed(() => { letterbox(gpuCtx); return gpuCtx.getImageData(0, 0, SIZE, SIZE); }))[0]);
+    const [rbg, gpuImg] = await timed(() => { letterbox(gpuCtx); return gpuCtx.getImageData(0, 0, SIZE, SIZE).data; });
+    rec.drawReadbackGpuCanvas.push(rbg);
+    let maxDiff = 0, sumDiff = 0, changed = 0;
+    for (let o = 0; o < img.length; o++) {
+      if ((o & 3) === 3) continue;
+      const d = Math.abs(img[o] - gpuImg[o]);
+      if (d > 0) changed++;
+      sumDiff += d;
+      if (d > maxDiff) maxDiff = d;
+    }
+    canvasDiff = { maxAbs: maxDiff, meanAbs: +(sumDiff / (plane * 3)).toFixed(3), changedFraction: +(changed / (plane * 3)).toFixed(4) };
     const [nm, chw] = await timed(() => toChw(img));
     rec.normalize.push(nm);
     const [rc, outs] = await timed(() => s.run({ [input]: new ort.Tensor("float32", chw, dims) }));
@@ -306,6 +317,7 @@ async function breakdownInner(label, model, providers) {
 
   const result = { inputSize: SIZE, inputBytes: 3 * plane * 4, outputBytes };
   for (const [k, xs] of Object.entries(rec)) if (xs.length > 0) result[k + "Ms"] = median(xs);
+  result.canvasPixelDiff = canvasDiff;
   if (graphError !== null) result.graphCaptureError = graphError;
   if (graphMaxAbsDiff !== null) result.graphMaxAbsDiff = graphMaxAbsDiff;
   out.breakdown[label] = result;

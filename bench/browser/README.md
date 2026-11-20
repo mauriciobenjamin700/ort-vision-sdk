@@ -117,6 +117,7 @@ saída dentro do grafo ou manter a entrada e a saída na GPU.
 | `inputBytes` / `outputBytes` | Tamanho do tensor de entrada e soma das saídas |
 | `drawReadbackMs` | Letterbox no canvas `willReadFrequently` (o que o SDK usa) + `getImageData` |
 | `drawReadbackGpuCanvasMs` | O mesmo num canvas acelerado, para comparar |
+| `canvasPixelDiff` | Diferença de pixel entre os dois canvas acima (`maxAbs`, `meanAbs` em níveis de 0–255, `changedFraction` dos canais). Acelerado e software podem reamostrar com filtros diferentes: é o que o modelo passa a ver se o SDK trocar de um para o outro |
 | `normalizeMs` | Laço RGBA → CHW float32 |
 | `runCpuIoMs` | `run` com entrada e saída na CPU: upload + modelo + download |
 | `runGpuOutMs` | Só WebGPU. `run` com saída `gpu-buffer`, até a promessa resolver |

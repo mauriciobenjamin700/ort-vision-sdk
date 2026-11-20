@@ -20,12 +20,16 @@ Each package is self-contained: its own `README.md`, `LICENSE`, `CHANGELOG.md` a
 
 ## Releasing
 
-See [docs/publishing.md](docs/publishing.md) for the full step-by-step (Trusted Publishing on PyPI, npm provenance, tag conventions). Short version:
+Releases are published **from your machine**, not by GitHub Actions (the
+workflows are disabled; pushing a tag publishes nothing). See
+[docs/publishing.md](docs/publishing.md) for credentials and the full
+step-by-step. Short version:
 
-- Python release: bump version in `sdk-python/`, tag `v<x.y.z>`, push.
-- Web release: bump version in `sdk-js-web/`, tag `web-v<x.y.z>`, push.
-
-GitHub Actions ([.github/workflows](.github/workflows)) handles the rest.
+```bash
+export UV_PUBLISH_TOKEN="pypi-..."      # Python; npm needs `npm login`
+make release PROJECT=python TAG=x.y.z   # bump, validate, tag, publish, push, PR
+make release PROJECT=web    TAG=x.y.z
+```
 
 ## Documentation
 
@@ -34,10 +38,10 @@ The full bilingual documentation lives on GitHub Pages:
 - Português (BR): <https://mauriciobenjamin700.github.io/ort-vision-sdk/>
 - English (US): <https://mauriciobenjamin700.github.io/ort-vision-sdk/en/>
 
-The site is built with MkDocs Material + `mkdocs-static-i18n` and deployed by the
-[`Docs`](.github/workflows/docs.yml) GitHub Actions workflow on every push to
-`main` that touches `docs/`, `mkdocs.yml`, or the workflow itself. Sources live
-under [`docs/`](docs) (PT-BR base files; EN translations as `*.en.md`).
+The site is built with MkDocs Material + `mkdocs-static-i18n` and deployed with
+`make docs-deploy` (`mkdocs gh-deploy` to the `gh-pages` branch, run locally).
+Sources live under [`docs/`](docs) (PT-BR base files; EN translations as
+`*.en.md`).
 
 > Local preview (optional): `pip install -r docs/requirements.txt && mkdocs serve`.
 

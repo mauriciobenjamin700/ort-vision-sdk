@@ -12,7 +12,7 @@
 </style></head>
 <body>
 <h1>Bancada ort-vision-sdk</h1>
-<p class="muted">Parâmetros na URL: <code>?task=segment|detect|classify</code>, <code>?size=640</code>, <code>?threads=N</code>, <code>?proxy=1</code>, <code>?quick=1</code>, <code>?only=raw,sdk,breakdown,pipelining</code>, <code>?set=nome</code>, <code>?ramp=400</code>, <code>?timeout=180000</code>. Deixe a aba visível até terminar — a página avisa se ela não ficou. Modelos em <code>bench/browser/models/</code> — veja o README ao lado.</p>
+<p class="muted">Parâmetros na URL: <code>?task=segment|detect|classify</code>, <code>?size=640</code>, <code>?threads=N</code>, <code>?proxy=1</code>, <code>?quick=1</code>, <code>?only=check,raw,sdk,breakdown,pipelining</code>, <code>?set=nome</code>, <code>?ramp=400</code>, <code>?timeout=180000</code>. Deixe a aba visível até terminar — a página avisa se ela não ficou. Modelos em <code>bench/browser/models/</code> — veja o README ao lado.</p>
 <button id="copy" disabled>Copiar JSON</button>
 <pre id="log">iniciando…</pre>
 <script type="module">
@@ -48,7 +48,7 @@ const SDK = await import("/sdk-js-web/dist/index.js");
 const SET = params.get("set");
 const M = SET ? `/bench/browser/models/${encodeURIComponent(SET)}/` : "/bench/browser/models/";
 const Task = { segment: SDK.Segmenter, detect: SDK.Detector, classify: SDK.Classifier }[TASK];
-const out = { env: {}, raw: {}, sdk: {}, compare: {}, breakdown: {}, pipelining: {} };
+const out = { env: {}, check: {}, raw: {}, sdk: {}, compare: {}, breakdown: {}, pipelining: {} };
 const logEl = document.getElementById("log");
 const show = (msg) => { logEl.textContent = (msg ? msg + "\n\n" : "") + JSON.stringify(out, null, 1); };
 const median = (xs) => { const s = [...xs].sort((a, b) => a - b); return +s[Math.floor(s.length / 2)].toFixed(1); };
@@ -91,6 +91,59 @@ async function raw(...args) {
   catch (e) { out.raw[args[0]] = { error: String(e).slice(0, 200) }; }
 }
 const hasGpu = typeof out.env.webgpu === "object";
+// Uma variante rápida que devolve lixo não é variante: os tempos abaixo só
+// valem para as que passam aqui. Cada variante roda a mesma entrada
+// determinística e a primeira saída é comparada com a do FP32 no WASM. Foi o
+// que faltou para ver dois defeitos que saíam rápidos e calados: o INT8 de
+// detector com todo score 0 (#65) e o FP16 no WebGPU devolvendo saída toda
+// zero num adapter sem `shader-f16`. `scoreRatio` compara o maior valor fora
+// das 4 primeiras linhas (os scores de uma cabeça YOLO); perto de 1 é o
+// esperado, 0 é o modelo mudo.
+async function checkOne(file, provider, reference) {
+  const response = await fetch(M + file);
+  if (!response.ok) return { skipped: file + " não encontrado" };
+  const s = await ort.InferenceSession.create(new Uint8Array(await response.arrayBuffer()), { executionProviders: [provider] });
+  const name = s.inputNames[0];
+  const shape = (s.inputMetadata?.[0]?.shape ?? [1, 3, SIZE, SIZE]).map((d) => (typeof d === "number" ? d : 1));
+  const x = new Float32Array(shape.reduce((a, b) => a * b, 1));
+  for (let i = 0; i < x.length; i++) x[i] = ((i * 2654435761) % 1000) / 1000;
+  const o = (await s.run({ [name]: new ort.Tensor("float32", x, shape) }))[s.outputNames[0]];
+  await s.release();
+  const data = Float32Array.from(o.data, Number);
+  const rows = o.dims.length === 3 ? o.dims[2] : 0;
+  let scoreMax = -Infinity, nan = 0, allZero = true;
+  for (let i = 0; i < data.length; i++) {
+    const v = data[i];
+    if (Number.isNaN(v)) { nan++; continue; }
+    if (v !== 0) allZero = false;
+    if (i >= 4 * rows) scoreMax = Math.max(scoreMax, v);
+  }
+  const result = { scoreMax: +scoreMax.toFixed(4), nan, allZero };
+  if (reference) {
+    let maxAbs = 0;
+    for (let i = 0; i < data.length; i++) maxAbs = Math.max(maxAbs, Math.abs(data[i] - reference.data[i]));
+    result.maxAbsDiff = +maxAbs.toFixed(4);
+    result.scoreRatio = reference.scoreMax !== 0 ? +(scoreMax / reference.scoreMax).toFixed(3) : null;
+  }
+  return Object.assign(result, { data });
+}
+if (runs("check")) {
+  show("conferindo saídas");
+  const variants = [["wasm_int8", "model.int8.onnx", "wasm"], ["wasm_fp16", "model.fp16.onnx", "wasm"]];
+  if (hasGpu) variants.push(["webgpu_fp32", "model.onnx", "webgpu"], ["webgpu_fp16", "model.fp16.onnx", "webgpu"]);
+  try {
+    const reference = await withTimeout(checkOne("model.onnx", "wasm", null), "check:reference");
+    out.check.wasm_fp32 = { scoreMax: reference.scoreMax, nan: reference.nan, allZero: reference.allZero };
+    for (const [label, file, provider] of variants) {
+      try {
+        const { data, ...summary } = await withTimeout(checkOne(file, provider, reference), `check:${label}`);
+        out.check[label] = summary;
+      } catch (e) { out.check[label] = { error: String(e).slice(0, 200) }; }
+      show("conferindo saídas: " + label);
+    }
+  } catch (e) { out.check.wasm_fp32 = { error: String(e).slice(0, 200) }; }
+}
+
 if (runs("raw")) {
 await raw("wasm_fp32", M + "model.onnx", ["wasm"]);
 await raw("wasm_int8", M + "model.int8.onnx", ["wasm"]);

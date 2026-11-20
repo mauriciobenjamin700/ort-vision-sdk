@@ -80,10 +80,31 @@ roda no WSL. O Chrome do Windows usa a GPU real, que o WSL não enxerga.
 | `?threads=N` | `env.wasm.numThreads` — recarregue a página para cada valor |
 | `?proxy=1` | `env.wasm.proxy`: inferência num worker; é onde dois `predict()` em voo ganham |
 | `?quick=1` | Menos repetições |
-| `?only=breakdown` | Roda só as seções listadas, separadas por vírgula: `raw`, `sdk`, `breakdown`, `pipelining` (`compare` roda sempre que pedido) |
+| `?only=breakdown` | Roda só as seções listadas, separadas por vírgula: `check`, `raw`, `sdk`, `breakdown`, `pipelining` (`compare` roda sempre que pedido) |
 | `?set=nome` | Lê os modelos de `bench/browser/models/<nome>/` — gerado com `prepare_browser_bench.py --set <nome>` |
 | `?compare=a,b` | Compara conjuntos na mesma página, em rounds alternados; o primeiro é a base do `speedup_*` |
 | `?rounds=4` | Rounds da comparação (padrão 4; 2 com `?quick=1`) |
+
+## Antes do tempo, a saída (`check`)
+
+Variante rápida que devolve lixo não é variante. A seção `check` roda cada uma
+(INT8 e FP16 no WASM, FP32 e FP16 no WebGPU) com a mesma entrada determinística
+e compara a primeira saída com a do FP32 no WASM:
+
+| Campo | Leitura |
+| --- | --- |
+| `scoreRatio` | Maior valor fora das 4 primeiras linhas (os scores de uma cabeça YOLO), dividido pelo da referência. Perto de 1 é o esperado; 0 é o modelo mudo |
+| `maxAbsDiff` | Maior diferença elemento a elemento contra a referência |
+| `allZero` / `nan` | Saída toda zero, ou com NaN |
+
+Foi o que faltou para ver dois defeitos que saíam rápidos e calados: o INT8 de
+detector com todo score 0 (#65) e, num adapter sem `shader-f16`, o FP16 no
+WebGPU devolvendo saída toda zero. **Rode `check` antes de comparar tempos de
+uma variante nova:**
+
+```text
+run.html?set=famacha-det320&task=detect&only=check
+```
 
 ## Compare modelos na mesma página
 

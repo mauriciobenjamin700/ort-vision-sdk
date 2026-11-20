@@ -159,6 +159,26 @@ por isso o SDK alarga a saída na fronteira, e você nunca vê meia precisão nu
     download/memória, não quando é tempo de inferência. Com WebGPU a pergunta é
     outra — e onde não há adaptador, não há resposta melhor.
 
+!!! danger "WebGPU sem `shader-f16`: saída toda zero, sem erro"
+    Num adaptador WebGPU sem o recurso `shader-f16`, o ONNX Runtime Web roda um
+    modelo FP16 e devolve **tudo zero**: nenhuma caixa, nenhum score, nenhuma
+    exceção. Medido no `onnxruntime-web` 1.25.1 com um detector YOLO11n em
+    meia precisão (entrada e saída em float32). O mesmo arquivo no WASM bateu
+    com o FP32.
+
+    O SDK cuida disso: quando os pesos do modelo são float16 e o adaptador não
+    oferece `shader-f16`, ele tira o `webgpu` dos providers, roda no WASM e
+    avisa no console. Para usar a GPU desse aparelho, publique o export FP32.
+
+    ```typescript
+    import { Detector } from "@mauriciobenjamin700/ort-vision-sdk-web";
+
+    const det = await Detector.create("/models/detect-fp16.onnx", {
+      providers: ["webgpu", "wasm"],
+    });
+    console.log(det.session.providers); // ["wasm"] num adaptador sem shader-f16
+    ```
+
 !!! note "Onde a diferença aparece de verdade"
     Os **pesos** em meia precisão mudam as ativações, e portanto as confianças,
     nas casas decimais. A classe prevista raramente muda; o número ao lado dela
@@ -175,3 +195,5 @@ por isso o SDK alarga a saída na fronteira, e você nunca vê meia precisão nu
   `create()`, com mensagem dizendo isso.
 - Num pipeline fundido, os estágios ficam em float16 e a ponte em float32 —
   o `NonMaxSuppression` não aceita outra coisa.
+- WebGPU sem `shader-f16` devolve zero para modelo FP16; o SDK manda esse
+  caso para o WASM e avisa.

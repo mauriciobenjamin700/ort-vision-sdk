@@ -80,9 +80,74 @@ roda no WSL. O Chrome do Windows usa a GPU real, que o WSL não enxerga.
 | `?threads=N` | `env.wasm.numThreads` — recarregue a página para cada valor |
 | `?proxy=1` | `env.wasm.proxy`: inferência num worker; é onde dois `predict()` em voo ganham |
 | `?quick=1` | Menos repetições |
+| `?only=breakdown` | Roda só as seções listadas, separadas por vírgula: `raw`, `sdk`, `breakdown`, `pipelining` (`compare` roda sempre que pedido) |
+| `?set=nome` | Lê os modelos de `bench/browser/models/<nome>/` — gerado com `prepare_browser_bench.py --set <nome>` |
+| `?compare=a,b` | Compara conjuntos na mesma página, em rounds alternados; o primeiro é a base do `speedup_*` |
+| `?rounds=4` | Rounds da comparação (padrão 4; 2 com `?quick=1`) |
+
+## Compare modelos na mesma página
+
+No celular, o clock muda entre uma página e outra. Num Mali Bifrost, o WebGPU
+variou 2,4× entre rodadas abertas com minutos de diferença, e o número de
+threads do WASM nem chega nele. Comparar `det640` numa página e `det320` em
+outra mede o estado do aparelho, não os modelos.
+
+`?compare=` carrega os conjuntos juntos e reveza a cada round (A B, B A, A B…),
+então a deriva atinge os dois igualmente. `inferencePerRound` vai no JSON: se
+os rounds de um mesmo modelo discordam muito, a deriva foi grande, e a razão
+`speedup_*` continua valendo; os valores absolutos, não.
+
+```text
+run.html?task=detect&compare=famacha-det640,famacha-det320&only=compare
+```
 | `?ramp=400` | Milissegundos de inferência descartada antes de cronometrar, para o clock subir |
 | `?timeout=180000` | Teto por medição; o que estourar vira `error` no JSON e a bateria segue |
 | `?label=nome` | Nome do arquivo em `bench/browser/results/` |
+
+## Quebra do quadro (`breakdown`)
+
+O `speed` do SDK junta desenho, readback e normalização em `preprocess`, e
+upload, modelo e download em `inference`. A seção `breakdown` refaz à mão o
+caminho rápido do SDK num frame 1080p e cronometra cada fronteira de cópia à
+parte. É o número que decide se vale pré-processar dentro do grafo, reduzir a
+saída dentro do grafo ou manter a entrada e a saída na GPU.
+
+| Campo | Mede |
+| --- | --- |
+| `inputBytes` / `outputBytes` | Tamanho do tensor de entrada e soma das saídas |
+| `drawReadbackMs` | Letterbox no canvas `willReadFrequently` (o que o SDK usa) + `getImageData` |
+| `drawReadbackGpuCanvasMs` | O mesmo num canvas acelerado, para comparar |
+| `normalizeMs` | Laço RGBA → CHW float32 |
+| `runCpuIoMs` | `run` com entrada e saída na CPU: upload + modelo + download |
+| `runGpuOutMs` | Só WebGPU. `run` com saída `gpu-buffer`, até a promessa resolver |
+| `gpuDrainMs` | Só WebGPU. Espera a GPU terminar (`onSubmittedWorkDone`) |
+| `downloadMs` | Só WebGPU. `getData()` das saídas: mapear e copiar de volta |
+| `runGpuIoMs` | Só WebGPU. Entrada já na GPU (`Tensor.fromGpuBuffer`) até a GPU terminar |
+| `downloadGpuIoMs` | Só WebGPU. Download das saídas dessa execução |
+| `runGraphMs` | Só WebGPU. Igual a `runGpuIoMs`, com `enableGraphCapture`: a GPU reexecuta comandos gravados, sem a CPU despachar kernel por kernel |
+| `downloadGraphMs` | Só WebGPU. Download das saídas da execução gravada |
+| `graphMaxAbsDiff` | Maior diferença entre a saída gravada e a normal, para a mesma entrada. Tem de ser ~0 |
+| `graphCaptureError` | Por que o graph capture não rodou neste modelo, quando não rodou |
+
+Leituras:
+
+- `runCpuIoMs − runGpuIoMs − downloadGpuIoMs` ≈ custo do upload da entrada.
+- `downloadMs` é o teto do que se ganha reduzindo a saída dentro do grafo.
+- `drawReadbackMs + normalizeMs` é o teto do que se ganha pré-processando
+  na GPU.
+- `runGpuIoMs − runGraphMs` é o que o graph capture tira do despacho pela CPU.
+  Num celular (Mali Bifrost, det 320), o despacho sozinho (`runGpuOutMs`) foi
+  128 de ~224 ms de inferência.
+
+> **`runGpuOutMs` sozinho não diz nada.** Com saída `gpu-buffer`, a promessa do
+> `run` resolve antes de a GPU terminar. Num adapter de software, ela resolveu
+> em 25 ms e a GPU ainda levou 12 s. Some `runGpuOutMs + gpuDrainMs`.
+
+O Chrome adia o `drawImage` e só o executa no `getImageData` seguinte. Por isso
+desenho e readback saem num número só: medido à parte, o desenho dava 0 ms.
+
+Para rodar só esta seção, que é rápida, use
+`run.html?only=breakdown`.
 
 ## A aba precisa estar visível
 

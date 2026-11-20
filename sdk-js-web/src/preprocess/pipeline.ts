@@ -34,11 +34,13 @@ const INV_255 = 1 / 255;
  * canvases read back repeatedly — but it moves the backing store to software,
  * so the downscale from a full-resolution, GPU-backed source runs on the CPU.
  * Measured on the browser bench (`bench/browser`, `breakdown` section: letterbox
- * of a 1080p canvas, then `getImageData`), accelerated against software target:
- * 11.3–11.7 ms vs 16.4–17.7 ms on an Android phone (Mali Bifrost, 320×320),
- * 17.7 vs 26.0 ms at 640×640 on the same phone, 2.4 vs 3.0 ms on a desktop
- * RTX. The resize pipeline does the same draw and read and was not measured
- * separately.
+ * of a 1080p canvas, then `getImageData`), software against accelerated target,
+ * four runs on an Android phone (Mali Bifrost, 320×320): 4–6 ms saved in every
+ * run while inference ran on WebGPU (16.4 → 11.3, 17.7 → 11.7, 24.4 → 20.2,
+ * 16.7 → 11.1 ms), within noise while it ran on WASM (−4.2 to +2.7 ms), whose
+ * threads compete for the same CPU. 2.4 vs 3.0 ms on a desktop RTX. The pixels
+ * are the same: `canvasPixelDiff` was 0 on the phone in every run. The resize
+ * pipeline does the same draw and read and was not measured separately.
  *
  * Chrome may log "Multiple readback operations using getImageData are faster
  * with the willReadFrequently attribute set to true" for this canvas. On this

@@ -381,8 +381,9 @@ they explain numbers in `speed`:
   the old path, because compositing its alpha would change the colours.
 - **Resizing on the GPU.** The canvas the letterbox draws into stays
   accelerated, even though it is read back every frame. Measured on an Android
-  phone (Mali GPU), draw plus read went from 16.4–17.7 ms to 11.3–11.7 ms at
-  320×320, and from 26 to 17.7 ms at 640×640; on a desktop, from 3.0 to 2.4 ms.
+  phone (Mali GPU, 320×320), draw plus read got 4–6 ms faster with inference on
+  WebGPU, in every run; with it on WASM, the difference stayed within noise. On
+  a desktop, from 3.0 to 2.4 ms. The pixels handed to the model are the same.
   Chrome may warn in the console that `willReadFrequently` would make the read
   faster: on this path, the measurement says otherwise.
 - **`croppedImage` and `segmentedImage` on demand.** The per-detection crops

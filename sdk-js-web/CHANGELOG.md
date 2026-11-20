@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **A float16 model no longer returns all zeros on WebGPU without
+  `shader-f16`.** On such an adapter `onnxruntime-web` builds the session, and
+  every run succeeds with an all-zero output — no boxes, no scores, no error.
+  Measured on 1.25.1 (SwiftShader) with a half-precision YOLO11n detector whose
+  inputs and outputs are float32, so the declared input types never gave it
+  away: 0 detections, against 1 at confidence 0.9458 on WASM. `OrtSession.create`
+  now reads the model's weights (initializers and `Constant` tensors) and, when
+  any is float16 and the adapter lacks `shader-f16`, drops `webgpu` with a
+  console warning, falling back to WASM when nothing else is left. Float32
+  models and adapters that offer `shader-f16` are untouched. Only models whose
+  bytes the SDK holds are checked: a URL loaded with `readMetadata: false` and
+  no cache is passed to ORT unread.
+
 ## [0.12.0] - 2026-10-03
 
 ### Changed

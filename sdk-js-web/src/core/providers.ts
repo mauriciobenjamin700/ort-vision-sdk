@@ -122,3 +122,30 @@ async function hasWebGpuAdapter(): Promise<boolean> {
     return false;
   }
 }
+
+/**
+ * Whether this environment's WebGPU adapter offers the `shader-f16` feature.
+ *
+ * Without it a float16 model on WebGPU does not fail: it returns an all-zero
+ * output. Measured with `onnxruntime-web` 1.25.1 on a SwiftShader adapter, on a
+ * YOLO11n detector exported in half precision with float32 inputs and outputs —
+ * boxes 0, scores 0, no NaN, no error — while the same file on WASM matched the
+ * float32 export (score ratio 0.996). Asked only when a half model is about to
+ * go to WebGPU, so other sessions pay no extra `requestAdapter()`.
+ *
+ * @returns `true` when an adapter exists and lists `shader-f16`.
+ */
+export async function webGpuHasShaderF16(): Promise<boolean> {
+  const gpu = (
+    globalThis.navigator as
+      | { gpu?: { requestAdapter(): Promise<{ features?: { has(name: string): boolean } } | null> } }
+      | undefined
+  )?.gpu;
+  if (gpu === undefined) return false;
+  try {
+    const adapter = await gpu.requestAdapter();
+    return adapter?.features?.has("shader-f16") === true;
+  } catch {
+    return false;
+  }
+}

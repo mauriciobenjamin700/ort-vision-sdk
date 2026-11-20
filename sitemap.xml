@@ -1,0 +1,241 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">
+    <url>
+        <loc>https://mauriciobenjamin700.github.io/ort-vision-sdk/</loc>
+        <lastmod>2026-11-20</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="pt" href="https://mauriciobenjamin700.github.io/ort-vision-sdk/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://mauriciobenjamin700.github.io/ort-vision-sdk/en/"/>
+    </url>
+    <url>
+        <loc>https://mauriciobenjamin700.github.io/ort-vision-sdk/inicio-rapido/</loc>
+        <lastmod>2026-11-20</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="pt" href="https://mauriciobenjamin700.github.io/ort-vision-sdk/inicio-rapido/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://mauriciobenjamin700.github.io/ort-vision-sdk/en/inicio-rapido/"/>
+    </url>
+    <url>
+        <loc>https://mauriciobenjamin700.github.io/ort-vision-sdk/instalacao/</loc>
+        <lastmod>2026-11-20</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="pt" href="https://mauriciobenjamin700.github.io/ort-vision-sdk/instalacao/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://mauriciobenjamin700.github.io/ort-vision-sdk/en/instalacao/"/>
+    </url>
+    <url>
+        <loc>https://mauriciobenjamin700.github.io/ort-vision-sdk/publishing/</loc>
+        <lastmod>2026-11-20</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="pt" href="https://mauriciobenjamin700.github.io/ort-vision-sdk/publishing/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://mauriciobenjamin700.github.io/ort-vision-sdk/en/publishing/"/>
+    </url>
+    <url>
+        <loc>https://mauriciobenjamin700.github.io/ort-vision-sdk/guia/backends/</loc>
+        <lastmod>2026-11-20</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="pt" href="https://mauriciobenjamin700.github.io/ort-vision-sdk/guia/backends/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://mauriciobenjamin700.github.io/ort-vision-sdk/en/guia/backends/"/>
+    </url>
+    <url>
+        <loc>https://mauriciobenjamin700.github.io/ort-vision-sdk/guia/classificacao/</loc>
+        <lastmod>2026-11-20</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="pt" href="https://mauriciobenjamin700.github.io/ort-vision-sdk/guia/classificacao/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://mauriciobenjamin700.github.io/ort-vision-sdk/en/guia/classificacao/"/>
+    </url>
+    <url>
+        <loc>https://mauriciobenjamin700.github.io/ort-vision-sdk/guia/desempenho/</loc>
+        <lastmod>2026-11-20</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="pt" href="https://mauriciobenjamin700.github.io/ort-vision-sdk/guia/desempenho/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://mauriciobenjamin700.github.io/ort-vision-sdk/en/guia/desempenho/"/>
+    </url>
+    <url>
+        <loc>https://mauriciobenjamin700.github.io/ort-vision-sdk/guia/deteccao/</loc>
+        <lastmod>2026-11-20</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="pt" href="https://mauriciobenjamin700.github.io/ort-vision-sdk/guia/deteccao/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://mauriciobenjamin700.github.io/ort-vision-sdk/en/guia/deteccao/"/>
+    </url>
+    <url>
+        <loc>https://mauriciobenjamin700.github.io/ort-vision-sdk/guia/meia-precisao/</loc>
+        <lastmod>2026-11-20</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="pt" href="https://mauriciobenjamin700.github.io/ort-vision-sdk/guia/meia-precisao/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://mauriciobenjamin700.github.io/ort-vision-sdk/en/guia/meia-precisao/"/>
+    </url>
+    <url>
+        <loc>https://mauriciobenjamin700.github.io/ort-vision-sdk/guia/modelo/</loc>
+        <lastmod>2026-11-20</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="pt" href="https://mauriciobenjamin700.github.io/ort-vision-sdk/guia/modelo/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://mauriciobenjamin700.github.io/ort-vision-sdk/en/guia/modelo/"/>
+    </url>
+    <url>
+        <loc>https://mauriciobenjamin700.github.io/ort-vision-sdk/guia/pipeline/</loc>
+        <lastmod>2026-11-20</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="pt" href="https://mauriciobenjamin700.github.io/ort-vision-sdk/guia/pipeline/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://mauriciobenjamin700.github.io/ort-vision-sdk/en/guia/pipeline/"/>
+    </url>
+    <url>
+        <loc>https://mauriciobenjamin700.github.io/ort-vision-sdk/guia/python/</loc>
+        <lastmod>2026-11-20</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="pt" href="https://mauriciobenjamin700.github.io/ort-vision-sdk/guia/python/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://mauriciobenjamin700.github.io/ort-vision-sdk/en/guia/python/"/>
+    </url>
+    <url>
+        <loc>https://mauriciobenjamin700.github.io/ort-vision-sdk/guia/segmentacao/</loc>
+        <lastmod>2026-11-20</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="pt" href="https://mauriciobenjamin700.github.io/ort-vision-sdk/guia/segmentacao/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://mauriciobenjamin700.github.io/ort-vision-sdk/en/guia/segmentacao/"/>
+    </url>
+    <url>
+        <loc>https://mauriciobenjamin700.github.io/ort-vision-sdk/guia/velocidade/</loc>
+        <lastmod>2026-11-20</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="pt" href="https://mauriciobenjamin700.github.io/ort-vision-sdk/guia/velocidade/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://mauriciobenjamin700.github.io/ort-vision-sdk/en/guia/velocidade/"/>
+    </url>
+    <url>
+        <loc>https://mauriciobenjamin700.github.io/ort-vision-sdk/guia/web/</loc>
+        <lastmod>2026-11-20</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="pt" href="https://mauriciobenjamin700.github.io/ort-vision-sdk/guia/web/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://mauriciobenjamin700.github.io/ort-vision-sdk/en/guia/web/"/>
+    </url>
+    <url>
+        <loc>https://mauriciobenjamin700.github.io/ort-vision-sdk/referencia/python/</loc>
+        <lastmod>2026-11-20</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="pt" href="https://mauriciobenjamin700.github.io/ort-vision-sdk/referencia/python/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://mauriciobenjamin700.github.io/ort-vision-sdk/en/referencia/python/"/>
+    </url>
+    <url>
+        <loc>https://mauriciobenjamin700.github.io/ort-vision-sdk/referencia/web/</loc>
+        <lastmod>2026-11-20</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="pt" href="https://mauriciobenjamin700.github.io/ort-vision-sdk/referencia/web/"/>
+        <xhtml:link rel="alternate" hreflang="en" href="https://mauriciobenjamin700.github.io/ort-vision-sdk/en/referencia/web/"/>
+    </url>
+    <url>
+        <loc>https://mauriciobenjamin700.github.io/ort-vision-sdk/en/</loc>
+        <lastmod>2026-11-20</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://mauriciobenjamin700.github.io/ort-vision-sdk/en/"/>
+        <xhtml:link rel="alternate" hreflang="pt" href="https://mauriciobenjamin700.github.io/ort-vision-sdk/"/>
+    </url>
+    <url>
+        <loc>https://mauriciobenjamin700.github.io/ort-vision-sdk/en/inicio-rapido/</loc>
+        <lastmod>2026-11-20</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://mauriciobenjamin700.github.io/ort-vision-sdk/en/inicio-rapido/"/>
+        <xhtml:link rel="alternate" hreflang="pt" href="https://mauriciobenjamin700.github.io/ort-vision-sdk/inicio-rapido/"/>
+    </url>
+    <url>
+        <loc>https://mauriciobenjamin700.github.io/ort-vision-sdk/en/instalacao/</loc>
+        <lastmod>2026-11-20</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://mauriciobenjamin700.github.io/ort-vision-sdk/en/instalacao/"/>
+        <xhtml:link rel="alternate" hreflang="pt" href="https://mauriciobenjamin700.github.io/ort-vision-sdk/instalacao/"/>
+    </url>
+    <url>
+        <loc>https://mauriciobenjamin700.github.io/ort-vision-sdk/en/publishing/</loc>
+        <lastmod>2026-11-20</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://mauriciobenjamin700.github.io/ort-vision-sdk/en/publishing/"/>
+        <xhtml:link rel="alternate" hreflang="pt" href="https://mauriciobenjamin700.github.io/ort-vision-sdk/publishing/"/>
+    </url>
+    <url>
+        <loc>https://mauriciobenjamin700.github.io/ort-vision-sdk/en/guia/backends/</loc>
+        <lastmod>2026-11-20</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://mauriciobenjamin700.github.io/ort-vision-sdk/en/guia/backends/"/>
+        <xhtml:link rel="alternate" hreflang="pt" href="https://mauriciobenjamin700.github.io/ort-vision-sdk/guia/backends/"/>
+    </url>
+    <url>
+        <loc>https://mauriciobenjamin700.github.io/ort-vision-sdk/en/guia/classificacao/</loc>
+        <lastmod>2026-11-20</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://mauriciobenjamin700.github.io/ort-vision-sdk/en/guia/classificacao/"/>
+        <xhtml:link rel="alternate" hreflang="pt" href="https://mauriciobenjamin700.github.io/ort-vision-sdk/guia/classificacao/"/>
+    </url>
+    <url>
+        <loc>https://mauriciobenjamin700.github.io/ort-vision-sdk/en/guia/desempenho/</loc>
+        <lastmod>2026-11-20</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://mauriciobenjamin700.github.io/ort-vision-sdk/en/guia/desempenho/"/>
+        <xhtml:link rel="alternate" hreflang="pt" href="https://mauriciobenjamin700.github.io/ort-vision-sdk/guia/desempenho/"/>
+    </url>
+    <url>
+        <loc>https://mauriciobenjamin700.github.io/ort-vision-sdk/en/guia/deteccao/</loc>
+        <lastmod>2026-11-20</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://mauriciobenjamin700.github.io/ort-vision-sdk/en/guia/deteccao/"/>
+        <xhtml:link rel="alternate" hreflang="pt" href="https://mauriciobenjamin700.github.io/ort-vision-sdk/guia/deteccao/"/>
+    </url>
+    <url>
+        <loc>https://mauriciobenjamin700.github.io/ort-vision-sdk/en/guia/meia-precisao/</loc>
+        <lastmod>2026-11-20</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://mauriciobenjamin700.github.io/ort-vision-sdk/en/guia/meia-precisao/"/>
+        <xhtml:link rel="alternate" hreflang="pt" href="https://mauriciobenjamin700.github.io/ort-vision-sdk/guia/meia-precisao/"/>
+    </url>
+    <url>
+        <loc>https://mauriciobenjamin700.github.io/ort-vision-sdk/en/guia/modelo/</loc>
+        <lastmod>2026-11-20</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://mauriciobenjamin700.github.io/ort-vision-sdk/en/guia/modelo/"/>
+        <xhtml:link rel="alternate" hreflang="pt" href="https://mauriciobenjamin700.github.io/ort-vision-sdk/guia/modelo/"/>
+    </url>
+    <url>
+        <loc>https://mauriciobenjamin700.github.io/ort-vision-sdk/en/guia/pipeline/</loc>
+        <lastmod>2026-11-20</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://mauriciobenjamin700.github.io/ort-vision-sdk/en/guia/pipeline/"/>
+        <xhtml:link rel="alternate" hreflang="pt" href="https://mauriciobenjamin700.github.io/ort-vision-sdk/guia/pipeline/"/>
+    </url>
+    <url>
+        <loc>https://mauriciobenjamin700.github.io/ort-vision-sdk/en/guia/python/</loc>
+        <lastmod>2026-11-20</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://mauriciobenjamin700.github.io/ort-vision-sdk/en/guia/python/"/>
+        <xhtml:link rel="alternate" hreflang="pt" href="https://mauriciobenjamin700.github.io/ort-vision-sdk/guia/python/"/>
+    </url>
+    <url>
+        <loc>https://mauriciobenjamin700.github.io/ort-vision-sdk/en/guia/segmentacao/</loc>
+        <lastmod>2026-11-20</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://mauriciobenjamin700.github.io/ort-vision-sdk/en/guia/segmentacao/"/>
+        <xhtml:link rel="alternate" hreflang="pt" href="https://mauriciobenjamin700.github.io/ort-vision-sdk/guia/segmentacao/"/>
+    </url>
+    <url>
+        <loc>https://mauriciobenjamin700.github.io/ort-vision-sdk/en/guia/velocidade/</loc>
+        <lastmod>2026-11-20</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://mauriciobenjamin700.github.io/ort-vision-sdk/en/guia/velocidade/"/>
+        <xhtml:link rel="alternate" hreflang="pt" href="https://mauriciobenjamin700.github.io/ort-vision-sdk/guia/velocidade/"/>
+    </url>
+    <url>
+        <loc>https://mauriciobenjamin700.github.io/ort-vision-sdk/en/guia/web/</loc>
+        <lastmod>2026-11-20</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://mauriciobenjamin700.github.io/ort-vision-sdk/en/guia/web/"/>
+        <xhtml:link rel="alternate" hreflang="pt" href="https://mauriciobenjamin700.github.io/ort-vision-sdk/guia/web/"/>
+    </url>
+    <url>
+        <loc>https://mauriciobenjamin700.github.io/ort-vision-sdk/en/referencia/python/</loc>
+        <lastmod>2026-11-20</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://mauriciobenjamin700.github.io/ort-vision-sdk/en/referencia/python/"/>
+        <xhtml:link rel="alternate" hreflang="pt" href="https://mauriciobenjamin700.github.io/ort-vision-sdk/referencia/python/"/>
+    </url>
+    <url>
+        <loc>https://mauriciobenjamin700.github.io/ort-vision-sdk/en/referencia/web/</loc>
+        <lastmod>2026-11-20</lastmod>
+        <changefreq>daily</changefreq>
+        <xhtml:link rel="alternate" hreflang="en" href="https://mauriciobenjamin700.github.io/ort-vision-sdk/en/referencia/web/"/>
+        <xhtml:link rel="alternate" hreflang="pt" href="https://mauriciobenjamin700.github.io/ort-vision-sdk/referencia/web/"/>
+    </url>
+</urlset>

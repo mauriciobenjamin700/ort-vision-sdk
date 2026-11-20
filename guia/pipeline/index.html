@@ -1,0 +1,1942 @@
+
+<!doctype html>
+<html lang="pt" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="SDKs de alto nível para inferência de visão computacional sobre o ONNX Runtime (Python + browser/TypeScript).">
+      
+      
+      
+        <link rel="canonical" href="https://mauriciobenjamin700.github.io/ort-vision-sdk/guia/pipeline/">
+      
+      
+        <link rel="prev" href="../segmentacao/">
+      
+      
+        <link rel="next" href="../modelo/">
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.5.50">
+    
+    
+      
+        <title>Pipelines fundidos - ort-vision-sdk</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.a40c8224.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#pipelines-fundidos-deteccao-classificacao" class="md-skip">
+          Ir para o conteúdo
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Cabeçalho">
+    <a href="../.." title="ort-vision-sdk" class="md-header__button md-logo" aria-label="ort-vision-sdk" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            ort-vision-sdk
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Pipelines fundidos
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Tema escuro"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Tema escuro" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m17.75 4.09-2.53 1.94.91 3.06-2.63-1.81-2.63 1.81.91-3.06-2.53-1.94L12.44 4l1.06-3 1.06 3zm3.5 6.91-1.64 1.25.59 1.98-1.7-1.17-1.7 1.17.59-1.98L15.75 11l2.06-.05L18.5 9l.69 1.95zm-2.28 4.95c.83-.08 1.72 1.1 1.19 1.85-.32.45-.66.87-1.08 1.27C15.17 23 8.84 23 4.94 19.07c-3.91-3.9-3.91-10.24 0-14.14.4-.4.82-.76 1.27-1.08.75-.53 1.93.36 1.85 1.19-.27 2.86.69 5.83 2.89 8.02a9.96 9.96 0 0 0 8.02 2.89m-1.64 2.02a12.08 12.08 0 0 1-7.8-3.47c-2.17-2.19-3.33-5-3.49-7.82-2.81 3.14-2.7 7.96.31 10.98 3.02 3.01 7.84 3.12 10.98.31"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Tema claro"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Tema claro" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 7a5 5 0 0 1 5 5 5 5 0 0 1-5 5 5 5 0 0 1-5-5 5 5 0 0 1 5-5m0 2a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3m0-7 2.39 3.42C13.65 5.15 12.84 5 12 5s-1.65.15-2.39.42zM3.34 7l4.16-.35A7.2 7.2 0 0 0 5.94 8.5c-.44.74-.69 1.5-.83 2.29zm.02 10 1.76-3.77a7.131 7.131 0 0 0 2.38 4.14zM20.65 7l-1.77 3.79a7.02 7.02 0 0 0-2.38-4.15zm-.01 10-4.14.36c.59-.51 1.12-1.14 1.54-1.86.42-.73.69-1.5.83-2.29zM12 22l-2.41-3.44c.74.27 1.55.44 2.41.44.82 0 1.63-.17 2.37-.44z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+      <div class="md-header__option">
+  <div class="md-select">
+    
+    <button class="md-header__button md-icon" aria-label="Selecione o idioma">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m12.87 15.07-2.54-2.51.03-.03A17.5 17.5 0 0 0 14.07 6H17V4h-7V2H8v2H1v2h11.17C11.5 7.92 10.44 9.75 9 11.35 8.07 10.32 7.3 9.19 6.69 8h-2c.73 1.63 1.73 3.17 2.98 4.56l-5.09 5.02L4 19l5-5 3.11 3.11zM18.5 10h-2L12 22h2l1.12-3h4.75L21 22h2zm-2.62 7 1.62-4.33L19.12 17z"/></svg>
+    </button>
+    <div class="md-select__inner">
+      <ul class="md-select__list">
+        
+          <li class="md-select__item">
+            <a href="./" hreflang="pt" class="md-select__link">
+              Português (BR)
+            </a>
+          </li>
+        
+          <li class="md-select__item">
+            <a href="../../en/guia/pipeline/" hreflang="en" class="md-select__link">
+              English (US)
+            </a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+</div>
+    
+    
+      <label class="md-header__button md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+      </label>
+      <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Buscar" placeholder="Buscar" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Pesquisar">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Limpar" aria-label="Limpar" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Inicializando a pesquisa
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/mauriciobenjamin700/ort-vision-sdk" title="Ir ao repositório" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81"/></svg>
+  </div>
+  <div class="md-source__repository">
+    mauriciobenjamin700/ort-vision-sdk
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navegação" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="ort-vision-sdk" class="md-nav__button md-logo" aria-label="ort-vision-sdk" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    ort-vision-sdk
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/mauriciobenjamin700/ort-vision-sdk" title="Ir ao repositório" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81"/></svg>
+  </div>
+  <div class="md-source__repository">
+    mauriciobenjamin700/ort-vision-sdk
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Início
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../instalacao/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Instalação
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../inicio-rapido/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Início rápido
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  <span class="md-ellipsis">
+    Guia
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            Guia
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../classificacao/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Classificação
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../deteccao/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Detecção
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../segmentacao/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Segmentação
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  <span class="md-ellipsis">
+    Pipelines fundidos
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  <span class="md-ellipsis">
+    Pipelines fundidos
+  </span>
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Índice">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Índice
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#instalando-o-extra" class="md-nav__link">
+    <span class="md-ellipsis">
+      Instalando o extra
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#fundindo-os-dois-modelos" class="md-nav__link">
+    <span class="md-ellipsis">
+      Fundindo os dois modelos
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#rodando" class="md-nav__link">
+    <span class="md-ellipsis">
+      Rodando
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dois-espacos-de-rotulo-separados" class="md-nav__link">
+    <span class="md-ellipsis">
+      Dois espaços de rótulo, separados
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#escolhendo-de-onde-vem-os-recortes" class="md-nav__link">
+    <span class="md-ellipsis">
+      Escolhendo de onde vêm os recortes
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#quantas-caixas-o-pipeline-reporta" class="md-nav__link">
+    <span class="md-ellipsis">
+      Quantas caixas o pipeline reporta
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#normalizacao-do-classificador" class="md-nav__link">
+    <span class="md-ellipsis">
+      Normalização do classificador
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Normalização do classificador">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#escolhendo-a-mao" class="md-nav__link">
+    <span class="md-ellipsis">
+      Escolhendo à mão
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#valores-proprios" class="md-nav__link">
+    <span class="md-ellipsis">
+      Valores próprios
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#o-que-ficou-registrado-no-arquivo" class="md-nav__link">
+    <span class="md-ellipsis">
+      O que ficou registrado no arquivo
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tres-estagios-segmentando-dentro-do-recorte" class="md-nav__link">
+    <span class="md-ellipsis">
+      Três estágios: segmentando dentro do recorte
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Três estágios: segmentando dentro do recorte">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#lendo-as-mascaras" class="md-nav__link">
+    <span class="md-ellipsis">
+      Lendo as máscaras
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#o-que-da-para-ajustar" class="md-nav__link">
+    <span class="md-ellipsis">
+      O que dá para ajustar
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#quando-nao-detectar-nada-e-um-erro" class="md-nav__link">
+    <span class="md-ellipsis">
+      Quando não detectar nada é um erro
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#quando-fundir-compensa" class="md-nav__link">
+    <span class="md-ellipsis">
+      Quando fundir compensa
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Quando fundir compensa">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#por-que-o-teto-e-baixo" class="md-nav__link">
+    <span class="md-ellipsis">
+      Por que o teto é baixo
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#a-armadilha-que-inverte-a-conclusao" class="md-nav__link">
+    <span class="md-ellipsis">
+      A armadilha que inverte a conclusão
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#reproduzindo-a-cascata-numericamente" class="md-nav__link">
+    <span class="md-ellipsis">
+      Reproduzindo a cascata numericamente
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#recomendacao" class="md-nav__link">
+    <span class="md-ellipsis">
+      Recomendação
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#limites-que-valem-saber" class="md-nav__link">
+    <span class="md-ellipsis">
+      Limites que valem saber
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#recapitulando" class="md-nav__link">
+    <span class="md-ellipsis">
+      Recapitulando
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#proximos-passos" class="md-nav__link">
+    <span class="md-ellipsis">
+      Próximos passos
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../modelo/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    O modelo manda
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../python/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Python
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../backends/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Backends de inferência
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../velocidade/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Custo da inferência
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../desempenho/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Otimizando criação e inferência
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../web/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Web (browser)
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../meia-precisao/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Meia precisão (FP16)
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
+            
+  
+  <span class="md-ellipsis">
+    Referência
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            Referência
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../referencia/python/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    API Python
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../referencia/web/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    API Web
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="">
+            
+  
+  <span class="md-ellipsis">
+    Projeto
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            Projeto
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../publishing/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Publicação
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Índice">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Índice
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#instalando-o-extra" class="md-nav__link">
+    <span class="md-ellipsis">
+      Instalando o extra
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#fundindo-os-dois-modelos" class="md-nav__link">
+    <span class="md-ellipsis">
+      Fundindo os dois modelos
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#rodando" class="md-nav__link">
+    <span class="md-ellipsis">
+      Rodando
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dois-espacos-de-rotulo-separados" class="md-nav__link">
+    <span class="md-ellipsis">
+      Dois espaços de rótulo, separados
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#escolhendo-de-onde-vem-os-recortes" class="md-nav__link">
+    <span class="md-ellipsis">
+      Escolhendo de onde vêm os recortes
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#quantas-caixas-o-pipeline-reporta" class="md-nav__link">
+    <span class="md-ellipsis">
+      Quantas caixas o pipeline reporta
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#normalizacao-do-classificador" class="md-nav__link">
+    <span class="md-ellipsis">
+      Normalização do classificador
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Normalização do classificador">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#escolhendo-a-mao" class="md-nav__link">
+    <span class="md-ellipsis">
+      Escolhendo à mão
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#valores-proprios" class="md-nav__link">
+    <span class="md-ellipsis">
+      Valores próprios
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#o-que-ficou-registrado-no-arquivo" class="md-nav__link">
+    <span class="md-ellipsis">
+      O que ficou registrado no arquivo
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tres-estagios-segmentando-dentro-do-recorte" class="md-nav__link">
+    <span class="md-ellipsis">
+      Três estágios: segmentando dentro do recorte
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Três estágios: segmentando dentro do recorte">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#lendo-as-mascaras" class="md-nav__link">
+    <span class="md-ellipsis">
+      Lendo as máscaras
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#o-que-da-para-ajustar" class="md-nav__link">
+    <span class="md-ellipsis">
+      O que dá para ajustar
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#quando-nao-detectar-nada-e-um-erro" class="md-nav__link">
+    <span class="md-ellipsis">
+      Quando não detectar nada é um erro
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#quando-fundir-compensa" class="md-nav__link">
+    <span class="md-ellipsis">
+      Quando fundir compensa
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Quando fundir compensa">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#por-que-o-teto-e-baixo" class="md-nav__link">
+    <span class="md-ellipsis">
+      Por que o teto é baixo
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#a-armadilha-que-inverte-a-conclusao" class="md-nav__link">
+    <span class="md-ellipsis">
+      A armadilha que inverte a conclusão
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#reproduzindo-a-cascata-numericamente" class="md-nav__link">
+    <span class="md-ellipsis">
+      Reproduzindo a cascata numericamente
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#recomendacao" class="md-nav__link">
+    <span class="md-ellipsis">
+      Recomendação
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#limites-que-valem-saber" class="md-nav__link">
+    <span class="md-ellipsis">
+      Limites que valem saber
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#recapitulando" class="md-nav__link">
+    <span class="md-ellipsis">
+      Recapitulando
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#proximos-passos" class="md-nav__link">
+    <span class="md-ellipsis">
+      Próximos passos
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+  
+  
+
+
+<h1 id="pipelines-fundidos-deteccao-classificacao">Pipelines fundidos (detecção → classificação)</h1>
+<p>Você tem dois modelos. Um detector acha os objetos; um classificador diz de que
+subtipo cada objeto é. O fluxo natural é encadear:</p>
+<div class="highlight"><pre><span></span><code><span class="n">detections</span> <span class="o">=</span> <span class="n">detector</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="s2">"rebanho.jpg"</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+<span class="k">for</span> <span class="n">d</span> <span class="ow">in</span> <span class="n">detections</span><span class="p">:</span>
+    <span class="n">sub</span> <span class="o">=</span> <span class="n">classifier</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">d</span><span class="o">.</span><span class="n">cropped_image</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>  <span class="c1"># 😐 uma sessão a mais, uma volta a mais</span>
+</code></pre></div>
+<p>Isso funciona — e custa caro. São <strong>duas sessões</strong>, <strong>dois carregamentos de
+modelo</strong>, e uma ida e volta pelo Python (ou pelo JavaScript) para cada recorte:
+fatiar, redimensionar, empilhar em batch, chamar o segundo runtime. No celular
+ou numa aba de navegador, essa volta costuma dominar o tempo total.</p>
+<p>O módulo <code>ort_vision_sdk.compose</code> remove as duas coisas. Ele reescreve os dois
+<code>.onnx</code> num <strong>único grafo</strong>: o detector, uma ponte que recorta e redimensiona as
+caixas, e o classificador. Um arquivo, uma sessão, um carregamento — e os
+recortes nunca saem do runtime.</p>
+<pre class="mermaid"><code>flowchart LR
+    A[imagem&lt;br/&gt;letterbox] --&gt; B[detector]
+    B --&gt; C[NMS]
+    C --&gt; D[RoiAlign&lt;br/&gt;recorta + redimensiona]
+    A --&gt; D
+    D --&gt; E[normaliza]
+    E --&gt; F[classificador]
+    F --&gt; G[probs]
+    C --&gt; H[boxes / scores / classes]</code></pre>
+<div class="admonition info">
+<p class="admonition-title">Fundir é passo de build, rodar não é</p>
+<p>A fusão precisa da biblioteca <code>onnx</code> (o extra <code>[compose]</code>), porque ela
+reescreve protobufs. O arquivo resultante é um <code>.onnx</code> comum: <strong>rodar</strong> não
+precisa de nada além do <code>onnxruntime</code> que o SDK já traz — inclusive no
+navegador, onde o SDK web carrega exatamente o mesmo arquivo.</p>
+</div>
+<h2 id="instalando-o-extra">Instalando o extra</h2>
+<div class="highlight"><pre><span></span><code>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">"ort-vision-sdk[compose]"</span>
+</code></pre></div>
+<h2 id="fundindo-os-dois-modelos">Fundindo os dois modelos</h2>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">ort_vision_sdk.compose</span><span class="w"> </span><span class="kn">import</span> <span class="n">fuse_detect_classify</span>
+
+<span class="n">fuse_detect_classify</span><span class="p">(</span>
+    <span class="s2">"yolov8n.onnx"</span><span class="p">,</span>       <span class="c1"># detector: cabeça YOLO anchor-free (v8..v26)</span>
+    <span class="s2">"resnet18.onnx"</span><span class="p">,</span>      <span class="c1"># classificador: uma entrada NCHW, uma saída (batch, classes)</span>
+    <span class="s2">"pipeline.onnx"</span><span class="p">,</span>      <span class="c1"># onde gravar o modelo fundido</span>
+    <span class="n">max_detections</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span>    <span class="c1"># quantas caixas o pipeline reporta por imagem</span>
+    <span class="n">conf_threshold</span><span class="o">=</span><span class="mf">0.25</span><span class="p">,</span>  <span class="c1"># limiar de score, gravado dentro do NMS do grafo</span>
+    <span class="n">iou_threshold</span><span class="o">=</span><span class="mf">0.45</span><span class="p">,</span>   <span class="c1"># limiar de IoU, idem</span>
+<span class="p">)</span>
+</code></pre></div>
+<p>Pronto. <code>pipeline.onnx</code> é um modelo autocontido.</p>
+<div class="admonition check">
+<p class="admonition-title">A fusão se valida sozinha</p>
+<p>Antes de retornar, <code>fuse_detect_classify</code> <strong>roda o grafo fundido uma vez</strong> no
+ONNX Runtime. Isso é o que pega o erro mais comum — um classificador cujo
+grafo só aceita o batch com que foi exportado (um <code>Reshape</code> com <code>1</code> fixo lá
+dentro). Você descobre na hora de fundir, não em produção. Passe
+<code>validate=False</code> para pular.</p>
+</div>
+<h2 id="rodando">Rodando</h2>
+<div class="tabbed-set tabbed-alternate" data-tabs="1:2"><input checked="checked" id="__tabbed_1_1" name="__tabbed_1" type="radio" /><input id="__tabbed_1_2" name="__tabbed_1" type="radio" /><div class="tabbed-labels"><label for="__tabbed_1_1">Python</label><label for="__tabbed_1_2">Web (browser)</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">ort_vision_sdk</span><span class="w"> </span><span class="kn">import</span> <span class="n">DetectClassify</span>
+
+<span class="n">pipeline</span> <span class="o">=</span> <span class="n">DetectClassify</span><span class="p">(</span><span class="s2">"pipeline.onnx"</span><span class="p">)</span>
+<span class="n">result</span> <span class="o">=</span> <span class="n">pipeline</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="s2">"rebanho.jpg"</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+
+<span class="k">for</span> <span class="n">d</span> <span class="ow">in</span> <span class="n">result</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">d</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">d</span><span class="o">.</span><span class="n">conf</span><span class="p">,</span> <span class="n">d</span><span class="o">.</span><span class="n">box</span><span class="o">.</span><span class="n">xyxy</span><span class="p">)</span>          <span class="c1"># o que o detector achou</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">d</span><span class="o">.</span><span class="n">classification</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">d</span><span class="o">.</span><span class="n">classification</span><span class="o">.</span><span class="n">conf</span><span class="p">)</span>  <span class="c1"># o que o classificador disse</span>
+</code></pre></div>
+</div>
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code><span class="k">import</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">DetectClassify</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="kr">from</span><span class="w"> </span><span class="s2">"@mauriciobenjamin700/ort-vision-sdk-web"</span><span class="p">;</span>
+
+<span class="kd">const</span><span class="w"> </span><span class="nx">pipeline</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">DetectClassify</span><span class="p">.</span><span class="nx">create</span><span class="p">(</span><span class="s2">"/models/pipeline.onnx"</span><span class="p">);</span>
+<span class="kd">const</span><span class="w"> </span><span class="nx">result</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="k">await</span><span class="w"> </span><span class="nx">pipeline</span><span class="p">.</span><span class="nx">predict</span><span class="p">(</span><span class="s2">"/images/rebanho.jpg"</span><span class="p">))[</span><span class="mf">0</span><span class="p">];</span>
+
+<span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kd">const</span><span class="w"> </span><span class="nx">d</span><span class="w"> </span><span class="k">of</span><span class="w"> </span><span class="nx">result</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="nx">d</span><span class="p">.</span><span class="nx">name</span><span class="p">,</span><span class="w"> </span><span class="nx">d</span><span class="p">.</span><span class="nx">conf</span><span class="p">,</span><span class="w"> </span><span class="nx">d</span><span class="p">.</span><span class="nx">box</span><span class="p">.</span><span class="nx">xyxy</span><span class="p">);</span>
+<span class="w">  </span><span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="nx">d</span><span class="p">.</span><span class="nx">classification</span><span class="o">?</span><span class="p">.</span><span class="nx">name</span><span class="p">,</span><span class="w"> </span><span class="nx">d</span><span class="p">.</span><span class="nx">classification</span><span class="o">?</span><span class="p">.</span><span class="nx">conf</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div>
+</div>
+</div>
+</div>
+<p>Você não repetiu <strong>nenhuma</strong> configuração ao carregar. Resolução do letterbox,
+tamanho do recorte, se a saída ainda precisa de softmax, os nomes das classes
+dos dois estágios — tudo isso foi decidido na fusão e gravado nos metadados do
+próprio arquivo. É a mesma ideia de <a href="../modelo/">O modelo manda</a>, levada ao
+pipeline inteiro.</p>
+<h2 id="dois-espacos-de-rotulo-separados">Dois espaços de rótulo, separados</h2>
+<p>Um detector que acha <code>sheep</code> alimentando um classificador que responde
+<code>famacha_3</code> não compartilha id de classe nenhum com ele. Por isso o envelope
+carrega <strong>dois</strong> mapas, e a resposta do classificador mora no seu próprio campo:</p>
+<div class="highlight"><pre><span></span><code><span class="n">result</span><span class="o">.</span><span class="n">names</span>             <span class="c1"># {0: 'sheep', 1: 'goat'}       — estágio de detecção</span>
+<span class="n">result</span><span class="o">.</span><span class="n">classifier_names</span>  <span class="c1"># {0: 'famacha_1', 1: 'famacha_2', ...} — estágio de classificação</span>
+
+<span class="n">d</span> <span class="o">=</span> <span class="n">result</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+<span class="n">d</span><span class="o">.</span><span class="n">cls</span><span class="p">,</span> <span class="n">d</span><span class="o">.</span><span class="n">name</span>              <span class="c1"># classe do detector</span>
+<span class="n">d</span><span class="o">.</span><span class="n">classification</span><span class="o">.</span><span class="n">cls</span>       <span class="c1"># classe do classificador — outro espaço, outro id</span>
+</code></pre></div>
+<div class="admonition warning">
+<p class="admonition-title">Não compare <code>d.cls</code> com <code>d.classification.cls</code></p>
+<p>São perguntas diferentes: <em>que tipo de objeto é esse</em> e <em>de que subcategoria
+esse objeto é</em>. Juntar os dois num campo só perderia uma das respostas.</p>
+</div>
+<h2 id="escolhendo-de-onde-vem-os-recortes">Escolhendo de onde vêm os recortes</h2>
+<p>Esta é a decisão que mais muda o resultado.</p>
+<div class="tabbed-set tabbed-alternate" data-tabs="2:2"><input checked="checked" id="__tabbed_2_1" name="__tabbed_2" type="radio" /><input id="__tabbed_2_2" name="__tabbed_2" type="radio" /><div class="tabbed-labels"><label for="__tabbed_2_1"><code>detector_input</code> (padrão)</label><label for="__tabbed_2_2"><code>original</code></label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<p>Recorta do próprio tensor 640×640 já letterboxado. O grafo tem <strong>uma entrada
+só</strong> e é o mais simples de operar.</p>
+<div class="highlight"><pre><span></span><code><span class="n">fuse_detect_classify</span><span class="p">(</span><span class="n">det</span><span class="p">,</span> <span class="n">clf</span><span class="p">,</span> <span class="s2">"pipeline.onnx"</span><span class="p">,</span> <span class="n">crop_source</span><span class="o">=</span><span class="s2">"detector_input"</span><span class="p">)</span>
+</code></pre></div>
+<p>O custo: um objeto pequeno é classificado a partir da cópia reduzida. Uma
+caixa de 40×40 px dentro do letterbox de 640 vira um recorte de 224×224
+ampliado a partir de 40×40 pixels de detalhe real.</p>
+</div>
+<div class="tabbed-block">
+<p>Adiciona uma segunda entrada em resolução nativa. A ponte desfaz o letterbox
+<strong>dentro do grafo</strong> e recorta da imagem original.</p>
+<div class="highlight"><pre><span></span><code><span class="n">fuse_detect_classify</span><span class="p">(</span><span class="n">det</span><span class="p">,</span> <span class="n">clf</span><span class="p">,</span> <span class="s2">"pipeline.onnx"</span><span class="p">,</span> <span class="n">crop_source</span><span class="o">=</span><span class="s2">"original"</span><span class="p">)</span>
+</code></pre></div>
+<p>São dois tensores para alimentar — mas o SDK monta os dois para você, e
+continua sendo <strong>uma sessão e um carregamento</strong>. Use esta opção quando o
+classificador depende de detalhe fino (textura, cor de mucosa, lesão
+pequena).</p>
+</div>
+</div>
+</div>
+<div class="admonition tip">
+<p class="admonition-title">As caixas são idênticas nos dois modos</p>
+<p>O grafo sempre reporta as caixas no espaço letterboxado do detector, e o
+runtime desfaz essa transformação do mesmo jeito nos dois casos. Trocar o
+<code>crop_source</code> muda a qualidade do recorte, nunca as coordenadas.</p>
+</div>
+<h2 id="quantas-caixas-o-pipeline-reporta">Quantas caixas o pipeline reporta</h2>
+<p>Por padrão o pipeline tem um número <strong>fixo</strong> de linhas: <code>max_detections</code>. Sobras
+são preenchidas com zeros, e a saída <code>num_detections</code> diz quantas são reais — o
+runtime já ignora o resto para você.</p>
+<div class="highlight"><pre><span></span><code><span class="n">fuse_detect_classify</span><span class="p">(</span><span class="n">det</span><span class="p">,</span> <span class="n">clf</span><span class="p">,</span> <span class="s2">"pipeline.onnx"</span><span class="p">,</span> <span class="n">max_detections</span><span class="o">=</span><span class="mi">20</span><span class="p">)</span>  <span class="c1"># 20 linhas, sempre</span>
+</code></pre></div>
+<p>Isso é o que mantém <strong>todos os shapes do grafo estáticos</strong>, e shapes estáticos
+são o que TensorRT, NNAPI e WebGPU precisam para compilar o modelo. É também o
+que elimina o caso de zero detecções: o classificador sempre recebe <code>K</code>
+recortes, nunca um batch vazio que alguns providers se recusam a executar.</p>
+<p>O preço é rodar o classificador <code>K</code> vezes mesmo quando há 2 objetos. Se isso
+pesar mais que a compilação estática, use o modo dinâmico:</p>
+<div class="highlight"><pre><span></span><code><span class="n">fuse_detect_classify</span><span class="p">(</span><span class="n">det</span><span class="p">,</span> <span class="n">clf</span><span class="p">,</span> <span class="s2">"pipeline.onnx"</span><span class="p">,</span> <span class="n">max_detections</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+</code></pre></div>
+<details class="note">
+<summary>O que o modo dinâmico exige</summary>
+<p>O classificador precisa ter sido exportado com eixo de batch dinâmico, e
+precisa tolerar um batch de <strong>zero</strong> linhas (o que acontece quando nada passa
+do limiar). A validação da fusão testa exatamente esse caso, então você
+descobre na hora se o seu modelo não aguenta.</p>
+</details>
+<h2 id="normalizacao-do-classificador">Normalização do classificador</h2>
+<p>O recorte sai do grafo em <code>[0, 1]</code>. O que tem que acontecer depois disso depende
+inteiramente de <strong>como o seu classificador foi treinado</strong> — e as duas famílias
+mais comuns discordam:</p>
+<table>
+<thead>
+<tr>
+<th>Família</th>
+<th>Espera</th>
+<th>Preset</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>torchvision / timm</td>
+<td>tensor normalizado com média e desvio do ImageNet</td>
+<td><code>"imagenet"</code></td>
+</tr>
+<tr>
+<td>Ultralytics (<code>YOLO(...).export()</code>)</td>
+<td><code>[0, 1]</code> cru, sem normalização nenhuma</td>
+<td><code>"ultralytics"</code></td>
+</tr>
+</tbody>
+</table>
+<p>Por isso o padrão é <code>normalization="auto"</code>: a fusão <strong>lê os metadados do
+classificador</strong> e escolhe sozinha.</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">ort_vision_sdk.compose</span><span class="w"> </span><span class="kn">import</span> <span class="n">fuse_detect_classify</span>
+
+<span class="c1"># Nada a decidir: o arquivo diz o que ele é.</span>
+<span class="n">fuse_detect_classify</span><span class="p">(</span><span class="n">det</span><span class="p">,</span> <span class="s2">"yolo11s-cls.onnx"</span><span class="p">,</span> <span class="s2">"pipeline.onnx"</span><span class="p">)</span>
+</code></pre></div>
+<p>Todo export do Ultralytics carrega <code>author: Ultralytics</code> e <code>task: classify</code> no
+próprio <code>.onnx</code>. Esse par é determinístico, e o SDK já lia esse bloco para
+aproveitar os nomes de classe — então a informação necessária para acertar
+sempre esteve dentro do arquivo que você entrega.</p>
+<div class="admonition danger">
+<p class="admonition-title">O modo de falha que isto elimina</p>
+<p>Até a 0.8.0 o padrão era ImageNet para todo mundo. Fundir um classificador
+Ultralytics com esse padrão insere um <code>Sub</code>/<code>Div</code> que o modelo <strong>nunca viu no
+treino</strong> — e nada reclama: não levanta exceção, não emite warning, e
+<code>validate=True</code> passa (ele confere forma, não semântica). O grafo roda,
+devolve <code>probs</code> com a forma certa e classifica pior. Sem medir concordância
+contra a rota não-fundida, não há como perceber.</p>
+</div>
+<h3 id="escolhendo-a-mao">Escolhendo à mão</h3>
+<div class="highlight"><pre><span></span><code><span class="n">fuse_detect_classify</span><span class="p">(</span><span class="n">det</span><span class="p">,</span> <span class="n">clf</span><span class="p">,</span> <span class="s2">"pipeline.onnx"</span><span class="p">,</span> <span class="n">normalization</span><span class="o">=</span><span class="s2">"imagenet"</span><span class="p">)</span>
+<span class="n">fuse_detect_classify</span><span class="p">(</span><span class="n">det</span><span class="p">,</span> <span class="n">clf</span><span class="p">,</span> <span class="s2">"pipeline.onnx"</span><span class="p">,</span> <span class="n">normalization</span><span class="o">=</span><span class="s2">"ultralytics"</span><span class="p">)</span>
+<span class="n">fuse_detect_classify</span><span class="p">(</span><span class="n">det</span><span class="p">,</span> <span class="n">clf</span><span class="p">,</span> <span class="s2">"pipeline.onnx"</span><span class="p">,</span> <span class="n">normalization</span><span class="o">=</span><span class="s2">"none"</span><span class="p">)</span>
+</code></pre></div>
+<p><code>"none"</code> é a mesma aritmética que <code>"ultralytics"</code> — identidade — com um nome que
+diz "este modelo quer <code>[0, 1]</code> cru" em vez de citar um fornecedor.</p>
+<h3 id="valores-proprios">Valores próprios</h3>
+<p>Um modelo cuja normalização nenhum preset descreve recebe os números direto:</p>
+<div class="highlight"><pre><span></span><code><span class="n">fuse_detect_classify</span><span class="p">(</span>
+    <span class="n">det</span><span class="p">,</span> <span class="n">clf</span><span class="p">,</span> <span class="s2">"pipeline.onnx"</span><span class="p">,</span>
+    <span class="n">mean</span><span class="o">=</span><span class="p">(</span><span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">),</span>
+    <span class="n">std</span><span class="o">=</span><span class="p">(</span><span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">),</span>
+    <span class="n">input_scale</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>     <span class="c1"># 255.0 se o seu modelo espera 0..255</span>
+<span class="p">)</span>
+</code></pre></div>
+<div class="admonition tip">
+<p class="admonition-title"><code>mean</code> e <code>std</code> são independentes</p>
+<p>Passar só um dos dois deixa o outro no valor do preset que o <code>auto</code>
+escolheria — passar um <code>mean</code> não zera o desvio para 1 pelas suas costas.</p>
+</div>
+<p>Passar <code>mean</code>/<code>std</code> <strong>junto</strong> com <code>normalization</code> levanta <code>ValueError</code>: são duas
+respostas para a mesma pergunta, e adivinhar qual delas você quis dizer é como um
+grafo acaba normalizado de um jeito e com metadado dizendo outro.</p>
+<p>E se o classificador for um export Ultralytics e você pedir uma normalização que
+não é identidade, sai um <code>UserWarning</code> — o grafo é construído do mesmo jeito, mas
+você fica sabendo.</p>
+<h3 id="o-que-ficou-registrado-no-arquivo">O que ficou registrado no arquivo</h3>
+<p>A escolha vai para os metadados do modelo fundido, em
+<code>ovs.classifier_normalization</code>:</p>
+<div class="highlight"><pre><span></span><code>python<span class="w"> </span>-c<span class="w"> </span><span class="s2">"import onnx; print({k.key: k.value for k in onnx.load('pipeline.onnx').metadata_props}['ovs.classifier_normalization'])"</span>
+<span class="c1"># ultralytics</span>
+</code></pre></div>
+<p>Uma vez fundida, a normalização é um punhado de nós <code>Sub</code>/<code>Div</code> no meio do
+grafo — invisível. "Que preprocessamento este pipeline assume?" é a primeira
+pergunta quando um modelo fundido classifica pior que a cascata que ele
+substituiu, e agora o arquivo responde.</p>
+<p>Passos que seriam identidade (<code>mean</code> zero, <code>std</code> unitário, escala 1.0) não viram
+nós — um classificador que quer o recorte cru em <code>[0, 1]</code> não paga aritmética
+nenhuma.</p>
+<h2 id="tres-estagios-segmentando-dentro-do-recorte">Três estágios: segmentando dentro do recorte</h2>
+<p>Às vezes o recorte não basta: você quer classificar <strong>só o objeto</strong>, sem o fundo
+que a caixa inevitavelmente traz junto. Para isso existe um terceiro estágio.</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">ort_vision_sdk.compose</span><span class="w"> </span><span class="kn">import</span> <span class="n">fuse_detect_segment_classify</span>
+
+<span class="n">fuse_detect_segment_classify</span><span class="p">(</span>
+    <span class="s2">"yolov8n.onnx"</span><span class="p">,</span>
+    <span class="s2">"unet.onnx"</span><span class="p">,</span>
+    <span class="s2">"resnet18.onnx"</span><span class="p">,</span>
+    <span class="s2">"pipeline.onnx"</span><span class="p">,</span>
+    <span class="n">max_detections</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>
+<span class="p">)</span>
+</code></pre></div>
+<p>O grafo resultante faz, num arquivo só: detecta → recorta → <strong>segmenta cada
+recorte</strong> → multiplica o recorte pela máscara → classifica.</p>
+<pre class="mermaid"><code>flowchart LR
+    A["images"] --&gt; B["detector"]
+    B --&gt; C["NMS + RoiAlign"]
+    C --&gt; D["recortes"]
+    D --&gt; E["segmentador"]
+    E --&gt; F["máscara binária"]
+    D --&gt; G["Mul"]
+    F --&gt; G
+    G --&gt; H["classificador"]
+    F --&gt; I["masks"]
+    H --&gt; J["probs"]</code></pre>
+<div class="admonition warning">
+<p class="admonition-title">Isto não é para um YOLO-seg</p>
+<p>Um export YOLO-seg <strong>já</strong> detecta e segmenta num modelo só. Colocar um
+detector separado na frente dele duplica trabalho. Os três estágios são para
+quando o segmentador é uma rede imagem→máscara comum (U-Net e parentes), que
+não tem detector próprio e trabalha melhor num recorte apertado do que no
+quadro inteiro.</p>
+</div>
+<h3 id="lendo-as-mascaras">Lendo as máscaras</h3>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">ort_vision_sdk</span><span class="w"> </span><span class="kn">import</span> <span class="n">DetectClassify</span>
+
+<span class="n">pipeline</span> <span class="o">=</span> <span class="n">DetectClassify</span><span class="p">(</span><span class="s2">"pipeline.onnx"</span><span class="p">)</span>
+<span class="n">result</span> <span class="o">=</span> <span class="n">pipeline</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="s2">"foto.jpg"</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+
+<span class="k">for</span> <span class="n">d</span> <span class="ow">in</span> <span class="n">result</span><span class="o">.</span><span class="n">detections</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">d</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">d</span><span class="o">.</span><span class="n">conf</span><span class="p">,</span> <span class="n">d</span><span class="o">.</span><span class="n">mask</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>   <span class="c1"># (altura_da_caixa, largura_da_caixa)</span>
+</code></pre></div>
+<p><code>d.mask</code> chega já no formato da caixa, binária (0/255) <code>uint8</code> — o <strong>mesmo
+contrato</strong> que o <code>Segmenter</code> entrega. Quem já trata a máscara de um segmentador
+trata esta sem mudar nada.</p>
+<div class="admonition info">
+<p class="admonition-title">No grafo, a máscara vive no espaço do recorte</p>
+<p>A saída <code>masks</code> do <code>.onnx</code> tem forma <code>(K, 1, crop_h, crop_w)</code>, porque é onde
+o segmentador a calculou. Remapear para a imagem original é um resize por
+instância, com geometria diferente a cada caixa — a task faz isso para você
+(vizinho mais próximo, já que os valores são binários), e quem dirige o
+grafo na mão faz a partir da linha de <code>boxes</code> correspondente.</p>
+</div>
+<h3 id="o-que-da-para-ajustar">O que dá para ajustar</h3>
+<table>
+<thead>
+<tr>
+<th>Parâmetro</th>
+<th>Para quê</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>mask_threshold</code></td>
+<td>Probabilidade a partir da qual um pixel é primeiro plano (default <code>0.5</code>).</td>
+</tr>
+<tr>
+<td><code>mask_channel</code></td>
+<td>Qual canal do segmentador é o primeiro plano. <code>0</code> para cabeça de um canal.</td>
+</tr>
+<tr>
+<td><code>mask_activation</code></td>
+<td><code>"sigmoid"</code> (um canal) ou <code>"softmax"</code> (canais competindo). <code>None</code> decide pelo grafo.</td>
+</tr>
+<tr>
+<td><code>apply_mask</code></td>
+<td><code>False</code> reporta as máscaras <strong>sem</strong> gatear o classificador — use quando ele foi treinado em recortes sem máscara.</td>
+</tr>
+<tr>
+<td><code>segmenter_mean</code> / <code>segmenter_std</code></td>
+<td>Normalização do segmentador, independente da do classificador.</td>
+</tr>
+</tbody>
+</table>
+<div class="admonition danger">
+<p class="admonition-title">Os dois últimos estágios compartilham o <code>crop_size</code></p>
+<p>A máscara é calculada no espaço do recorte e multiplica esse recorte
+diretamente. Se o segmentador e o classificador declararem resoluções
+diferentes, a fusão <strong>recusa</strong> e diz quais são as duas, em vez de
+reamostrar por trás e entregar uma máscara desalinhada do que ela descreve.</p>
+</div>
+<div class="admonition check">
+<p class="admonition-title">Verificando que a máscara chegou ao classificador</p>
+<p>O teste que o SDK usa para isso vale como receita: fixe um recorte de cor
+uniforme e compare as probabilidades com <code>apply_mask=True</code> e <code>False</code>.
+Mascarar metade de um recorte vermelho puro leva a média do canal de 1,0
+para 0,5 — um número que só aparece se a máscara realmente multiplicou.</p>
+</div>
+<h2 id="quando-nao-detectar-nada-e-um-erro">Quando não detectar nada é um erro</h2>
+<p>Um pipeline que não acha nada devolve um envelope vazio — o classificador nem
+chega a ter linha para responder. Se o passo seguinte depende de ter alguma
+coisa ali, <code>raise_on_empty</code> transforma isso em exceção, exatamente como no
+<a href="../deteccao/#quando-nao-detectar-nada-e-um-erro"><code>Detector</code></a>:</p>
+<div class="highlight"><pre><span></span><code><span class="n">pipeline</span> <span class="o">=</span> <span class="n">DetectClassify</span><span class="p">(</span><span class="s2">"pipeline.onnx"</span><span class="p">,</span> <span class="n">raise_on_empty</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">pipeline</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="s2">"pasto-vazio.jpg"</span><span class="p">)</span>   <span class="c1"># -&gt; NoDetectionsError</span>
+</code></pre></div>
+<p>O limiar citado na mensagem é o <strong>efetivo</strong>: o maior entre o que foi congelado
+no NMS do grafo na fusão e qualquer <code>conf_threshold</code> mais estrito passado na
+chamada.</p>
+<h2 id="quando-fundir-compensa">Quando fundir compensa</h2>
+<p>Fundir <strong>não</strong> é sempre mais rápido. A intuição diz que sim — um artefato, uma
+sessão, sem ida e volta pelo host — mas o custo de verdade depende de onde o
+tempo está, e num pipeline de detecção ele quase nunca está na ponte.</p>
+<p>Estes números vêm de um pipeline real (detecção de mucosa ocular a 640 →
+classificação a 224, i9-13900F de 12 núcleos, RTX 4070 Ti SUPER,
+onnxruntime 1.24.3), 200 passadas cronometradas com 20 de aquecimento, mediana
+de 20 repetições:</p>
+<table>
+<thead>
+<tr>
+<th>Device</th>
+<th>Topologia</th>
+<th>Sessões</th>
+<th style="text-align: right;">Latência</th>
+<th style="text-align: right;">vs cascata</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>CPU</td>
+<td>cascata <code>.onnx</code>, 6+6 threads</td>
+<td>2</td>
+<td style="text-align: right;"><strong>33,06 ms</strong></td>
+<td style="text-align: right;">1,00×</td>
+</tr>
+<tr>
+<td>CPU</td>
+<td><strong>fundido</strong></td>
+<td>1</td>
+<td style="text-align: right;"><strong>50,65 ms</strong></td>
+<td style="text-align: right;"><strong>0,65×</strong></td>
+</tr>
+<tr>
+<td>CPU</td>
+<td>cascata <code>.pt</code> (torch)</td>
+<td>2</td>
+<td style="text-align: right;">69,45 ms</td>
+<td style="text-align: right;">0,48×</td>
+</tr>
+<tr>
+<td>GPU</td>
+<td>cascata <code>.onnx</code>, 6+6 threads</td>
+<td>2</td>
+<td style="text-align: right;"><strong>5,97 ms</strong></td>
+<td style="text-align: right;">1,00×</td>
+</tr>
+<tr>
+<td>GPU</td>
+<td><strong>fundido</strong></td>
+<td>1</td>
+<td style="text-align: right;"><strong>5,74 ms</strong></td>
+<td style="text-align: right;"><strong>1,04×</strong></td>
+</tr>
+<tr>
+<td>GPU</td>
+<td>cascata <code>.pt</code> (torch)</td>
+<td>2</td>
+<td style="text-align: right;">11,24 ms</td>
+<td style="text-align: right;">0,53×</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Na CPU o grafo fundido foi 53 % mais lento</strong> que duas sessões bem
+configuradas. Na GPU empatou.</p>
+<h3 id="por-que-o-teto-e-baixo">Por que o teto é baixo</h3>
+<p>A quebra por estágio da cascata na CPU explica tudo:</p>
+<table>
+<thead>
+<tr>
+<th>Estágio</th>
+<th style="text-align: right;">ms</th>
+<th style="text-align: right;">% do total</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>detector</td>
+<td style="text-align: right;">25,79</td>
+<td style="text-align: right;"><strong>78,0 %</strong></td>
+</tr>
+<tr>
+<td>recorte (<code>cv2</code> no host)</td>
+<td style="text-align: right;">1,49</td>
+<td style="text-align: right;"><strong>4,5 %</strong></td>
+</tr>
+<tr>
+<td>classificador</td>
+<td style="text-align: right;">5,00</td>
+<td style="text-align: right;">15,1 %</td>
+</tr>
+</tbody>
+</table>
+<p>A fusão só pode remover o recorte no host e um repasse entre sessões — <strong>4,5 %
+de teto</strong>. E os ~68 nós da ponte (NMS, TopK, Pad, clamp, <code>RoiAlign</code>) custam
++17,6 ms na CPU, bem mais que o <code>cv2.resize</code> que substituem. Na GPU esses nós
+são baratos e o empate reaparece.</p>
+<div class="admonition info">
+<p class="admonition-title">Capacidade tem preço</p>
+<p>Uma ponte mínima escrita à mão (<code>ArgMax</code> + <code>RoiAlign</code>, 22 nós, sem NMS, sem
+padding, um objeto só) marcava 0,99× nessa mesma máquina. A diferença entre
+0,99× e 0,65× é o preço de NMS com limiar, <code>TopK</code>, padding para forma
+estática e clamp — justo pelo que compra, mas grande na CPU.</p>
+</div>
+<h3 id="a-armadilha-que-inverte-a-conclusao">A armadilha que inverte a conclusão</h3>
+<div class="admonition warning">
+<p class="admonition-title">Cascata mal configurada faz a fusão parecer 5× mais rápida</p>
+<p>A primeira medição desse estudo deu cascata 148 ms contra fundido 30 ms. O
+número era <strong>falso</strong>: o detector <em>sozinho</em> marcava 110 ms dentro da cascata,
+e o grafo fundido contém exatamente o mesmo detector.</p>
+<p>A causa é o ONNX Runtime dar a <strong>cada <code>InferenceSession</code> o seu próprio pool
+de intra-op</strong>. Numa cascata os dois estágios se alternam, e o pool que
+acabou de terminar fica em <em>spin-wait</em> roubando núcleos do que está rodando:</p>
+<table>
+<thead>
+<tr>
+<th>Configuração</th>
+<th style="text-align: right;">Total (CPU)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>12 + 12 threads</td>
+<td style="text-align: right;">140,6 ms</td>
+</tr>
+<tr>
+<td>12 + 12, <code>intra_op.allow_spinning = 0</code></td>
+<td style="text-align: right;">49,4 ms</td>
+</tr>
+<tr>
+<td>6 + 6 threads</td>
+<td style="text-align: right;">33,7 ms</td>
+</tr>
+</tbody>
+</table>
+<p>O grafo fundido tem <strong>um</strong> pool e é imune a isso por construção — então
+comparar contra uma cascata mal configurada dá à fusão uma vitória que ela
+não conquistou. A baseline honesta divide o orçamento de threads entre as
+sessões. (<code>torch</code> não sofre disso: <code>torch.set_num_threads</code> configura um pool
+único para o processo.)</p>
+</div>
+<h3 id="reproduzindo-a-cascata-numericamente">Reproduzindo a cascata numericamente</h3>
+<p>Para o grafo fundido reproduzir uma cascata que recorta com <code>cv2.INTER_LINEAR</code>:</p>
+<ul>
+<li><strong><code>sampling_ratio=1</code></strong> — resample bilinear simples. O default <code>0</code> adapta ao
+  tamanho da caixa e faz anti-aliasing: melhor em geral, mas amostra diferente
+  de um <code>cv2.resize</code>.</li>
+<li><strong><code>coordinate_transformation_mode="half_pixel"</code></strong> no <code>RoiAlign</code>, que é o que a
+  ponte já usa: reproduz o <code>cv2.INTER_LINEAR</code> com erro absoluto médio de 4·10⁻⁵
+  numa imagem em <code>[0, 1]</code>, contra 185× mais no <code>output_half_pixel</code>.</li>
+</ul>
+<p>Com os dois, a concordância de predição entre fundido e cascata ficou em 0,982
+(3 divergências em 169 amostras, todas com confiança entre 0,47 e 0,60 — em cima
+da fronteira de decisão), delta mediano de probabilidade 3,4·10⁻⁵, e caixa
+selecionada idêntica (0,000 px).</p>
+<h3 id="recomendacao">Recomendação</h3>
+<ul>
+<li><strong>Compensa</strong> por portabilidade e operação: um artefato, uma sessão, formas
+  estáticas (TensorRT/NNAPI/WebGPU), o mesmo arquivo rodando no SDK web.</li>
+<li><strong>Não compensa</strong> por latência na CPU, e empata na GPU, quando a alternativa é
+  uma cascata com o orçamento de threads dividido.</li>
+<li><strong>Antes de medir</strong>, olhe a quebra por estágio com
+  <a href="../velocidade/"><code>timings</code></a>: se o detector é ~80 % do custo, o teto do ganho da
+  fusão é o que sobra.</li>
+</ul>
+<h2 id="limites-que-valem-saber">Limites que valem saber</h2>
+<ul>
+<li><strong>A cabeça precisa ser YOLO anchor-free</strong> — saída <code>(1, 4 + nc, N)</code>, a mesma
+  família que o <a href="../deteccao/"><code>Detector</code></a> aceita. Cabeças com objectness
+  explícito (v5/v6/v7) ou com NMS embutido (v10 <em>end2end</em>) são recusadas com uma
+  mensagem clara em vez de lerem os canais errados em silêncio.</li>
+<li><strong>Os limiares ficam congelados no grafo.</strong> <code>conf_threshold</code> e <code>iou_threshold</code>
+  vão para dentro do nó de NMS. No runtime você pode filtrar <strong>mais</strong>
+  (<code>predict(img, conf_threshold=0.6)</code>), nunca menos — para baixar o limiar, funda
+  de novo.</li>
+<li><strong>O NMS fundido pontua todas as classes.</strong> O decodificador Python colapsa cada
+  âncora no seu <code>argmax</code> antes de suprimir; o <code>NonMaxSuppression</code> do ONNX avalia
+  cada classe de forma independente. Uma âncora que passa do limiar em duas
+  classes vira duas linhas aqui e uma linha lá.</li>
+<li><strong>Opsets são reconciliados para cima.</strong> Se os dois modelos foram exportados em
+  versões diferentes, o mais antigo é convertido — e o piso é o opset 16, exigido
+  pelo <code>RoiAlign</code> da ponte.</li>
+<li><strong><code>boxes</code> é a caixa que foi classificada.</strong> Uma caixa que sai do quadro é
+  recortada aos limites da imagem antes de virar recorte, e é essa versão
+  recortada que sai em <code>boxes</code> — desenhar o retângulo e olhar o recorte mostram a
+  mesma região. Até a 0.8.0 as duas divergiam: <code>boxes</code> reportava a caixa inteira
+  e o <code>RoiAlign</code> recebia a recortada. Linhas de padding continuam zeradas.</li>
+</ul>
+<h2 id="recapitulando">Recapitulando</h2>
+<ul>
+<li><code>fuse_detect_classify</code> transforma detector + classificador em <strong>um</strong> <code>.onnx</code>.</li>
+<li>Fundir precisa do extra <code>[compose]</code>; <strong>rodar não precisa de nada a mais</strong>.</li>
+<li><code>DetectClassify</code> (Python e Web) carrega o arquivo e se configura sozinho a
+  partir dos metadados gravados na fusão.</li>
+<li><code>crop_source="original"</code> custa uma entrada a mais e devolve a resolução nativa
+  ao classificador.</li>
+<li><code>max_detections</code> fixo mantém os shapes estáticos; <code>None</code> troca isso por menos
+  trabalho por execução.</li>
+</ul>
+<h2 id="proximos-passos">Próximos passos</h2>
+<ul>
+<li><a href="../deteccao/">Detecção</a> — a cabeça que o estágio de detecção precisa ter.</li>
+<li><a href="../classificacao/">Classificação</a> — a normalização que o segundo estágio espera.</li>
+<li><a href="../modelo/">O modelo manda</a> — por que a configuração mora no arquivo.</li>
+<li><a href="../../referencia/python/">API Python</a> e <a href="../../referencia/web/">API Web</a>.</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Voltar ao topo
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    <script id="__config" type="application/json">{"base": "../..", "features": ["navigation.tracking", "navigation.sections", "navigation.top", "navigation.indexes", "content.code.copy", "search.suggest", "search.highlight", "toc.follow"], "search": "../../assets/javascripts/workers/search.f8cc74c7.min.js", "translations": {"clipboard.copied": "Copiado para \u00e1rea de transfer\u00eancia", "clipboard.copy": "Copiar para \u00e1rea de transfer\u00eancia", "search.result.more.one": "Mais 1 nesta p\u00e1gina", "search.result.more.other": "Mais # nesta p\u00e1gina", "search.result.none": "Nenhum resultado encontrado", "search.result.one": "1 resultado encontrado", "search.result.other": "# resultados encontrados", "search.result.placeholder": "Digite para iniciar a busca", "search.result.term.missing": "Ausente", "select.version": "Selecione a vers\u00e3o"}}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.60a45f97.min.js"></script>
+      
+    
+  </body>
+</html>

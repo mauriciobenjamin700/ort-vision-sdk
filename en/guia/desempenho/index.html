@@ -1,0 +1,1889 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="SDKs de alto nível para inferência de visão computacional sobre o ONNX Runtime (Python + browser/TypeScript).">
+      
+      
+      
+        <link rel="canonical" href="https://mauriciobenjamin700.github.io/ort-vision-sdk/en/guia/desempenho/">
+      
+      
+        <link rel="prev" href="../velocidade/">
+      
+      
+        <link rel="next" href="../web/">
+      
+      
+      <link rel="icon" href="../../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.5.50">
+    
+    
+      
+        <title>Optimizing creation and inference - ort-vision-sdk</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../../assets/stylesheets/main.a40c8224.min.css">
+      
+        
+        <link rel="stylesheet" href="../../../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#optimizing-creation-and-inference" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../../" title="ort-vision-sdk" class="md-header__button md-logo" aria-label="ort-vision-sdk" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            ort-vision-sdk
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Optimizing creation and inference
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Tema escuro"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Tema escuro" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m17.75 4.09-2.53 1.94.91 3.06-2.63-1.81-2.63 1.81.91-3.06-2.53-1.94L12.44 4l1.06-3 1.06 3zm3.5 6.91-1.64 1.25.59 1.98-1.7-1.17-1.7 1.17.59-1.98L15.75 11l2.06-.05L18.5 9l.69 1.95zm-2.28 4.95c.83-.08 1.72 1.1 1.19 1.85-.32.45-.66.87-1.08 1.27C15.17 23 8.84 23 4.94 19.07c-3.91-3.9-3.91-10.24 0-14.14.4-.4.82-.76 1.27-1.08.75-.53 1.93.36 1.85 1.19-.27 2.86.69 5.83 2.89 8.02a9.96 9.96 0 0 0 8.02 2.89m-1.64 2.02a12.08 12.08 0 0 1-7.8-3.47c-2.17-2.19-3.33-5-3.49-7.82-2.81 3.14-2.7 7.96.31 10.98 3.02 3.01 7.84 3.12 10.98.31"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Tema claro"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Tema claro" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 7a5 5 0 0 1 5 5 5 5 0 0 1-5 5 5 5 0 0 1-5-5 5 5 0 0 1 5-5m0 2a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3m0-7 2.39 3.42C13.65 5.15 12.84 5 12 5s-1.65.15-2.39.42zM3.34 7l4.16-.35A7.2 7.2 0 0 0 5.94 8.5c-.44.74-.69 1.5-.83 2.29zm.02 10 1.76-3.77a7.131 7.131 0 0 0 2.38 4.14zM20.65 7l-1.77 3.79a7.02 7.02 0 0 0-2.38-4.15zm-.01 10-4.14.36c.59-.51 1.12-1.14 1.54-1.86.42-.73.69-1.5.83-2.29zM12 22l-2.41-3.44c.74.27 1.55.44 2.41.44.82 0 1.63-.17 2.37-.44z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+      <div class="md-header__option">
+  <div class="md-select">
+    
+    <button class="md-header__button md-icon" aria-label="Select language">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m12.87 15.07-2.54-2.51.03-.03A17.5 17.5 0 0 0 14.07 6H17V4h-7V2H8v2H1v2h11.17C11.5 7.92 10.44 9.75 9 11.35 8.07 10.32 7.3 9.19 6.69 8h-2c.73 1.63 1.73 3.17 2.98 4.56l-5.09 5.02L4 19l5-5 3.11 3.11zM18.5 10h-2L12 22h2l1.12-3h4.75L21 22h2zm-2.62 7 1.62-4.33L19.12 17z"/></svg>
+    </button>
+    <div class="md-select__inner">
+      <ul class="md-select__list">
+        
+          <li class="md-select__item">
+            <a href="../../../guia/desempenho/" hreflang="pt" class="md-select__link">
+              Português (BR)
+            </a>
+          </li>
+        
+          <li class="md-select__item">
+            <a href="./" hreflang="en" class="md-select__link">
+              English (US)
+            </a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+</div>
+    
+    
+      <label class="md-header__button md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+      </label>
+      <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/mauriciobenjamin700/ort-vision-sdk" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81"/></svg>
+  </div>
+  <div class="md-source__repository">
+    mauriciobenjamin700/ort-vision-sdk
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../../" title="ort-vision-sdk" class="md-nav__button md-logo" aria-label="ort-vision-sdk" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    ort-vision-sdk
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/mauriciobenjamin700/ort-vision-sdk" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81"/></svg>
+  </div>
+  <div class="md-source__repository">
+    mauriciobenjamin700/ort-vision-sdk
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Home
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../instalacao/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Installation
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../inicio-rapido/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Quick start
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  <span class="md-ellipsis">
+    Guide
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            Guide
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../classificacao/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Classification
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../deteccao/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Detection
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../segmentacao/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Segmentation
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../pipeline/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Fused pipelines
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../modelo/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    The model decides
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../python/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Python
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../backends/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Inference backends
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../velocidade/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Inference cost
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  <span class="md-ellipsis">
+    Optimizing creation and inference
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  <span class="md-ellipsis">
+    Optimizing creation and inference
+  </span>
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#creation-keep-the-model-in-the-browser" class="md-nav__link">
+    <span class="md-ellipsis">
+      Creation: keep the model in the browser
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#creation-download-the-runtime-alongside-the-model" class="md-nav__link">
+    <span class="md-ellipsis">
+      Creation: download the runtime alongside the model
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Creation: download the runtime alongside the model">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#not-using-webgpu-download-half-the-runtime" class="md-nav__link">
+    <span class="md-ellipsis">
+      Not using WebGPU? Download half the runtime
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#creation-optimize-the-graph-once-at-build-time" class="md-nav__link">
+    <span class="md-ellipsis">
+      Creation: optimize the graph once, at build time
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#creation-per-provider-options" class="md-nav__link">
+    <span class="md-ellipsis">
+      Creation: per-provider options
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#inference-quantize-to-int8" class="md-nav__link">
+    <span class="md-ellipsis">
+      Inference: quantize to INT8
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#inference-wasm-threads" class="md-nav__link">
+    <span class="md-ellipsis">
+      Inference: WASM threads
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#inference-two-predict-calls-in-flight" class="md-nav__link">
+    <span class="md-ellipsis">
+      Inference: two predict calls in flight
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#inference-hand-the-video-over-directly" class="md-nav__link">
+    <span class="md-ellipsis">
+      Inference: hand the video over directly
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-the-sdk-already-does-for-you" class="md-nav__link">
+    <span class="md-ellipsis">
+      What the SDK already does for you
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#at-the-edge-what-weighs-on-a-phone" class="md-nav__link">
+    <span class="md-ellipsis">
+      At the edge: what weighs on a phone
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="At the edge: what weighs on a phone">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#first-the-input-resolution" class="md-nav__link">
+    <span class="md-ellipsis">
+      First: the input resolution
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#then-the-backend" class="md-nav__link">
+    <span class="md-ellipsis">
+      Then: the backend
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#what-did-not-pay-off" class="md-nav__link">
+    <span class="md-ellipsis">
+      What did not pay off
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#recap" class="md-nav__link">
+    <span class="md-ellipsis">
+      Recap
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#see-also" class="md-nav__link">
+    <span class="md-ellipsis">
+      See also
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../web/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Web (browser)
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../meia-precisao/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Half precision (FP16)
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
+            
+  
+  <span class="md-ellipsis">
+    Reference
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            Reference
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../referencia/python/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Python API
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../referencia/web/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Web API
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="">
+            
+  
+  <span class="md-ellipsis">
+    Project
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            Project
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../publishing/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Publishing
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#creation-keep-the-model-in-the-browser" class="md-nav__link">
+    <span class="md-ellipsis">
+      Creation: keep the model in the browser
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#creation-download-the-runtime-alongside-the-model" class="md-nav__link">
+    <span class="md-ellipsis">
+      Creation: download the runtime alongside the model
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Creation: download the runtime alongside the model">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#not-using-webgpu-download-half-the-runtime" class="md-nav__link">
+    <span class="md-ellipsis">
+      Not using WebGPU? Download half the runtime
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#creation-optimize-the-graph-once-at-build-time" class="md-nav__link">
+    <span class="md-ellipsis">
+      Creation: optimize the graph once, at build time
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#creation-per-provider-options" class="md-nav__link">
+    <span class="md-ellipsis">
+      Creation: per-provider options
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#inference-quantize-to-int8" class="md-nav__link">
+    <span class="md-ellipsis">
+      Inference: quantize to INT8
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#inference-wasm-threads" class="md-nav__link">
+    <span class="md-ellipsis">
+      Inference: WASM threads
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#inference-two-predict-calls-in-flight" class="md-nav__link">
+    <span class="md-ellipsis">
+      Inference: two predict calls in flight
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#inference-hand-the-video-over-directly" class="md-nav__link">
+    <span class="md-ellipsis">
+      Inference: hand the video over directly
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-the-sdk-already-does-for-you" class="md-nav__link">
+    <span class="md-ellipsis">
+      What the SDK already does for you
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#at-the-edge-what-weighs-on-a-phone" class="md-nav__link">
+    <span class="md-ellipsis">
+      At the edge: what weighs on a phone
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="At the edge: what weighs on a phone">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#first-the-input-resolution" class="md-nav__link">
+    <span class="md-ellipsis">
+      First: the input resolution
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#then-the-backend" class="md-nav__link">
+    <span class="md-ellipsis">
+      Then: the backend
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#what-did-not-pay-off" class="md-nav__link">
+    <span class="md-ellipsis">
+      What did not pay off
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#recap" class="md-nav__link">
+    <span class="md-ellipsis">
+      Recap
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#see-also" class="md-nav__link">
+    <span class="md-ellipsis">
+      See also
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+  
+  
+
+
+<h1 id="optimizing-creation-and-inference">Optimizing creation and inference</h1>
+<p>On the previous page you learned to <a href="../velocidade/">measure</a> where the time
+goes. This page is the next step: <strong>what to do with that number.</strong> 🚀</p>
+<p>There are two different costs, and each has its own levers:</p>
+<ul>
+<li><strong>Creating the task</strong> (<code>Detector.create(...)</code> / <code>Detector(...)</code>): downloading
+  the model and building the ONNX Runtime session. It happens once, but it is
+  what the user waits through before seeing anything.</li>
+<li><strong>Every <code>predict()</code></strong>: decoding the image, preprocessing, running the model,
+  decoding the output. It happens on every frame.</li>
+</ul>
+<div class="admonition info">
+<p class="admonition-title">Every number here was measured</p>
+<p>Unless stated otherwise, the numbers come from headless Chromium
+(Playwright) on a 12-logical-core machine, WASM backend, with a
+YOLO11n-seg 640×640 (11.7 MB). Each value is the <strong>median of 5 to 12
+runs</strong> after one warm-up run. On a phone the absolute numbers differ; the
+ratios tend to hold.</p>
+</div>
+<h2 id="creation-keep-the-model-in-the-browser">Creation: keep the model in the browser</h2>
+<p>On a page load, the biggest creation cost is almost always <strong>downloading the
+model</strong>. It is megabytes, and the server does not always send cache headers
+the browser honours for a file that size.</p>
+<p>The <code>cache</code> option keeps the model in the browser's Cache Storage. From the
+second visit on, the bytes come from disk, not the network:</p>
+<div class="highlight"><pre><span></span><code><span class="k">import</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">Detector</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="kr">from</span><span class="w"> </span><span class="s2">"@mauriciobenjamin700/ort-vision-sdk-web"</span><span class="p">;</span>
+
+<span class="kd">const</span><span class="w"> </span><span class="nx">det</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">Detector</span><span class="p">.</span><span class="nx">create</span><span class="p">(</span><span class="s2">"/models/yolov8n.v1.onnx"</span><span class="p">,</span><span class="w"> </span><span class="p">{</span>
+<span class="hll"><span class="w">  </span><span class="nx">cache</span><span class="o">:</span><span class="w"> </span><span class="kt">true</span><span class="p">,</span>
+</span><span class="p">});</span>
+<span class="kd">const</span><span class="w"> </span><span class="nx">result</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="k">await</span><span class="w"> </span><span class="nx">det</span><span class="p">.</span><span class="nx">predict</span><span class="p">(</span><span class="s2">"/images/street.jpg"</span><span class="p">))[</span><span class="mf">0</span><span class="p">];</span>
+<span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kd">const</span><span class="w"> </span><span class="nx">d</span><span class="w"> </span><span class="k">of</span><span class="w"> </span><span class="nx">result</span><span class="p">)</span><span class="w"> </span><span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="nx">d</span><span class="p">.</span><span class="nx">className</span><span class="p">,</span><span class="w"> </span><span class="nx">d</span><span class="p">.</span><span class="nx">confidence</span><span class="p">,</span><span class="w"> </span><span class="nx">d</span><span class="p">.</span><span class="nx">bbox</span><span class="p">.</span><span class="nx">asXyxy</span><span class="p">());</span>
+</code></pre></div>
+<p><code>cache: true</code> uses the <code>DEFAULT_MODEL_CACHE</code> bucket (<code>"ort-vision-sdk-models"</code>).
+A string picks another name: <code>cache: "my-app-models"</code>.</p>
+<div class="admonition warning">
+<p class="admonition-title">The URL is the key, and nothing expires on its own</p>
+<p>If you publish a new model <strong>at the same URL</strong>, returning visitors keep the
+old one. Version the URL (<code>yolov8n.v2.onnx</code>, <code>?v=2</code>), change the bucket
+name, or delete the bucket with <code>caches.delete(name)</code>.</p>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Where there is no Cache Storage, nothing breaks</p>
+<p>Cache Storage only exists in a secure context (<code>https://</code> or <code>localhost</code>)
+and may be blocked (private window, site data disabled). In those cases
+the SDK just downloads the model from the network, as if <code>cache</code> had not
+been asked for.</p>
+</div>
+<h2 id="creation-download-the-runtime-alongside-the-model">Creation: download the runtime alongside the model</h2>
+<p>Besides the model, a page's first session downloads and compiles the <strong>ONNX
+Runtime runtime</strong>, a <code>.wasm</code> of several megabytes. It used to start only after
+the model download finished, so the page's two largest downloads ran one after
+the other.</p>
+<p>The SDK now starts the runtime <strong>while</strong> the model downloads. You change
+nothing. Measured with bandwidth capped at 5 MB/s (11.7 MB model, 12.8 MB
+runtime), on the page's first creation:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>First creation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Before (one after the other)</td>
+<td>5020–5145 ms</td>
+</tr>
+<tr>
+<td>Now (in parallel)</td>
+<td><strong>2648–2656 ms</strong></td>
+</tr>
+</tbody>
+</table>
+<h3 id="not-using-webgpu-download-half-the-runtime">Not using WebGPU? Download half the runtime</h3>
+<p>The default <code>onnxruntime-web</code> import brings the runtime <strong>with</strong> WebGPU: 25.9 MB
+(6.0 MB gzipped). The <code>onnxruntime-web/wasm</code> subpath brings WASM only: 12.8 MB
+(3.3 MB gzipped). If your app runs on WASM only, point the import at it. In
+Vite, in <code>vite.config.ts</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="k">import</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">defineConfig</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="kr">from</span><span class="w"> </span><span class="s2">"vite"</span><span class="p">;</span>
+
+<span class="k">export</span><span class="w"> </span><span class="k">default</span><span class="w"> </span><span class="nx">defineConfig</span><span class="p">({</span>
+<span class="w">  </span><span class="nx">resolve</span><span class="o">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nx">alias</span><span class="o">:</span><span class="w"> </span><span class="p">[{</span><span class="w"> </span><span class="nx">find</span><span class="o">:</span><span class="w"> </span><span class="sr">/^onnxruntime-web$/</span><span class="p">,</span><span class="w"> </span><span class="nx">replacement</span><span class="o">:</span><span class="w"> </span><span class="s2">"onnxruntime-web/wasm"</span><span class="w"> </span><span class="p">}],</span>
+<span class="w">  </span><span class="p">},</span>
+<span class="p">});</span>
+</code></pre></div>
+<p>The SDK uses that build too, since it imports <code>onnxruntime-web</code>. Ask for
+<code>providers: ["wasm"]</code> in the tasks: the WASM-only build has no WebGPU to offer.</p>
+<h2 id="creation-optimize-the-graph-once-at-build-time">Creation: optimize the graph once, at build time</h2>
+<p>Every ONNX Runtime session runs the <strong>graph optimizer</strong> before it can infer:
+it folds constants, fuses operators, removes redundant nodes. That is most of
+the cost of building a session, and it produces the same result every time.</p>
+<p>So you can pay it <strong>once, in your build</strong>, with the Python SDK:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">ort_vision_sdk</span><span class="w"> </span><span class="kn">import</span> <span class="n">optimize_model</span>
+
+<span class="n">optimize_model</span><span class="p">(</span><span class="s2">"yolov8n.onnx"</span><span class="p">,</span> <span class="s2">"yolov8n.opt.onnx"</span><span class="p">)</span>
+</code></pre></div>
+<p>Ship <code>yolov8n.opt.onnx</code> instead of the original. Done! The web SDK reads, in
+the file's metadata, the mark <code>optimize_model</code> left, and builds the session
+<strong>without</strong> running the optimizer again. You change no line in the browser:</p>
+<div class="highlight"><pre><span></span><code><span class="k">import</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">Segmenter</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="kr">from</span><span class="w"> </span><span class="s2">"@mauriciobenjamin700/ort-vision-sdk-web"</span><span class="p">;</span>
+
+<span class="kd">const</span><span class="w"> </span><span class="nx">seg</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">Segmenter</span><span class="p">.</span><span class="nx">create</span><span class="p">(</span><span class="s2">"/models/yolov8n-seg.opt.onnx"</span><span class="p">);</span>
+</code></pre></div>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Session creation (ORT only)</th>
+<th>Full <code>Segmenter.create</code></th>
+<th>Inference</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Original</td>
+<td>29.4 ms</td>
+<td>52.6 ms</td>
+<td>65.9 ms</td>
+</tr>
+<tr>
+<td><code>optimize_model(...)</code></td>
+<td><strong>12.4 ms</strong></td>
+<td><strong>33.6 ms</strong></td>
+<td>65.2 ms</td>
+</tr>
+</tbody>
+</table>
+<p>Inference does not change: the graph is the same one ORT would build on its
+own, just built earlier.</p>
+<div class="admonition tip">
+<p class="admonition-title">Why <code>"extended"</code> and not <code>"all"</code></p>
+<p>The default is <code>level="extended"</code>. Beyond that, ORT applies layout
+transformations chosen for the instruction set of the <strong>CPU doing the
+optimizing</strong> (AVX2, AVX-512…), which the browser's WASM does not have. That
+is why <code>"all"</code> is not offered at all. <code>"basic"</code> exists for constant folding
+only.</p>
+</div>
+<details class="info">
+<summary>Technical details</summary>
+<ul>
+<li>The export's metadata (<code>names</code>, <code>imgsz</code>…) is preserved; the mark is the
+  <code>GRAPH_OPTIMIZATION_KEY</code> key (<code>"ort_vision_sdk.graph_optimization"</code>).</li>
+<li>An explicit <code>graphOptimizationLevel</code> in <code>sessionOptions</code> always wins over
+  the mark.</li>
+<li>With <code>readMetadata: false</code> the mark is not read, and ORT optimizes as
+  usual.</li>
+<li><code>extended</code> fusions use <code>com.microsoft</code> operators that every CPU and WASM
+  build implements. On <strong>WebGPU</strong>, some have no kernel: on the
+  YOLO11n-seg, ORT placed 2 nodes on the CPU for the optimized file and
+  none for the original, which costs GPU↔CPU copies on every inference.
+  The SDK warns in the console when a pre-optimized model is headed for
+  WebGPU. <strong>For WebGPU, ship the original export.</strong></li>
+<li>The Python SDK does not apply the mark on its own: it only reads metadata
+  once the session exists. The optimized file runs normally; to skip the
+  repeated optimization, pass <code>SessionOptions</code> with
+  <code>graph_optimization_level = ORT_DISABLE_ALL</code>.</li>
+</ul>
+</details>
+<h2 id="creation-per-provider-options">Creation: per-provider options</h2>
+<p>Each execution provider has its own options, and some change creation and
+inference time a lot. Pass an object (web) or a <code>(name, options)</code> pair
+(Python) instead of the name:</p>
+<div class="tabbed-set tabbed-alternate" data-tabs="1:2"><input checked="checked" id="__tabbed_1_1" name="__tabbed_1" type="radio" /><input id="__tabbed_1_2" name="__tabbed_1" type="radio" /><div class="tabbed-labels"><label for="__tabbed_1_1">Web</label><label for="__tabbed_1_2">Python</label></div>
+<div class="tabbed-content">
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code><span class="k">import</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">Detector</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="kr">from</span><span class="w"> </span><span class="s2">"@mauriciobenjamin700/ort-vision-sdk-web"</span><span class="p">;</span>
+
+<span class="kd">const</span><span class="w"> </span><span class="nx">det</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">Detector</span><span class="p">.</span><span class="nx">create</span><span class="p">(</span><span class="s2">"/models/yolov8n.onnx"</span><span class="p">,</span><span class="w"> </span><span class="p">{</span>
+<span class="hll"><span class="w">  </span><span class="nx">providers</span><span class="o">:</span><span class="w"> </span><span class="p">[{</span><span class="w"> </span><span class="nx">name</span><span class="o">:</span><span class="w"> </span><span class="s2">"webgpu"</span><span class="p">,</span><span class="w"> </span><span class="nx">preferredLayout</span><span class="o">:</span><span class="w"> </span><span class="s2">"NHWC"</span><span class="w"> </span><span class="p">},</span><span class="w"> </span><span class="s2">"wasm"</span><span class="p">],</span>
+</span><span class="p">});</span>
+<span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="nx">det</span><span class="p">.</span><span class="nx">session</span><span class="p">.</span><span class="nx">providers</span><span class="p">);</span><span class="w"> </span><span class="c1">// ["webgpu", "wasm"] — always names</span>
+</code></pre></div>
+</div>
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">ort_vision_sdk</span><span class="w"> </span><span class="kn">import</span> <span class="n">Detector</span>
+
+<span class="n">det</span> <span class="o">=</span> <span class="n">Detector</span><span class="p">(</span>
+    <span class="s2">"yolov8n.onnx"</span><span class="p">,</span>
+    <span class="n">providers</span><span class="o">=</span><span class="p">[</span>
+<span class="hll">        <span class="p">(</span><span class="s2">"tensorrt"</span><span class="p">,</span> <span class="p">{</span><span class="s2">"trt_engine_cache_enable"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span> <span class="s2">"trt_engine_cache_path"</span><span class="p">:</span> <span class="s2">"./trt"</span><span class="p">}),</span>
+</span><span class="hll">        <span class="p">(</span><span class="s2">"cuda"</span><span class="p">,</span> <span class="p">{</span><span class="s2">"cudnn_conv_algo_search"</span><span class="p">:</span> <span class="s2">"HEURISTIC"</span><span class="p">}),</span>
+</span>        <span class="s2">"cpu"</span><span class="p">,</span>
+    <span class="p">],</span>
+<span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">det</span><span class="o">.</span><span class="n">session</span><span class="o">.</span><span class="n">requested_providers</span><span class="p">)</span>
+<span class="c1"># ["TensorrtExecutionProvider", "CUDAExecutionProvider", "CPUExecutionProvider"]</span>
+</code></pre></div>
+</div>
+</div>
+</div>
+<p>In Python, the name in a pair accepts the usual aliases (<code>"cuda"</code>,
+<code>"tensorrt"</code>…). The options reach ONNX Runtime untouched.</p>
+<div class="admonition tip">
+<p class="admonition-title">The TensorRT engine cache pays the most</p>
+<p>Without a cache, TensorRT rebuilds its engine <strong>in every process</strong>, and for
+a large model that takes minutes. With <code>trt_engine_cache_enable</code>, only the
+first process pays.</p>
+</div>
+<h2 id="inference-quantize-to-int8">Inference: quantize to INT8</h2>
+<p>Quantizing swaps float32 weights and activations for 8-bit integers. The model
+gets ~3× smaller, and the CPU runs integer kernels, which are much cheaper. It
+is also a build step in the Python SDK, with the <code>[quantize]</code> extra:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">ort_vision_sdk</span><span class="w"> </span><span class="kn">import</span> <span class="n">quantize_model</span>
+
+<span class="n">calibration</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="s2">"calibration/"</span><span class="p">)</span><span class="o">.</span><span class="n">glob</span><span class="p">(</span><span class="s2">"*.jpg"</span><span class="p">))</span>
+<span class="n">quantize_model</span><span class="p">(</span><span class="s2">"yolov8n-seg.onnx"</span><span class="p">,</span> <span class="s2">"yolov8n-seg.int8.onnx"</span><span class="p">,</span> <span class="n">calibration</span><span class="p">)</span>
+</code></pre></div>
+<p>The calibration images set each activation's int8 range, and go through the
+<strong>same preprocessing</strong> as <code>predict()</code>: letterbox for detection and
+segmentation, resize and normalization for classification. The task comes from
+the <code>task</code> field of the Ultralytics metadata, or from <code>task="detect" |
+"segment" | "classify"</code>.</p>
+<p>Measured on the YOLO11n-seg (per-channel QDQ, 24 calibration images):</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>FP32</th>
+<th>INT8</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>File</td>
+<td>11.7 MB</td>
+<td><strong>3.5 MB</strong></td>
+</tr>
+<tr>
+<td>Inference, native CPU (Python ORT)</td>
+<td>87 ms</td>
+<td><strong>30.5 ms</strong></td>
+</tr>
+<tr>
+<td>Full <code>predict()</code>, Python SDK</td>
+<td>37.5 ms</td>
+<td><strong>16.8 ms</strong></td>
+</tr>
+<tr>
+<td>Inference, WASM (4 threads)</td>
+<td>68.4 ms</td>
+<td><strong>52.7 ms</strong></td>
+</tr>
+</tbody>
+</table>
+<div class="admonition warning">
+<p class="admonition-title">Validate accuracy on your own data</p>
+<p>Quantization costs some accuracy, and how much depends on the model and on
+how representative the calibration images are. On this model the main
+detection stayed the same (confidence 0.663 → 0.659), but measure on your
+validation set before shipping.</p>
+</div>
+<details class="info">
+<summary>Why the graph's last node stays in FP32</summary>
+<p>A YOLO detection head ends in one <code>Concat</code> that joins boxes in pixels
+(0 to 640) with scores from 0 to 1. Quantized, that tensor gets a single
+int8 scale of ~2.5 per step and every score rounds to 0: the model loads,
+runs and detects nothing. <code>quantize_model</code> keeps the nodes that write the
+graph's outputs in FP32. On a one-class YOLO11n detector, the top
+detection's confidence went from 0.868 (FP32) to 0.895 (INT8) at 640, and
+from 0.946 to 0.948 at 320, with unchanged inference time. Before this fix,
+both returned 0 detections.</p>
+</details>
+<div class="admonition note">
+<p class="admonition-title">In the browser, INT8 runs on WASM</p>
+<p>ONNX Runtime Web's WebGPU backend cannot run this format's quantized
+operators: its <code>DequantizeLinear</code> rejects the quantized bias.
+<code>quantize_model</code> marks the file, and the web SDK drops <code>webgpu</code> from the
+providers of a marked model, with a console warning. On WASM, which is
+where INT8 pays, it runs normally.</p>
+</div>
+<details class="info">
+<summary>Why not chain it with <code>optimize_model</code></summary>
+<p>For an INT8 model, ORT applies fusions <strong>at load time</strong> that the offline
+<code>extended</code> level does not reproduce. Measured on WASM: the pre-optimized
+INT8 model was created 79 ms faster, but every inference got 19% slower
+(60.8 vs 51.1 ms). <code>optimize_model</code> raises a <code>UserWarning</code> when given a
+quantized model.</p>
+</details>
+<h2 id="inference-wasm-threads">Inference: WASM threads</h2>
+<p>The WASM backend uses several threads, but <strong>only</strong> when the page is isolated
+(<code>crossOriginIsolated === true</code>). Without isolation, it runs on one thread.
+Measured on the YOLO11n-seg:</p>
+<table>
+<thead>
+<tr>
+<th><code>env.wasm.numThreads</code></th>
+<th>Inference</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1 (page not isolated)</td>
+<td>221 ms</td>
+</tr>
+<tr>
+<td>4 (ORT default)</td>
+<td>65 ms</td>
+</tr>
+<tr>
+<td><strong>6</strong></td>
+<td><strong>49 ms</strong></td>
+</tr>
+<tr>
+<td>10</td>
+<td>58 ms</td>
+</tr>
+</tbody>
+</table>
+<p>Two lessons here:</p>
+<ol>
+<li><strong>Isolating the page is worth 3.4×.</strong> It is the biggest win on this whole
+   page, and it changes no line of your code: it is two HTTP headers.</li>
+<li>ORT's default caps at 4 threads. On this machine, <strong>half the cores</strong> was
+   best; going past that got worse.</li>
+</ol>
+<p>To isolate, serve the page with:</p>
+<div class="highlight"><pre><span></span><code>Cross-Origin-Opener-Policy: same-origin
+Cross-Origin-Embedder-Policy: require-corp
+</code></pre></div>
+<p>And, if you want to tune the threads, do it <strong>before the first session</strong>:</p>
+<div class="highlight"><pre><span></span><code><span class="k">import</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">env</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="kr">from</span><span class="w"> </span><span class="s2">"onnxruntime-web"</span><span class="p">;</span>
+<span class="k">import</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">Detector</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="kr">from</span><span class="w"> </span><span class="s2">"@mauriciobenjamin700/ort-vision-sdk-web"</span><span class="p">;</span>
+
+<span class="nx">env</span><span class="p">.</span><span class="nx">wasm</span><span class="p">.</span><span class="nx">numThreads</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">Math</span><span class="p">.</span><span class="nx">max</span><span class="p">(</span><span class="mf">1</span><span class="p">,</span><span class="w"> </span><span class="nb">Math</span><span class="p">.</span><span class="nx">floor</span><span class="p">(</span><span class="nx">navigator</span><span class="p">.</span><span class="nx">hardwareConcurrency</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="mf">2</span><span class="p">));</span>
+
+<span class="kd">const</span><span class="w"> </span><span class="nx">det</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">Detector</span><span class="p">.</span><span class="nx">create</span><span class="p">(</span><span class="s2">"/models/yolov8n.onnx"</span><span class="p">,</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">providers</span><span class="o">:</span><span class="w"> </span><span class="p">[</span><span class="s2">"wasm"</span><span class="p">]</span><span class="w"> </span><span class="p">});</span>
+</code></pre></div>
+<div class="admonition warning">
+<p class="admonition-title">Why the SDK does not do this for you</p>
+<p><code>env.wasm</code> is <strong>global</strong> configuration of <code>onnxruntime-web</code>, which belongs
+to your app (it is a peer dependency), and the best number depends on the
+device and on what else runs on the page. The SDK leaves it alone.</p>
+</div>
+<div class="admonition note">
+<p class="admonition-title">COEP has a price</p>
+<p>With <code>require-corp</code>, every cross-origin resource (CDN image, font, script)
+must come with <code>Cross-Origin-Resource-Policy</code> or CORS. Check before turning
+it on in production.</p>
+</div>
+<h2 id="inference-two-predict-calls-in-flight">Inference: two <code>predict</code> calls in flight</h2>
+<p>With <code>env.wasm.proxy = true</code>, inference runs in a worker, and the main thread is
+free while it happens. You can put that time to use: while the model infers
+frame N, the SDK already decodes and preprocesses frame N+1.</p>
+<p>Just keep <strong>two</strong> <code>predict()</code> calls going. The SDK queues the runs of one
+session (ONNX Runtime Web refuses two at once), so only the model step waits
+its turn:</p>
+<div class="highlight"><pre><span></span><code><span class="k">import</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">env</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="kr">from</span><span class="w"> </span><span class="s2">"onnxruntime-web"</span><span class="p">;</span>
+<span class="k">import</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">Segmenter</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="kr">from</span><span class="w"> </span><span class="s2">"@mauriciobenjamin700/ort-vision-sdk-web"</span><span class="p">;</span>
+
+<span class="nx">env</span><span class="p">.</span><span class="nx">wasm</span><span class="p">.</span><span class="nx">proxy</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span><span class="p">;</span>
+
+<span class="kd">const</span><span class="w"> </span><span class="nx">seg</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">Segmenter</span><span class="p">.</span><span class="nx">create</span><span class="p">(</span><span class="s2">"/models/yolov8n-seg.onnx"</span><span class="p">,</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">providers</span><span class="o">:</span><span class="w"> </span><span class="p">[</span><span class="s2">"wasm"</span><span class="p">]</span><span class="w"> </span><span class="p">});</span>
+<span class="k">await</span><span class="w"> </span><span class="nx">seg</span><span class="p">.</span><span class="nx">warmup</span><span class="p">();</span>
+
+<span class="kd">const</span><span class="w"> </span><span class="nx">frames</span><span class="o">:</span><span class="w"> </span><span class="kt">HTMLCanvasElement</span><span class="p">[]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[...</span><span class="nb">document</span><span class="p">.</span><span class="nx">querySelectorAll</span><span class="p">(</span><span class="s2">"canvas"</span><span class="p">)];</span>
+<span class="kd">let</span><span class="w"> </span><span class="nx">next</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">0</span><span class="p">;</span>
+<span class="k">async</span><span class="w"> </span><span class="kd">function</span><span class="w"> </span><span class="nx">worker</span><span class="p">()</span><span class="o">:</span><span class="w"> </span><span class="nb">Promise</span><span class="o">&lt;</span><span class="ow">void</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="k">while</span><span class="w"> </span><span class="p">(</span><span class="nx">next</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="nx">frames</span><span class="p">.</span><span class="nx">length</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kd">const</span><span class="w"> </span><span class="nx">frame</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">frames</span><span class="p">[</span><span class="nx">next</span><span class="o">++</span><span class="p">]</span><span class="o">!</span><span class="p">;</span>
+<span class="w">    </span><span class="kd">const</span><span class="w"> </span><span class="nx">result</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="k">await</span><span class="w"> </span><span class="nx">seg</span><span class="p">.</span><span class="nx">predict</span><span class="p">(</span><span class="nx">frame</span><span class="p">))[</span><span class="mf">0</span><span class="p">];</span>
+<span class="w">    </span><span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="nx">result</span><span class="p">.</span><span class="nx">length</span><span class="p">,</span><span class="w"> </span><span class="s2">"instances"</span><span class="p">);</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="p">}</span>
+<span class="k">await</span><span class="w"> </span><span class="nb">Promise</span><span class="p">.</span><span class="nx">all</span><span class="p">([</span><span class="nx">worker</span><span class="p">(),</span><span class="w"> </span><span class="nx">worker</span><span class="p">()]);</span>
+</code></pre></div>
+<p>Measured on a 1080p frame, with the proxy:</p>
+<table>
+<thead>
+<tr>
+<th><code>predict()</code> in flight</th>
+<th>ms per frame</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>82–86</td>
+</tr>
+<tr>
+<td><strong>2</strong></td>
+<td><strong>70–73</strong></td>
+</tr>
+<tr>
+<td>3</td>
+<td>72</td>
+</tr>
+</tbody>
+</table>
+<p>Three gain nothing more: the model itself becomes the bottleneck. Without
+<code>env.wasm.proxy</code>, inference holds the main thread and two in flight gain
+nothing (84.6 vs 86 ms), but they do not break either.</p>
+<h2 id="inference-hand-the-video-over-directly">Inference: hand the video over directly</h2>
+<p>In a camera loop, pass the <code>HTMLVideoElement</code> (or a <code>VideoFrame</code>) straight to
+<code>predict()</code>, without drawing it onto a canvas first:</p>
+<div class="highlight"><pre><span></span><code><span class="k">import</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">Detector</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="kr">from</span><span class="w"> </span><span class="s2">"@mauriciobenjamin700/ort-vision-sdk-web"</span><span class="p">;</span>
+
+<span class="kd">const</span><span class="w"> </span><span class="nx">video</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">document</span><span class="p">.</span><span class="nx">querySelector</span><span class="p">(</span><span class="s2">"video"</span><span class="p">)</span><span class="o">!</span><span class="p">;</span>
+<span class="nx">video</span><span class="p">.</span><span class="nx">srcObject</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">navigator</span><span class="p">.</span><span class="nx">mediaDevices</span><span class="p">.</span><span class="nx">getUserMedia</span><span class="p">({</span><span class="w"> </span><span class="nx">video</span><span class="o">:</span><span class="w"> </span><span class="kt">true</span><span class="w"> </span><span class="p">});</span>
+<span class="k">await</span><span class="w"> </span><span class="ow">new</span><span class="w"> </span><span class="nb">Promise</span><span class="p">((</span><span class="nx">resolve</span><span class="p">)</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="nx">video</span><span class="p">.</span><span class="nx">addEventListener</span><span class="p">(</span><span class="s2">"loadeddata"</span><span class="p">,</span><span class="w"> </span><span class="nx">resolve</span><span class="p">,</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">once</span><span class="o">:</span><span class="w"> </span><span class="kt">true</span><span class="w"> </span><span class="p">}));</span>
+<span class="k">await</span><span class="w"> </span><span class="nx">video</span><span class="p">.</span><span class="nx">play</span><span class="p">();</span>
+
+<span class="kd">const</span><span class="w"> </span><span class="nx">det</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">Detector</span><span class="p">.</span><span class="nx">create</span><span class="p">(</span><span class="s2">"/models/yolov8n.onnx"</span><span class="p">,</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">cache</span><span class="o">:</span><span class="w"> </span><span class="kt">true</span><span class="w"> </span><span class="p">});</span>
+<span class="k">await</span><span class="w"> </span><span class="nx">det</span><span class="p">.</span><span class="nx">warmup</span><span class="p">();</span>
+
+<span class="k">async</span><span class="w"> </span><span class="kd">function</span><span class="w"> </span><span class="nx">loop</span><span class="p">()</span><span class="o">:</span><span class="w"> </span><span class="nb">Promise</span><span class="o">&lt;</span><span class="ow">void</span><span class="o">&gt;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="kd">const</span><span class="w"> </span><span class="nx">result</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="k">await</span><span class="w"> </span><span class="nx">det</span><span class="p">.</span><span class="nx">predict</span><span class="p">(</span><span class="nx">video</span><span class="p">))[</span><span class="mf">0</span><span class="p">];</span>
+<span class="w">  </span><span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="nx">result</span><span class="p">.</span><span class="nx">length</span><span class="p">,</span><span class="w"> </span><span class="s2">"objects"</span><span class="p">,</span><span class="w"> </span><span class="nx">result</span><span class="p">.</span><span class="nx">speed</span><span class="p">);</span>
+<span class="w">  </span><span class="nx">requestAnimationFrame</span><span class="p">(</span><span class="nx">loop</span><span class="p">);</span>
+<span class="p">}</span>
+<span class="nx">loop</span><span class="p">();</span>
+</code></pre></div>
+<p>The decoded frame is the one on screen at the time of the call. A video with no
+frame yet (<code>readyState &lt; 2</code>) throws <code>ImageLoadError</code>, explaining that it must
+wait for the <code>loadeddata</code> event.</p>
+<p>With a camera or screen capture (<code>srcObject</code> is a <code>MediaStream</code>), the SDK does
+not even read the frame back from the GPU: it draws it onto a copy and
+preprocesses from that. The RGB pixels are only built if something reads
+<code>origImg</code>, <code>croppedImage</code> or <code>segmentedImage</code>. Measured on a 1080p frame,
+<code>load</code> went from 8.5–10.7 ms to <strong>2.0–2.5 ms</strong>. The same holds for an
+alpha-less <code>VideoFrame</code> (<code>I420</code>, <code>NV12</code>, <code>RGBX</code>…) and for JPEG.</p>
+<details class="info">
+<summary>Why only these sources</summary>
+<p>Preprocessing straight from the copy is identical to the normal path only
+when no pixel is translucent, and usually only reading the pixels tells.
+<code>MediaStream</code> frames, alpha-less <code>VideoFrame</code>s and JPEGs <strong>cannot</strong> carry
+alpha, so they skip the read. A <code>&lt;video&gt;</code> playing a file may have alpha
+(VP9), so it is still read right away.</p>
+</details>
+<h2 id="what-the-sdk-already-does-for-you">What the SDK already does for you</h2>
+<p>Some optimizations ask nothing of you. They are worth knowing about, because
+they explain numbers in <code>speed</code>:</p>
+<ul>
+<li><strong>Preprocessing without an extra copy.</strong> When the input is drawable (image,
+  canvas, <code>ImageBitmap</code>, video, <code>Blob</code>, URL), the pipeline resizes straight
+  from the canvas the image was decoded onto. Measured on a 1080p frame,
+  <code>preprocess</code> went from ~10 ms to ~5 ms. An image with <strong>transparency</strong> takes
+  the old path, because compositing its alpha would change the colours.</li>
+<li><strong>Resizing on the GPU.</strong> The canvas the letterbox draws into stays
+  accelerated, even though it is read back every frame. Measured on an Android
+  phone (Mali GPU, 320×320), draw plus read got 4–6 ms faster with inference on
+  WebGPU, in every run; with it on WASM, the difference stayed within noise. On
+  a desktop, from 3.0 to 2.4 ms. The pixels handed to the model are the same.
+  Chrome may warn in the console that <code>willReadFrequently</code> would make the read
+  faster: on this path, the measurement says otherwise.</li>
+<li><strong><code>croppedImage</code> and <code>segmentedImage</code> on demand.</strong> The per-detection crops
+  are only built when you read the field. If you only use box and class, they
+  never cost anything.</li>
+<li><strong>Faster postprocessing</strong>, with output bit-identical to before: decode
+  25–54% faster, NMS 28–40%, mask assembly 71% on the web; in Python, decode
+  43–80%, NMS 78–87% (up to 512 boxes per class) and masks 81%.</li>
+<li><strong><code>warmup()</code> in both SDKs.</strong> In Python it pays the CUDA arena allocation,
+  cuDNN's algorithm search and the TensorRT engine before the first request.</li>
+</ul>
+<div class="admonition warning">
+<p class="admonition-title">Reusing the same <code>RGBImage</code> across frames? Crops are built right away</p>
+<p>If you pass your own <code>RGBImage</code> and rewrite its buffer on every frame, a
+crop built later would read the next frame. So with a caller's <code>RGBImage</code>,
+the SDK builds the crops <strong>immediately</strong>. On-demand applies only when the
+SDK allocated the pixels itself.</p>
+</div>
+<h2 id="at-the-edge-what-weighs-on-a-phone">At the edge: what weighs on a phone</h2>
+<p>On a desktop with a GPU, half the frame is copies and JavaScript loops and the
+other half is the model. On a phone the balance is different: <strong>the model is
+nearly everything</strong>, and optimizing the copies pays little. Before touching the
+pipeline, find out which of the two worlds you are in. 📱</p>
+<p>The numbers below come from an Android 10 phone with a Mali (Bifrost) GPU,
+running a one-class YOLO11n detector, measured on the
+<a href="https://github.com/mauriciobenjamin700/ort-vision-sdk/tree/main/bench/browser">browser bench</a>.</p>
+<h3 id="first-the-input-resolution">First: the input resolution</h3>
+<p>A model's cost grows with the input's <strong>area</strong>. At 320×320 the image has ¼ of
+the pixels of 640×640, and the time drops almost in proportion:</p>
+<table>
+<thead>
+<tr>
+<th>Backend</th>
+<th>640×640</th>
+<th>320×320</th>
+<th>Speedup</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>WASM FP32</td>
+<td>2575 ms</td>
+<td>697 ms</td>
+<td>3.7×</td>
+</tr>
+<tr>
+<td>WASM INT8</td>
+<td>1348 ms</td>
+<td>390 ms</td>
+<td>3.5×</td>
+</tr>
+<tr>
+<td><strong>WebGPU FP32</strong></td>
+<td>1037 ms</td>
+<td><strong>223 ms</strong></td>
+<td><strong>4.7×</strong></td>
+</tr>
+<tr>
+<td>WebGPU FP16</td>
+<td>1469 ms</td>
+<td>489 ms</td>
+<td>3.0×</td>
+</tr>
+</tbody>
+</table>
+<p>No other lever comes close. But a smaller resolution is an <strong>accuracy</strong>
+decision, not only a speed one: re-export (and retrain if needed) at the new
+resolution and validate on your test set before switching. On this detector,
+the model trained at 320 tied with the 640 one.</p>
+<div class="admonition warning">
+<p class="admonition-title">Compare models in the same page</p>
+<p>A phone's clock changes from one measurement to the next. On this device,
+the same WebGPU run varied 2.4× between pages opened minutes apart. Two
+separate pages measure the device's state, not the models. The bench
+alternates the models in one page:
+<code>run.html?task=detect&amp;compare=model-640,model-320&amp;only=compare</code>.</p>
+</div>
+<h3 id="then-the-backend">Then: the backend</h3>
+<p>With the model at 320, ask for WebGPU and keep WASM as the fallback:</p>
+<div class="highlight"><pre><span></span><code><span class="k">import</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">Detector</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="kr">from</span><span class="w"> </span><span class="s2">"@mauriciobenjamin700/ort-vision-sdk-web"</span><span class="p">;</span>
+
+<span class="kd">const</span><span class="w"> </span><span class="nx">det</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">Detector</span><span class="p">.</span><span class="nx">create</span><span class="p">(</span><span class="s2">"/models/detect-320.onnx"</span><span class="p">,</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="nx">providers</span><span class="o">:</span><span class="w"> </span><span class="p">[</span><span class="s2">"webgpu"</span><span class="p">,</span><span class="w"> </span><span class="s2">"wasm"</span><span class="p">],</span>
+<span class="w">  </span><span class="nx">cache</span><span class="o">:</span><span class="w"> </span><span class="kt">true</span><span class="p">,</span>
+<span class="p">});</span>
+<span class="k">await</span><span class="w"> </span><span class="nx">det</span><span class="p">.</span><span class="nx">warmup</span><span class="p">(</span><span class="mf">2</span><span class="p">);</span>
+
+<span class="kd">const</span><span class="w"> </span><span class="nx">input</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">document</span><span class="p">.</span><span class="nx">querySelector</span><span class="o">&lt;</span><span class="nx">HTMLInputElement</span><span class="o">&gt;</span><span class="p">(</span><span class="s2">"input[type=file]"</span><span class="p">)</span><span class="o">!</span><span class="p">;</span>
+<span class="nx">input</span><span class="p">.</span><span class="nx">addEventListener</span><span class="p">(</span><span class="s2">"change"</span><span class="p">,</span><span class="w"> </span><span class="k">async</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="kd">const</span><span class="w"> </span><span class="nx">file</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">input</span><span class="p">.</span><span class="nx">files</span><span class="o">?</span><span class="p">.[</span><span class="mf">0</span><span class="p">];</span>
+<span class="w">  </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="nx">file</span><span class="p">)</span><span class="w"> </span><span class="k">return</span><span class="p">;</span>
+<span class="w">  </span><span class="kd">const</span><span class="w"> </span><span class="nx">result</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="k">await</span><span class="w"> </span><span class="nx">det</span><span class="p">.</span><span class="nx">predict</span><span class="p">(</span><span class="nx">file</span><span class="p">))[</span><span class="mf">0</span><span class="p">];</span>
+<span class="w">  </span><span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="nx">det</span><span class="p">.</span><span class="nx">session</span><span class="p">.</span><span class="nx">providers</span><span class="p">,</span><span class="w"> </span><span class="nx">result</span><span class="p">.</span><span class="nx">length</span><span class="p">,</span><span class="w"> </span><span class="nx">result</span><span class="p">.</span><span class="nx">speed</span><span class="p">);</span>
+<span class="p">});</span>
+</code></pre></div>
+<p><code>det.session.providers</code> tells which backend the session ended up on. On a phone
+without WebGPU it falls back to WASM on its own.</p>
+<p>Three things the measurement showed:</p>
+<ul>
+<li><strong>WebGPU FP32 won.</strong> On this Mali, FP16 was <strong>slower</strong> than FP32 (489 vs
+  223 ms), even with <code>shader-f16</code> available. Measure on your device before
+  shipping an FP16 export for speed.</li>
+<li><strong>On WASM, INT8 nearly doubles the speed</strong> (697 → 390 ms). It is the best
+  fallback for a phone without WebGPU, as long as you validate accuracy. Until
+  the fix for <a href="https://github.com/mauriciobenjamin700/ort-vision-sdk/issues/65">#65</a>,
+  <code>quantize_model</code> produced YOLO detectors with every score at 0.</li>
+<li><strong>FP16 on WASM does not help latency</strong>: it shrinks the download.</li>
+</ul>
+<h3 id="what-did-not-pay-off">What did not pay off</h3>
+<p>At 320×320 on WebGPU, each stage of the frame measured on its own:</p>
+<table>
+<thead>
+<tr>
+<th>Stage</th>
+<th>ms</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Letterbox + pixel readback</td>
+<td>11–18</td>
+</tr>
+<tr>
+<td>Conversion to CHW float32</td>
+<td>6–7</td>
+</tr>
+<tr>
+<td>Input upload</td>
+<td>~12</td>
+</tr>
+<tr>
+<td>GPU inference</td>
+<td>~200</td>
+</tr>
+<tr>
+<td>Output download (42 KB)</td>
+<td>~6</td>
+</tr>
+</tbody>
+</table>
+<p>That is why three ideas that work on paper paid little here:</p>
+<ul>
+<li><strong>Graph capture</strong> (<code>enableGraphCapture</code>): −20 ms (9%), and it needs input
+  and output on the GPU.</li>
+<li><strong>Preprocessing inside the graph</strong>: at most the conversion and part of the
+  upload, ~15 ms.</li>
+<li><strong>Shrinking the output inside the graph</strong>: the output is already 42 KB; the
+  download is fixed latency.</li>
+</ul>
+<div class="admonition tip">
+<p class="admonition-title">On another device, measure again</p>
+<p>A phone with a strong GPU and a weak CPU shifts the balance. The bench's
+<code>breakdown</code> section gives this same table on your device:
+<code>run.html?set=your-model&amp;task=detect&amp;only=breakdown</code>.</p>
+</div>
+<h2 id="recap">Recap</h2>
+<ul>
+<li><strong>Creation:</strong> <code>cache: true</code> takes the network out of the way from the second
+  visit on; the runtime now downloads alongside the model (−48% on the first
+  creation); <code>onnxruntime-web/wasm</code> halves the runtime; <code>optimize_model</code> at
+  build time cuts ~60% of session building (for WASM); per-provider options via
+  an object or a <code>(name, options)</code> pair. ✅</li>
+<li><strong>Inference:</strong> <code>quantize_model</code> makes the model ~3× smaller and 2.2× faster in
+  Python; isolate the page (COOP/COEP) for up to 3.4× on WASM; with
+  <code>env.wasm.proxy</code>, two <code>predict()</code> calls in flight yield ~15% more.</li>
+<li><strong>Video:</strong> pass the <code>HTMLVideoElement</code> straight to <code>predict()</code>; with a camera,
+  <code>load</code> drops ~75%.</li>
+<li>The SDK already avoids copies in preprocessing and builds crops only when
+  you ask for them.</li>
+<li><strong>Phone:</strong> lower the input resolution first (320 ran 3–4.7× faster than
+  640), then prefer WebGPU FP32 with WASM as the fallback; compare models in
+  the same page. 📱</li>
+</ul>
+<h2 id="see-also">See also</h2>
+<ul>
+<li><a href="../velocidade/">Inference cost</a>: measure before you optimize.</li>
+<li><a href="../web/">Web guide</a>: <code>env.wasm.proxy</code> to move inference off the main thread.</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    <script id="__config" type="application/json">{"base": "../../..", "features": ["navigation.tracking", "navigation.sections", "navigation.top", "navigation.indexes", "content.code.copy", "search.suggest", "search.highlight", "toc.follow"], "search": "../../../assets/javascripts/workers/search.f8cc74c7.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}}</script>
+    
+    
+      <script src="../../../assets/javascripts/bundle.60a45f97.min.js"></script>
+      
+    
+  </body>
+</html>

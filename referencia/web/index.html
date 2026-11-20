@@ -1,0 +1,1499 @@
+
+<!doctype html>
+<html lang="pt" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="SDKs de alto nível para inferência de visão computacional sobre o ONNX Runtime (Python + browser/TypeScript).">
+      
+      
+      
+        <link rel="canonical" href="https://mauriciobenjamin700.github.io/ort-vision-sdk/referencia/web/">
+      
+      
+        <link rel="prev" href="../python/">
+      
+      
+        <link rel="next" href="../../publishing/">
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.5.50">
+    
+    
+      
+        <title>API Web - ort-vision-sdk</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.a40c8224.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#referencia-api-web" class="md-skip">
+          Ir para o conteúdo
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Cabeçalho">
+    <a href="../.." title="ort-vision-sdk" class="md-header__button md-logo" aria-label="ort-vision-sdk" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            ort-vision-sdk
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              API Web
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Tema escuro"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Tema escuro" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m17.75 4.09-2.53 1.94.91 3.06-2.63-1.81-2.63 1.81.91-3.06-2.53-1.94L12.44 4l1.06-3 1.06 3zm3.5 6.91-1.64 1.25.59 1.98-1.7-1.17-1.7 1.17.59-1.98L15.75 11l2.06-.05L18.5 9l.69 1.95zm-2.28 4.95c.83-.08 1.72 1.1 1.19 1.85-.32.45-.66.87-1.08 1.27C15.17 23 8.84 23 4.94 19.07c-3.91-3.9-3.91-10.24 0-14.14.4-.4.82-.76 1.27-1.08.75-.53 1.93.36 1.85 1.19-.27 2.86.69 5.83 2.89 8.02a9.96 9.96 0 0 0 8.02 2.89m-1.64 2.02a12.08 12.08 0 0 1-7.8-3.47c-2.17-2.19-3.33-5-3.49-7.82-2.81 3.14-2.7 7.96.31 10.98 3.02 3.01 7.84 3.12 10.98.31"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Tema claro"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Tema claro" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 7a5 5 0 0 1 5 5 5 5 0 0 1-5 5 5 5 0 0 1-5-5 5 5 0 0 1 5-5m0 2a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3m0-7 2.39 3.42C13.65 5.15 12.84 5 12 5s-1.65.15-2.39.42zM3.34 7l4.16-.35A7.2 7.2 0 0 0 5.94 8.5c-.44.74-.69 1.5-.83 2.29zm.02 10 1.76-3.77a7.131 7.131 0 0 0 2.38 4.14zM20.65 7l-1.77 3.79a7.02 7.02 0 0 0-2.38-4.15zm-.01 10-4.14.36c.59-.51 1.12-1.14 1.54-1.86.42-.73.69-1.5.83-2.29zM12 22l-2.41-3.44c.74.27 1.55.44 2.41.44.82 0 1.63-.17 2.37-.44z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+      <div class="md-header__option">
+  <div class="md-select">
+    
+    <button class="md-header__button md-icon" aria-label="Selecione o idioma">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m12.87 15.07-2.54-2.51.03-.03A17.5 17.5 0 0 0 14.07 6H17V4h-7V2H8v2H1v2h11.17C11.5 7.92 10.44 9.75 9 11.35 8.07 10.32 7.3 9.19 6.69 8h-2c.73 1.63 1.73 3.17 2.98 4.56l-5.09 5.02L4 19l5-5 3.11 3.11zM18.5 10h-2L12 22h2l1.12-3h4.75L21 22h2zm-2.62 7 1.62-4.33L19.12 17z"/></svg>
+    </button>
+    <div class="md-select__inner">
+      <ul class="md-select__list">
+        
+          <li class="md-select__item">
+            <a href="./" hreflang="pt" class="md-select__link">
+              Português (BR)
+            </a>
+          </li>
+        
+          <li class="md-select__item">
+            <a href="../../en/referencia/web/" hreflang="en" class="md-select__link">
+              English (US)
+            </a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+</div>
+    
+    
+      <label class="md-header__button md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+      </label>
+      <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Buscar" placeholder="Buscar" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Pesquisar">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Limpar" aria-label="Limpar" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Inicializando a pesquisa
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/mauriciobenjamin700/ort-vision-sdk" title="Ir ao repositório" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81"/></svg>
+  </div>
+  <div class="md-source__repository">
+    mauriciobenjamin700/ort-vision-sdk
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navegação" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="ort-vision-sdk" class="md-nav__button md-logo" aria-label="ort-vision-sdk" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    ort-vision-sdk
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/mauriciobenjamin700/ort-vision-sdk" title="Ir ao repositório" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81"/></svg>
+  </div>
+  <div class="md-source__repository">
+    mauriciobenjamin700/ort-vision-sdk
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Início
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../instalacao/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Instalação
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../inicio-rapido/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Início rápido
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  <span class="md-ellipsis">
+    Guia
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            Guia
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guia/classificacao/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Classificação
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guia/deteccao/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Detecção
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guia/segmentacao/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Segmentação
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guia/pipeline/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Pipelines fundidos
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guia/modelo/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    O modelo manda
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guia/python/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Python
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guia/backends/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Backends de inferência
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guia/velocidade/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Custo da inferência
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guia/desempenho/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Otimizando criação e inferência
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guia/web/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Web (browser)
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guia/meia-precisao/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Meia precisão (FP16)
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
+            
+  
+  <span class="md-ellipsis">
+    Referência
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            Referência
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../python/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    API Python
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  <span class="md-ellipsis">
+    API Web
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  <span class="md-ellipsis">
+    API Web
+  </span>
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Índice">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Índice
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#tarefas" class="md-nav__link">
+    <span class="md-ellipsis">
+      Tarefas
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Tarefas">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#tipos-de-opcoes" class="md-nav__link">
+    <span class="md-ellipsis">
+      Tipos de opções
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#resultados" class="md-nav__link">
+    <span class="md-ellipsis">
+      Resultados
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#imagens-rotulos-e-providers" class="md-nav__link">
+    <span class="md-ellipsis">
+      Imagens, rótulos e providers
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#erros" class="md-nav__link">
+    <span class="md-ellipsis">
+      Erros
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#resultado-vazio" class="md-nav__link">
+    <span class="md-ellipsis">
+      Resultado vazio
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pipelines-fundidos" class="md-nav__link">
+    <span class="md-ellipsis">
+      Pipelines fundidos
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#utilitarios-de-prepos-processamento" class="md-nav__link">
+    <span class="md-ellipsis">
+      Utilitários de pré/pós-processamento
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Utilitários de pré/pós-processamento">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#o-caminho-rapido-que-as-tarefas-tomam" class="md-nav__link">
+    <span class="md-ellipsis">
+      O caminho rápido que as tarefas tomam
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="">
+            
+  
+  <span class="md-ellipsis">
+    Projeto
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            Projeto
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../publishing/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Publicação
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Índice">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Índice
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#tarefas" class="md-nav__link">
+    <span class="md-ellipsis">
+      Tarefas
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Tarefas">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#tipos-de-opcoes" class="md-nav__link">
+    <span class="md-ellipsis">
+      Tipos de opções
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#resultados" class="md-nav__link">
+    <span class="md-ellipsis">
+      Resultados
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#imagens-rotulos-e-providers" class="md-nav__link">
+    <span class="md-ellipsis">
+      Imagens, rótulos e providers
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#erros" class="md-nav__link">
+    <span class="md-ellipsis">
+      Erros
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#resultado-vazio" class="md-nav__link">
+    <span class="md-ellipsis">
+      Resultado vazio
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pipelines-fundidos" class="md-nav__link">
+    <span class="md-ellipsis">
+      Pipelines fundidos
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#utilitarios-de-prepos-processamento" class="md-nav__link">
+    <span class="md-ellipsis">
+      Utilitários de pré/pós-processamento
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Utilitários de pré/pós-processamento">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#o-caminho-rapido-que-as-tarefas-tomam" class="md-nav__link">
+    <span class="md-ellipsis">
+      O caminho rápido que as tarefas tomam
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+  
+  
+
+
+<h1 id="referencia-api-web">Referência — API Web</h1>
+<p>Superfície pública do pacote <code>@mauriciobenjamin700/ort-vision-sdk-web</code> (tudo
+exportado de <code>@mauriciobenjamin700/ort-vision-sdk-web</code>).</p>
+<h2 id="tarefas">Tarefas</h2>
+<table>
+<thead>
+<tr>
+<th>Classe</th>
+<th>Criação</th>
+<th>Descrição</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Classifier</code></td>
+<td><code>await Classifier.create(model, options)</code></td>
+<td>Classificação de imagem.</td>
+</tr>
+<tr>
+<td><code>Detector</code></td>
+<td><code>await Detector.create(model, options)</code></td>
+<td>Detecção de objetos (YOLO).</td>
+</tr>
+<tr>
+<td><code>Segmenter</code></td>
+<td><code>await Segmenter.create(model, options)</code></td>
+<td>Segmentação de instância (YOLO-seg).</td>
+</tr>
+<tr>
+<td><code>DetectClassify</code></td>
+<td><code>await DetectClassify.create(model, options)</code></td>
+<td>Pipeline fundido detector → classificador, num único <code>.onnx</code>.</td>
+</tr>
+<tr>
+<td><code>VisionTask</code></td>
+<td>—</td>
+<td>Classe base comum.</td>
+</tr>
+</tbody>
+</table>
+<p><code>predict()</code> é sempre <code>async</code> e retorna <code>Promise&lt;...Results[]&gt;</code> de comprimento 1
+por imagem. Cada tarefa expõe um alias <code>run()</code>.</p>
+<h3 id="tipos-de-opcoes">Tipos de opções</h3>
+<table>
+<thead>
+<tr>
+<th>Tipo</th>
+<th>Para</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ClassifierOptions</code> / <code>ClassifierPredictOptions</code></td>
+<td>construção / <code>predict</code> do <code>Classifier</code> (<code>labels</code>, <code>numClasses</code>, <code>inputSize</code>, <code>normalization</code>, <code>mean</code>/<code>std</code>, <code>applySoftmax</code>, <code>providers</code>; <code>topK</code> no predict)</td>
+</tr>
+<tr>
+<td><code>DetectorOptions</code> / <code>DetectorPredictOptions</code></td>
+<td><code>Detector</code> (<code>head</code>, <code>labels</code>, <code>inputSize</code>, <code>confThreshold</code>, <code>iouThreshold</code>; overrides + <code>classes</code> no predict)</td>
+</tr>
+<tr>
+<td><code>SegmenterOptions</code> / <code>SegmenterPredictOptions</code></td>
+<td><code>Segmenter</code> (+ <code>maskThreshold</code>)</td>
+</tr>
+<tr>
+<td><code>DetectorHead</code> (<code>"yolo"</code>) / <code>SegmenterHead</code> (<code>"yolo-seg"</code>)</td>
+<td>famílias de decoder</td>
+</tr>
+<tr>
+<td><code>DetectClassifyOptions</code> / <code>DetectClassifyPredictOptions</code></td>
+<td><code>DetectClassify</code> (<code>labels</code>, <code>classifierLabels</code>; <code>confThreshold</code>, <code>classes</code>, <code>topK</code> no predict)</td>
+</tr>
+</tbody>
+</table>
+<p>Os três tipos de detecção aceitam ainda <code>raiseOnEmpty</code> (construção e predict) —
+ver <a href="#resultado-vazio">Resultado vazio</a>.</p>
+<h2 id="resultados">Resultados</h2>
+<table>
+<thead>
+<tr>
+<th>Envelope</th>
+<th>Visão em massa</th>
+<th>Iterar produz</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ClassificationResults</code></td>
+<td><code>probs</code></td>
+<td>n/a (resultado único)</td>
+</tr>
+<tr>
+<td><code>DetectionResults</code></td>
+<td><code>boxes</code></td>
+<td><code>DetectionResult</code></td>
+</tr>
+<tr>
+<td><code>DetectClassifyResults</code></td>
+<td><code>boxes</code></td>
+<td><code>DetectionResult</code> com <code>classification</code> preenchido (+ <code>classifierNames</code> no envelope)</td>
+</tr>
+<tr>
+<td><code>SegmentationResults</code></td>
+<td><code>boxes</code>, <code>masks</code></td>
+<td><code>SegmentationResult</code></td>
+</tr>
+</tbody>
+</table>
+<p>Todo envelope expõe <code>names</code>, <code>origImg</code>, <code>origShape</code>, <code>path</code> e <code>speed</code> — um
+objeto <code>Speed</code> com <code>load</code>, <code>preprocess</code>, <code>inference</code> e <code>postprocess</code> em
+milissegundos, preenchido por todo <code>predict()</code>. Ver
+<a href="../../guia/velocidade/">Custo da inferência</a>.</p>
+<p>Visões em massa: <code>Boxes</code>, <code>Probs</code>, <code>Masks</code> (mesmos atributos do Python).</p>
+<p>Tipos/classes por instância: <code>DetectionResult</code>, <code>SegmentationResult</code>,
+<code>ClassificationResult</code>, <code>ClassProbability</code> (com <code>classId</code>/<code>className</code>/
+<code>confidence</code> e os aliases <code>cls</code>/<code>name</code>/<code>conf</code>/<code>box</code>), além de <code>BoundingBox</code>
+(<code>asXyxy()</code>, <code>asXywh()</code>), <code>Mask</code> (<code>data</code>/<code>width</code>/<code>height</code>) e <code>RGBImage</code> (com <code>RGBImage.deferred(w, h, materialize)</code> para pixels montados só na primeira leitura de <code>data</code>).</p>
+<h2 id="imagens-rotulos-e-providers">Imagens, rótulos e providers</h2>
+<table>
+<thead>
+<tr>
+<th>Símbolo</th>
+<th>Descrição</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>loadImage(image)</code></td>
+<td>Carrega qualquer entrada suportada para um <code>RGBImage</code>.</td>
+</tr>
+<tr>
+<td><code>ImageInput</code></td>
+<td>Tipo de união das entradas aceitas por <code>predict()</code>.</td>
+</tr>
+<tr>
+<td><code>resolveLabels(spec, options)</code></td>
+<td>Resolve uma <code>LabelSpec</code> para o mapeamento de classes.</td>
+</tr>
+<tr>
+<td><code>LabelSpec</code> / <code>ResolveLabelsOptions</code></td>
+<td>Tipos da resolução de rótulos.</td>
+</tr>
+<tr>
+<td><code>COCO_CLASSES</code></td>
+<td>As 80 classes do preset COCO.</td>
+</tr>
+<tr>
+<td><code>DEFAULT_PROVIDERS</code></td>
+<td><code>["webgpu", "wasm"]</code>.</td>
+</tr>
+<tr>
+<td><code>resolveProviders(...)</code></td>
+<td>Resolve a lista de providers para nomes do ORT-Web.</td>
+</tr>
+<tr>
+<td><code>ProviderSpec</code></td>
+<td>Um provider: o nome, ou o objeto de configuração do ORT para ele (<code>{ name: "webgpu", preferredLayout: "NHWC" }</code>).</td>
+</tr>
+<tr>
+<td><code>detectProviders(...)</code></td>
+<td>Estreita a lista pedida pelo que o navegador consegue oferecer (WebGPU precisa de adapter).</td>
+</tr>
+<tr>
+<td><code>Normalization</code> / <code>resolveNormalization(...)</code> / <code>isUltralyticsClassifier(...)</code></td>
+<td>Qual preprocessamento o classificador espera, lido dos metadados do modelo.</td>
+</tr>
+<tr>
+<td><code>OrtSession</code> / <code>OrtSessionOptions</code> / <code>ModelSource</code></td>
+<td>Sessão de baixo nível. <code>OrtSessionOptions.cache</code> guarda modelos por URL na Cache Storage.</td>
+</tr>
+<tr>
+<td><code>DEFAULT_MODEL_CACHE</code></td>
+<td>Bucket usado por <code>cache: true</code> (<code>"ort-vision-sdk-models"</code>).</td>
+</tr>
+<tr>
+<td><code>QUANTIZATION_KEY</code></td>
+<td>Chave de metadata gravada pelo <code>quantize_model</code> do Python; um modelo marcado roda em WASM mesmo com <code>webgpu</code> pedido.</td>
+</tr>
+<tr>
+<td><code>GRAPH_OPTIMIZATION_KEY</code></td>
+<td>Chave de metadata gravada pelo <code>optimize_model</code> do Python; um modelo marcado carrega com o otimizador do ORT desligado. Ver <a href="../../guia/desempenho/">Otimizando criação e inferência</a>.</td>
+</tr>
+<tr>
+<td><code>OrtSession.inputShape</code> / <code>.inputShapes</code></td>
+<td>Shapes declarados pelo grafo, eixos dinâmicos como <code>null</code>.</td>
+</tr>
+<tr>
+<td><code>OrtSession.providers</code></td>
+<td>Providers que este navegador pode oferecer — best-effort, o ORT-Web não reporta o efetivo.</td>
+</tr>
+<tr>
+<td><code>OrtSession.requestedProviders</code></td>
+<td>Providers que foram pedidos, depois dos defaults.</td>
+</tr>
+<tr>
+<td><code>OrtSession.release()</code></td>
+<td>Libera a sessão nativa (necessário ao descartar uma sessão com a página viva).</td>
+</tr>
+<tr>
+<td><code>task.inputSize</code></td>
+<td>Resolução em que a tarefa realmente pré-processa.</td>
+</tr>
+<tr>
+<td><code>task.warmup(runs?)</code></td>
+<td>Roda o modelo com tensor zerado para pagar a compilação de shaders adiantado.</td>
+</tr>
+<tr>
+<td><code>spatialInputSize</code> / <code>resolveInputSize</code> / <code>declaredShapesFrom</code></td>
+<td>Helpers puros da precedência grafo → chamador → fallback.</td>
+</tr>
+<tr>
+<td><code>DeclaredShape</code> / <code>DeclaredDim</code></td>
+<td>Shape declarado e uma dimensão (<code>number</code>, ou <code>null</code> quando simbólica).</td>
+</tr>
+<tr>
+<td><code>session.inputDtype</code> / <code>.inputDtypes</code></td>
+<td>Tipo de tensor que cada entrada declara — <code>"float16"</code> num export <code>half=True</code>. Lido do arquivo, porque o ORT-Web não expõe.</td>
+</tr>
+<tr>
+<td><code>readModelInputTypes(bytes)</code> / <code>tensorTypeFor(elemType)</code></td>
+<td>O parser do tipo declarado e o nome do tipo correspondente.</td>
+</tr>
+<tr>
+<td><code>asFloat32Array(data)</code></td>
+<td>Alarga uma saída de meia precisão antes de decodificar; devolve um <code>Float32Array</code> inalterado.</td>
+</tr>
+<tr>
+<td><code>hasFloat16Array()</code></td>
+<td>Se este navegador consegue montar tensor half. <code>create()</code> recusa o modelo quando não.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="erros">Erros</h2>
+<p>Hierarquia de exceções exportada: <code>OrtVisionError</code> (base), <code>ImageLoadError</code>,
+<code>InferenceError</code>, <code>LabelMapError</code>, <code>ModelLoadError</code>,
+<code>ProviderNotAvailableError</code>, <code>FusionError</code>, <code>NoDetectionsError</code>.</p>
+<h2 id="resultado-vazio">Resultado vazio</h2>
+<p><code>Detector</code>, <code>Segmenter</code> e <code>DetectClassify</code> aceitam <code>raiseOnEmpty</code> nas opções de
+construção e nas de <code>predict()</code>. Default <code>false</code>: não achar nada devolve um
+envelope vazio. Com <code>true</code>, lança <code>NoDetectionsError</code> — ver
+<a href="../../guia/deteccao/#quando-nao-detectar-nada-e-um-erro">Quando não detectar nada é um erro</a>.</p>
+<table>
+<thead>
+<tr>
+<th>Símbolo</th>
+<th>Descrição</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>raiseOnEmpty</code></td>
+<td>Opção de construção e de <code>predict()</code>; o valor por chamada vence.</td>
+</tr>
+<tr>
+<td><code>NoDetectionsError</code></td>
+<td>Lançado quando nada sobra e o flag está ativo.</td>
+</tr>
+<tr>
+<td><code>requireDetections(count, options)</code></td>
+<td>O helper compartilhado pelas três tarefas, exportado para quem constrói a própria tarefa.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="pipelines-fundidos">Pipelines fundidos</h2>
+<table>
+<thead>
+<tr>
+<th>Símbolo</th>
+<th>Descrição</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>readFusionSpec(metadata)</code></td>
+<td>Lê o que um pipeline fundido declara sobre si mesmo; <code>null</code> quando o modelo não é um pipeline.</td>
+</tr>
+<tr>
+<td><code>FusionSpec</code> / <code>CropSource</code></td>
+<td>O contrato decodificado e de onde vêm os recortes.</td>
+</tr>
+<tr>
+<td><code>INPUT_IMAGE</code> / <code>INPUT_SOURCE</code> / <code>INPUT_SCALE</code> / <code>INPUT_PAD</code></td>
+<td>Nomes das entradas do grafo fundido.</td>
+</tr>
+<tr>
+<td><code>OUTPUT_BOXES</code> / <code>OUTPUT_SCORES</code> / <code>OUTPUT_CLASSES</code> / <code>OUTPUT_NUM_DETECTIONS</code> / <code>OUTPUT_PROBS</code></td>
+<td>Nomes das saídas.</td>
+</tr>
+<tr>
+<td><code>METADATA_PREFIX</code> / <code>FUSION_KIND_DETECT_CLASSIFY</code></td>
+<td>Namespace <code>ovs.</code> e a família de pipeline.</td>
+</tr>
+<tr>
+<td><code>parseNames(raw)</code></td>
+<td>Interpreta um mapa de classes <code>repr</code>-encoded.</td>
+</tr>
+</tbody>
+</table>
+<p>Fundir modelos é um passo de build <strong>do lado Python</strong> (extra <code>[compose]</code>); o
+navegador só carrega o <code>.onnx</code> resultante. Ver
+<a href="../../guia/pipeline/">Pipelines fundidos</a>.</p>
+<h2 id="utilitarios-de-prepos-processamento">Utilitários de pré/pós-processamento</h2>
+<p>O pacote também exporta helpers de baixo nível para quem constrói o próprio
+pipeline: <code>letterbox</code>, <code>resize</code>, <code>normalize</code>, <code>toCHW</code>, <code>toTensor</code>,
+<code>toFloat32</code>/<code>toFloat32Tensor</code>, <code>fromCv2</code>/<code>toCv2</code>, <code>softmax</code>, <code>topK</code>, <code>nms</code>,
+<code>batchedNms</code>, <code>decodeYolo</code>, <code>decodeYoloAnchors</code> e <code>decodeYoloSeg</code>.</p>
+<h3 id="o-caminho-rapido-que-as-tarefas-tomam">O caminho rápido que as tarefas tomam</h3>
+<p>Os primitivos acima alocam e varrem o buffer inteiro a cada chamada — a forma
+certa para uma biblioteca, a errada para um laço de vídeo. As tarefas internas
+usam duas pipelines que fundem esse trabalho num <code>drawImage</code> mais um laço, com
+o buffer de saída reusado entre frames:</p>
+<table>
+<thead>
+<tr>
+<th>Símbolo</th>
+<th>O que faz</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>LetterboxPipeline(w, h, fill?)</code></td>
+<td>Redimensiona <strong>preservando proporção</strong> e preenche o resto, devolvendo <code>{ data, scale, padLeft, padTop, reused }</code>. É o que <code>Detector</code>, <code>Segmenter</code> e <code>DetectClassify</code> usam. <code>run(image, canvas?)</code> desenha direto de um canvas opaco com os mesmos pixels; <code>release(result?)</code> só libera o buffer compartilhado quando <code>result</code> é ele.</td>
+</tr>
+<tr>
+<td><code>ResizePipeline(w, h, mean?, std?)</code></td>
+<td>Estica até o alvo (sem padding) e já normaliza, devolvendo <code>{ data, reused }</code>. É o que o <code>Classifier</code> usa — ele não mapeia nada de volta para a imagem original, então não há escala nem padding a inverter.</td>
+</tr>
+<tr>
+<td><code>letterboxToTensorData(...)</code> / <code>resizeToTensorData(...)</code></td>
+<td>As formas de uma chamada só, para quem não quer manter a pipeline viva.</td>
+</tr>
+<tr>
+<td><code>writePlanarFloat32(rgba, w, h, mean, std, out, stride?)</code></td>
+<td>O laço em si: RGBA (ou RGB empacotado, com <code>stride: 3</code>) → float32 planar normalizado.</td>
+</tr>
+<tr>
+<td><code>zeroTensorData(w, h)</code></td>
+<td>O tensor zerado que o <code>warmup()</code> alimenta.</td>
+</tr>
+</tbody>
+</table>
+<div class="admonition warning">
+<p class="admonition-title"><code>release()</code> não é opcional</p>
+<p>O buffer de saída é reusado, então <code>run()</code> marca-o como em uso e a chamada
+seguinte aloca outro em vez de corromper o primeiro. Chame <code>release()</code>
+depois que a inferência resolveu — a partir daí os valores já estão dentro
+do heap do WASM.</p>
+</div>
+<div class="admonition info">
+<p class="admonition-title">A saída é bit-idêntica à dos primitivos</p>
+<p>Fundir mudou quantas passadas e quantas alocações acontecem, não a
+aritmética: <code>(valor / 255 - mean) / std</code> é avaliado nessa ordem justamente
+porque colapsar numa multiplicação-e-soma daria outro arredondamento. Os
+testes comparam as duas saídas valor a valor.</p>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Fonte da verdade</p>
+<p>As assinaturas completas vivem no código-fonte em
+<a href="https://github.com/mauriciobenjamin700/ort-vision-sdk/tree/main/sdk-js-web/src"><code>sdk-js-web/src/</code></a>.
+Esta página resume a superfície pública exportada em <code>index.ts</code>.</p>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Voltar ao topo
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    <script id="__config" type="application/json">{"base": "../..", "features": ["navigation.tracking", "navigation.sections", "navigation.top", "navigation.indexes", "content.code.copy", "search.suggest", "search.highlight", "toc.follow"], "search": "../../assets/javascripts/workers/search.f8cc74c7.min.js", "translations": {"clipboard.copied": "Copiado para \u00e1rea de transfer\u00eancia", "clipboard.copy": "Copiar para \u00e1rea de transfer\u00eancia", "search.result.more.one": "Mais 1 nesta p\u00e1gina", "search.result.more.other": "Mais # nesta p\u00e1gina", "search.result.none": "Nenhum resultado encontrado", "search.result.one": "1 resultado encontrado", "search.result.other": "# resultados encontrados", "search.result.placeholder": "Digite para iniciar a busca", "search.result.term.missing": "Ausente", "select.version": "Selecione a vers\u00e3o"}}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.60a45f97.min.js"></script>
+      
+    
+  </body>
+</html>

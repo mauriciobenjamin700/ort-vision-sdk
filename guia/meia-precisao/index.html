@@ -1,0 +1,1267 @@
+
+<!doctype html>
+<html lang="pt" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="SDKs de alto nível para inferência de visão computacional sobre o ONNX Runtime (Python + browser/TypeScript).">
+      
+      
+      
+        <link rel="canonical" href="https://mauriciobenjamin700.github.io/ort-vision-sdk/guia/meia-precisao/">
+      
+      
+        <link rel="prev" href="../web/">
+      
+      
+        <link rel="next" href="../../referencia/python/">
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.5.50">
+    
+    
+      
+        <title>Meia precisão (FP16) - ort-vision-sdk</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.a40c8224.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#meia-precisao-fp16" class="md-skip">
+          Ir para o conteúdo
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Cabeçalho">
+    <a href="../.." title="ort-vision-sdk" class="md-header__button md-logo" aria-label="ort-vision-sdk" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            ort-vision-sdk
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Meia precisão (FP16)
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Tema escuro"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Tema escuro" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m17.75 4.09-2.53 1.94.91 3.06-2.63-1.81-2.63 1.81.91-3.06-2.53-1.94L12.44 4l1.06-3 1.06 3zm3.5 6.91-1.64 1.25.59 1.98-1.7-1.17-1.7 1.17.59-1.98L15.75 11l2.06-.05L18.5 9l.69 1.95zm-2.28 4.95c.83-.08 1.72 1.1 1.19 1.85-.32.45-.66.87-1.08 1.27C15.17 23 8.84 23 4.94 19.07c-3.91-3.9-3.91-10.24 0-14.14.4-.4.82-.76 1.27-1.08.75-.53 1.93.36 1.85 1.19-.27 2.86.69 5.83 2.89 8.02a9.96 9.96 0 0 0 8.02 2.89m-1.64 2.02a12.08 12.08 0 0 1-7.8-3.47c-2.17-2.19-3.33-5-3.49-7.82-2.81 3.14-2.7 7.96.31 10.98 3.02 3.01 7.84 3.12 10.98.31"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Tema claro"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Tema claro" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 7a5 5 0 0 1 5 5 5 5 0 0 1-5 5 5 5 0 0 1-5-5 5 5 0 0 1 5-5m0 2a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3m0-7 2.39 3.42C13.65 5.15 12.84 5 12 5s-1.65.15-2.39.42zM3.34 7l4.16-.35A7.2 7.2 0 0 0 5.94 8.5c-.44.74-.69 1.5-.83 2.29zm.02 10 1.76-3.77a7.131 7.131 0 0 0 2.38 4.14zM20.65 7l-1.77 3.79a7.02 7.02 0 0 0-2.38-4.15zm-.01 10-4.14.36c.59-.51 1.12-1.14 1.54-1.86.42-.73.69-1.5.83-2.29zM12 22l-2.41-3.44c.74.27 1.55.44 2.41.44.82 0 1.63-.17 2.37-.44z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+      <div class="md-header__option">
+  <div class="md-select">
+    
+    <button class="md-header__button md-icon" aria-label="Selecione o idioma">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m12.87 15.07-2.54-2.51.03-.03A17.5 17.5 0 0 0 14.07 6H17V4h-7V2H8v2H1v2h11.17C11.5 7.92 10.44 9.75 9 11.35 8.07 10.32 7.3 9.19 6.69 8h-2c.73 1.63 1.73 3.17 2.98 4.56l-5.09 5.02L4 19l5-5 3.11 3.11zM18.5 10h-2L12 22h2l1.12-3h4.75L21 22h2zm-2.62 7 1.62-4.33L19.12 17z"/></svg>
+    </button>
+    <div class="md-select__inner">
+      <ul class="md-select__list">
+        
+          <li class="md-select__item">
+            <a href="./" hreflang="pt" class="md-select__link">
+              Português (BR)
+            </a>
+          </li>
+        
+          <li class="md-select__item">
+            <a href="../../en/guia/meia-precisao/" hreflang="en" class="md-select__link">
+              English (US)
+            </a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+</div>
+    
+    
+      <label class="md-header__button md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+      </label>
+      <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Buscar" placeholder="Buscar" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Pesquisar">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Limpar" aria-label="Limpar" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Inicializando a pesquisa
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/mauriciobenjamin700/ort-vision-sdk" title="Ir ao repositório" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81"/></svg>
+  </div>
+  <div class="md-source__repository">
+    mauriciobenjamin700/ort-vision-sdk
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navegação" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="ort-vision-sdk" class="md-nav__button md-logo" aria-label="ort-vision-sdk" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    ort-vision-sdk
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/mauriciobenjamin700/ort-vision-sdk" title="Ir ao repositório" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.7.2 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2024 Fonticons, Inc.--><path d="M439.55 236.05 244 40.45a28.87 28.87 0 0 0-40.81 0l-40.66 40.63 51.52 51.52c27.06-9.14 52.68 16.77 43.39 43.68l49.66 49.66c34.23-11.8 61.18 31 35.47 56.69-26.49 26.49-70.21-2.87-56-37.34L240.22 199v121.85c25.3 12.54 22.26 41.85 9.08 55a34.34 34.34 0 0 1-48.55 0c-17.57-17.6-11.07-46.91 11.25-56v-123c-20.8-8.51-24.6-30.74-18.64-45L142.57 101 8.45 235.14a28.86 28.86 0 0 0 0 40.81l195.61 195.6a28.86 28.86 0 0 0 40.8 0l194.69-194.69a28.86 28.86 0 0 0 0-40.81"/></svg>
+  </div>
+  <div class="md-source__repository">
+    mauriciobenjamin700/ort-vision-sdk
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Início
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../instalacao/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Instalação
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../inicio-rapido/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Início rápido
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  <span class="md-ellipsis">
+    Guia
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            Guia
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../classificacao/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Classificação
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../deteccao/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Detecção
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../segmentacao/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Segmentação
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../pipeline/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Pipelines fundidos
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../modelo/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    O modelo manda
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../python/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Python
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../backends/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Backends de inferência
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../velocidade/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Custo da inferência
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../desempenho/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Otimizando criação e inferência
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../web/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Web (browser)
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  <span class="md-ellipsis">
+    Meia precisão (FP16)
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  <span class="md-ellipsis">
+    Meia precisão (FP16)
+  </span>
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Índice">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Índice
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#exportando" class="md-nav__link">
+    <span class="md-ellipsis">
+      Exportando
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#python-nada-muda" class="md-nav__link">
+    <span class="md-ellipsis">
+      Python: nada muda
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#web-igual-com-um-requisito-de-navegador" class="md-nav__link">
+    <span class="md-ellipsis">
+      Web: igual, com um requisito de navegador
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pipelines-fundidos-float16-nas-pontas-float32-no-meio" class="md-nav__link">
+    <span class="md-ellipsis">
+      Pipelines fundidos: float16 nas pontas, float32 no meio
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#o-que-a-meia-precisao-custa" class="md-nav__link">
+    <span class="md-ellipsis">
+      O que a meia precisão custa
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#recap" class="md-nav__link">
+    <span class="md-ellipsis">
+      Recap
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
+            
+  
+  <span class="md-ellipsis">
+    Referência
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            Referência
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../referencia/python/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    API Python
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../referencia/web/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    API Web
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="">
+            
+  
+  <span class="md-ellipsis">
+    Projeto
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            Projeto
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../publishing/" class="md-nav__link">
+        
+  
+  <span class="md-ellipsis">
+    Publicação
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Índice">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Índice
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#exportando" class="md-nav__link">
+    <span class="md-ellipsis">
+      Exportando
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#python-nada-muda" class="md-nav__link">
+    <span class="md-ellipsis">
+      Python: nada muda
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#web-igual-com-um-requisito-de-navegador" class="md-nav__link">
+    <span class="md-ellipsis">
+      Web: igual, com um requisito de navegador
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pipelines-fundidos-float16-nas-pontas-float32-no-meio" class="md-nav__link">
+    <span class="md-ellipsis">
+      Pipelines fundidos: float16 nas pontas, float32 no meio
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#o-que-a-meia-precisao-custa" class="md-nav__link">
+    <span class="md-ellipsis">
+      O que a meia precisão custa
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#recap" class="md-nav__link">
+    <span class="md-ellipsis">
+      Recap
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+  
+  
+
+
+<h1 id="meia-precisao-fp16">Meia precisão (FP16)</h1>
+<p>Um export <code>half=True</code> do Ultralytics ocupa <strong>metade</strong> do arquivo: 5,11 MB contra
+10,11 MB num detector, 10,41 MB contra 20,78 MB num classificador. Num
+navegador, isso decide se a página abre.</p>
+<p>Este guia mostra como usar esses arquivos nos dois SDKs — e o que o SDK faz por
+baixo, porque a parte interessante é onde a precisão <strong>não</strong> pode ser meia.</p>
+<h2 id="exportando">Exportando</h2>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">ultralytics</span><span class="w"> </span><span class="kn">import</span> <span class="n">YOLO</span>
+
+<span class="n">YOLO</span><span class="p">(</span><span class="s2">"yolo11n.pt"</span><span class="p">)</span><span class="o">.</span><span class="n">export</span><span class="p">(</span><span class="nb">format</span><span class="o">=</span><span class="s2">"onnx"</span><span class="p">,</span> <span class="n">imgsz</span><span class="o">=</span><span class="mi">640</span><span class="p">,</span> <span class="n">half</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">opset</span><span class="o">=</span><span class="mi">19</span><span class="p">)</span>
+<span class="n">YOLO</span><span class="p">(</span><span class="s2">"yolo11s-cls.pt"</span><span class="p">)</span><span class="o">.</span><span class="n">export</span><span class="p">(</span><span class="nb">format</span><span class="o">=</span><span class="s2">"onnx"</span><span class="p">,</span> <span class="n">imgsz</span><span class="o">=</span><span class="mi">224</span><span class="p">,</span> <span class="n">half</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">opset</span><span class="o">=</span><span class="mi">19</span><span class="p">)</span>
+</code></pre></div>
+<p>O <code>.onnx</code> resultante declara a entrada como <code>tensor(float16)</code>. É essa declaração
+que o SDK lê.</p>
+<h2 id="python-nada-muda">Python: nada muda</h2>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">ort_vision_sdk</span><span class="w"> </span><span class="kn">import</span> <span class="n">Detector</span>
+
+<span class="n">det</span> <span class="o">=</span> <span class="n">Detector</span><span class="p">(</span><span class="s2">"yolo11n_fp16.onnx"</span><span class="p">,</span> <span class="n">labels</span><span class="o">=</span><span class="s2">"coco"</span><span class="p">)</span>
+<span class="n">result</span> <span class="o">=</span> <span class="n">det</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="s2">"foto.jpg"</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+
+<span class="k">for</span> <span class="n">d</span> <span class="ow">in</span> <span class="n">result</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">d</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">d</span><span class="o">.</span><span class="n">conf</span><span class="p">,</span> <span class="n">d</span><span class="o">.</span><span class="n">box</span><span class="o">.</span><span class="n">xyxy</span><span class="p">)</span>
+</code></pre></div>
+<p>Mesmo código de sempre. O que mudou por dentro:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">ort_vision_sdk</span><span class="w"> </span><span class="kn">import</span> <span class="n">Detector</span>
+
+<span class="n">det</span> <span class="o">=</span> <span class="n">Detector</span><span class="p">(</span><span class="s2">"yolo11n_fp16.onnx"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">det</span><span class="o">.</span><span class="n">session</span><span class="o">.</span><span class="n">input_dtype</span><span class="p">)</span>  <span class="c1"># tensor(float16)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">det</span><span class="o">.</span><span class="n">input_dtype</span><span class="p">)</span>          <span class="c1"># float16  (o dtype NumPy do feed)</span>
+</code></pre></div>
+<div class="admonition info">
+<p class="admonition-title">Por que o pré-processamento continua em float32</p>
+<p><code>(valor / 255 - mean) / std</code> em meia precisão perde exatamente as pequenas
+diferenças que a normalização existe para preservar. O SDK pré-processa em
+<code>float32</code> e converte <strong>uma vez</strong>, na fronteira do feed — contra o tipo que
+cada entrada declara.</p>
+</div>
+<h2 id="web-igual-com-um-requisito-de-navegador">Web: igual, com um requisito de navegador</h2>
+<div class="highlight"><pre><span></span><code><span class="k">import</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">Detector</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="kr">from</span><span class="w"> </span><span class="s2">"@mauriciobenjamin700/ort-vision-sdk-web"</span><span class="p">;</span>
+
+<span class="kd">const</span><span class="w"> </span><span class="nx">det</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">Detector</span><span class="p">.</span><span class="nx">create</span><span class="p">(</span><span class="s2">"/models/yolo11n_fp16.onnx"</span><span class="p">);</span>
+<span class="kd">const</span><span class="w"> </span><span class="nx">result</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="k">await</span><span class="w"> </span><span class="nx">det</span><span class="p">.</span><span class="nx">predict</span><span class="p">(</span><span class="s2">"/images/foto.jpg"</span><span class="p">))[</span><span class="mf">0</span><span class="p">];</span>
+
+<span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kd">const</span><span class="w"> </span><span class="nx">d</span><span class="w"> </span><span class="k">of</span><span class="w"> </span><span class="nx">result</span><span class="p">)</span><span class="w"> </span><span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="nx">d</span><span class="p">.</span><span class="nx">className</span><span class="p">,</span><span class="w"> </span><span class="nx">d</span><span class="p">.</span><span class="nx">confidence</span><span class="p">,</span><span class="w"> </span><span class="nx">d</span><span class="p">.</span><span class="nx">bbox</span><span class="p">.</span><span class="nx">asXyxy</span><span class="p">());</span>
+</code></pre></div>
+<p>O ONNX Runtime exige um <code>Float16Array</code> <strong>nativo</strong> para um tensor half — os
+mesmos bits num <code>Uint16Array</code> são recusados. Onde o navegador não tem esse
+construtor, o modelo é recusado já em <code>create()</code>:</p>
+<div class="highlight"><pre><span></span><code>ModelLoadError: This model declares half-precision input(s) [images], but this
+environment has no Float16Array, which ONNX Runtime requires for a float16
+tensor. Use a float32 export of the model, or run in a browser that supports
+Float16Array.
+</code></pre></div>
+<div class="admonition tip">
+<p class="admonition-title">Cheque antes de oferecer o download do modelo menor</p>
+<div class="highlight"><pre><span></span><code><span class="k">import</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">hasFloat16Array</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="kr">from</span><span class="w"> </span><span class="s2">"@mauriciobenjamin700/ort-vision-sdk-web"</span><span class="p">;</span>
+
+<span class="kd">const</span><span class="w"> </span><span class="nx">model</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">hasFloat16Array</span><span class="p">()</span><span class="w"> </span><span class="o">?</span><span class="w"> </span><span class="s2">"/models/det_fp16.onnx"</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="s2">"/models/det.onnx"</span><span class="p">;</span>
+</code></pre></div>
+</div>
+<div class="admonition warning">
+<p class="admonition-title"><code>session.inputMetadata</code> não serve para isso</p>
+<p>No <code>onnxruntime-web</code> 1.20.1 ele é <code>undefined</code>. O tipo declarado é lido do
+próprio arquivo <code>.onnx</code>, no mesmo passe que já lê os nomes de classe — mesmo
+download, nenhuma requisição nova.</p>
+</div>
+<h2 id="pipelines-fundidos-float16-nas-pontas-float32-no-meio">Pipelines fundidos: float16 nas pontas, float32 no meio</h2>
+<p>Fundir dois estágios FP16 <strong>não</strong> produz um grafo todo em meia precisão, e isso
+não é preferência:</p>
+<div class="admonition danger">
+<p class="admonition-title">O <code>NonMaxSuppression</code> do ONNX só existe em float32</p>
+<p>O operador é definido para <code>T = tensor(float)</code>. Não há variante float16. Uma
+ponte inteiramente em meia precisão é impossível de construir.</p>
+</div>
+<p>Então a fusão casta nas <strong>costuras</strong>, e só nelas:</p>
+<pre class="mermaid"><code>flowchart LR
+    A["images&lt;br/&gt;float32"] --&gt;|Cast| B["detector&lt;br/&gt;float16"]
+    B --&gt;|Cast| C["ponte: NMS + RoiAlign&lt;br/&gt;float32"]
+    C --&gt;|Cast| D["classificador&lt;br/&gt;float16"]
+    D --&gt;|Cast| E["probs&lt;br/&gt;float32"]
+    A -.-&gt;|RoiAlign recorta daqui| C</code></pre>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">ort_vision_sdk.compose</span><span class="w"> </span><span class="kn">import</span> <span class="n">fuse_detect_classify</span>
+
+<span class="n">fuse_detect_classify</span><span class="p">(</span>
+    <span class="n">detector_onnx</span><span class="o">=</span><span class="s2">"det_fp16.onnx"</span><span class="p">,</span>
+    <span class="n">classifier_onnx</span><span class="o">=</span><span class="s2">"clf_fp16.onnx"</span><span class="p">,</span>
+    <span class="n">output_path</span><span class="o">=</span><span class="s2">"fused_fp16.onnx"</span><span class="p">,</span>
+    <span class="n">image_size</span><span class="o">=</span><span class="mi">640</span><span class="p">,</span>
+    <span class="n">crop_size</span><span class="o">=</span><span class="mi">224</span><span class="p">,</span>
+    <span class="n">max_detections</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+<span class="p">)</span>
+</code></pre></div>
+<p>A entrada pública do grafo fundido continua <code>float32</code>, que é o que todo pipeline
+de pré-processamento produz — e é de lá que o <code>RoiAlign</code> recorta, mantendo a
+geometria em precisão simples.</p>
+<div class="admonition check">
+<p class="admonition-title">O que dá para conferir no artefato</p>
+<div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">onnx</span>
+
+<span class="n">fused</span> <span class="o">=</span> <span class="n">onnx</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="s2">"fused_fp16.onnx"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">([</span><span class="n">n</span><span class="o">.</span><span class="n">name</span> <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">fused</span><span class="o">.</span><span class="n">graph</span><span class="o">.</span><span class="n">node</span> <span class="k">if</span> <span class="n">n</span><span class="o">.</span><span class="n">op_type</span> <span class="o">==</span> <span class="s2">"Cast"</span><span class="p">][:</span><span class="mi">4</span><span class="p">])</span>
+<span class="c1"># ['ovs_bind_input', 'ovs_cast_detector_output', 'ovs_cast_crops', 'ovs_bind_probs']</span>
+</code></pre></div>
+</div>
+<h2 id="o-que-a-meia-precisao-custa">O que a meia precisão custa</h2>
+<p>As saídas voltam para <code>float32</code> antes de qualquer decodificação, e há um motivo
+medido para isso:</p>
+<table>
+<thead>
+<tr>
+<th>Coordenada</th>
+<th>Espaçamento em float16</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>320 px</td>
+<td>0,25 px</td>
+</tr>
+<tr>
+<td>640 px</td>
+<td>0,5 px</td>
+</tr>
+<tr>
+<td>1280 px</td>
+<td>1,0 px</td>
+</tr>
+<tr>
+<td>2048 px</td>
+<td>2,0 px</td>
+</tr>
+</tbody>
+</table>
+<p>Em float16, <code>640.3</code> <strong>é</strong> <code>640.5</code>. Decodificar caixas nesse tipo quantizaria
+cada coordenada antes do NMS e do retorno às coordenadas da imagem original —
+por isso o SDK alarga a saída na fronteira, e você nunca vê meia precisão numa
+<code>BoundingBox</code>.</p>
+<div class="admonition warning">
+<p class="admonition-title">No WASM, FP16 compra bytes — não tempo</p>
+<p>Não existe kernel de meia precisão no backend WASM: o cast é trabalho a
+mais. Medido num pipeline fundido real (2 baterias × 30 repetições, máquina
+ociosa, medianas reproduzindo entre 0,4 % e 1,1 %):</p>
+<table>
+<thead>
+<tr>
+<th>Variante</th>
+<th>Mediana</th>
+<th>Arquivo</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>fp32 fundido</td>
+<td>63,2 / 62,7 ms</td>
+<td>30,92 MB</td>
+</tr>
+<tr>
+<td>fp16 fundido</td>
+<td>87,5 / 88,2 ms</td>
+<td>15,54 MB</td>
+</tr>
+</tbody>
+</table>
+<p><strong>+39 % de latência para 1,99× menos bytes.</strong> Isso inverte a expectativa
+que FP16 cria em servidor. Escolha FP16 no navegador quando o gargalo é
+download/memória, não quando é tempo de inferência. Com WebGPU a pergunta é
+outra — e onde não há adaptador, não há resposta melhor.</p>
+</div>
+<div class="admonition danger">
+<p class="admonition-title">WebGPU sem <code>shader-f16</code>: saída toda zero, sem erro</p>
+<p>Num adaptador WebGPU sem o recurso <code>shader-f16</code>, o ONNX Runtime Web roda um
+modelo FP16 e devolve <strong>tudo zero</strong>: nenhuma caixa, nenhum score, nenhuma
+exceção. Medido no <code>onnxruntime-web</code> 1.25.1 com um detector YOLO11n em
+meia precisão (entrada e saída em float32). O mesmo arquivo no WASM bateu
+com o FP32.</p>
+<p>O SDK cuida disso: quando os pesos do modelo são float16 e o adaptador não
+oferece <code>shader-f16</code>, ele tira o <code>webgpu</code> dos providers, roda no WASM e
+avisa no console. Para usar a GPU desse aparelho, publique o export FP32.</p>
+<div class="highlight"><pre><span></span><code><span class="k">import</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">Detector</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="kr">from</span><span class="w"> </span><span class="s2">"@mauriciobenjamin700/ort-vision-sdk-web"</span><span class="p">;</span>
+
+<span class="kd">const</span><span class="w"> </span><span class="nx">det</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">await</span><span class="w"> </span><span class="nx">Detector</span><span class="p">.</span><span class="nx">create</span><span class="p">(</span><span class="s2">"/models/detect-fp16.onnx"</span><span class="p">,</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="nx">providers</span><span class="o">:</span><span class="w"> </span><span class="p">[</span><span class="s2">"webgpu"</span><span class="p">,</span><span class="w"> </span><span class="s2">"wasm"</span><span class="p">],</span>
+<span class="p">});</span>
+<span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="nx">det</span><span class="p">.</span><span class="nx">session</span><span class="p">.</span><span class="nx">providers</span><span class="p">);</span><span class="w"> </span><span class="c1">// ["wasm"] num adaptador sem shader-f16</span>
+</code></pre></div>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Onde a diferença aparece de verdade</p>
+<p>Os <strong>pesos</strong> em meia precisão mudam as ativações, e portanto as confianças,
+nas casas decimais. A classe prevista raramente muda; o número ao lado dela
+muda um pouco. Se o seu limiar está calibrado na terceira casa, recalibre
+depois de trocar para FP16.</p>
+</div>
+<h2 id="recap">Recap</h2>
+<ul>
+<li>Exporte com <code>half=True</code>, use o arquivo normalmente: <strong>nenhuma mudança de
+  código</strong> nos dois SDKs. 🚀</li>
+<li>O SDK lê o tipo que o grafo declara, converte o feed na fronteira e alarga a
+  saída antes de decodificar.</li>
+<li>No navegador, <code>Float16Array</code> é obrigatório; sem ele o modelo é recusado em
+  <code>create()</code>, com mensagem dizendo isso.</li>
+<li>Num pipeline fundido, os estágios ficam em float16 e a ponte em float32 —
+  o <code>NonMaxSuppression</code> não aceita outra coisa.</li>
+<li>WebGPU sem <code>shader-f16</code> devolve zero para modelo FP16; o SDK manda esse
+  caso para o WASM e avisa.</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Voltar ao topo
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    <script id="__config" type="application/json">{"base": "../..", "features": ["navigation.tracking", "navigation.sections", "navigation.top", "navigation.indexes", "content.code.copy", "search.suggest", "search.highlight", "toc.follow"], "search": "../../assets/javascripts/workers/search.f8cc74c7.min.js", "translations": {"clipboard.copied": "Copiado para \u00e1rea de transfer\u00eancia", "clipboard.copy": "Copiar para \u00e1rea de transfer\u00eancia", "search.result.more.one": "Mais 1 nesta p\u00e1gina", "search.result.more.other": "Mais # nesta p\u00e1gina", "search.result.none": "Nenhum resultado encontrado", "search.result.one": "1 resultado encontrado", "search.result.other": "# resultados encontrados", "search.result.placeholder": "Digite para iniciar a busca", "search.result.term.missing": "Ausente", "select.version": "Selecione a vers\u00e3o"}}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.60a45f97.min.js"></script>
+      
+    
+  </body>
+</html>
